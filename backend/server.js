@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.js';
+import travelRoutes from './routes/travel.js';
+import contactRoutes from './routes/contact.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,9 +14,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 app.use('/auth', authRoutes);
+app.use('/travel', travelRoutes);
+app.use('/contact', contactRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
