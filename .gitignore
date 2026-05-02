@@ -5,5 +5,4 @@ backend/.env
 *.log
 .DS_Store
 __MACOSX/
-*.claude.claude/settings.local.json
 .claude/settings.local.json
