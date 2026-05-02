@@ -1,0 +1,25 @@
+{
+  "name": "ak-portfolio-backend",
+  "version": "1.0.0",
+  "description": "Backend API for AK Portfolio with WebAuthn + email magic link auth",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^7.4.0",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "nodemailer": "^8.0.7",
+    "pg": "^8.10.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

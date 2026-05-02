@@ -1,0 +1,9 @@
+node_modules/
+backend/node_modules/
+backend/.env
+.env
+*.log
+.DS_Store
+__MACOSX/
+*.claude.claude/settings.local.json
+.claude/settings.local.json

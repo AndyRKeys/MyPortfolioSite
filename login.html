@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Login | AK Portfolio</title>
+    <link rel="stylesheet" href="./resources/css/reset.css" />
+    <link rel="stylesheet" href="./resources/css/styles.css" />
+</head>
+<body>
+    <header id="home">
+        <h1>A|K</h1>
+        <h2>Admin Login</h2>
+    </header>
+
+    <main class="admin-page">
+        <section class="sec-cont login-section">
+            <div class="admin-card" id="login-card">
+                <h2>Secure access only</h2>
+
+                <p id="verify-status" class="login-message" style="display:none;"></p>
+
+                <button id="passkey-btn" type="button">Sign in with passkey</button>
+
+                <div class="login-divider"><span>or</span></div>
+
+                <form id="email-form">
+                    <label>Email
+                        <input id="email-input" type="email" placeholder="your@email.com" autocomplete="email" />
+                    </label>
+                    <button type="submit">Send magic link</button>
+                </form>
+
+                <p id="login-message" class="login-message"></p>
+                <p><a href="index.html">Back to public site</a></p>
+            </div>
+        </section>
+    </main>
+
+    <script type="module">
+        import { startAuthentication } from 'https://esm.sh/@simplewebauthn/browser@7';
+        import { API } from './resources/java/config.js';
+
+        function setMessage(msg, isError = false) {
+            const el = document.getElementById('login-message');
+            el.textContent = msg;
+            el.style.color = isError ? '#c0392b' : '#27ae60';
+        }
+
+        function isAuthenticated() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return false;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                return payload.exp * 1000 > Date.now();
+            } catch {
+                return false;
+            }
+        }
+
+        if (isAuthenticated()) {
+            location.replace('admin.html');
+        }
+
+        // Auto-verify email magic link token from URL
+        const params = new URLSearchParams(location.search);
+        const emailToken = params.get('token');
+        if (emailToken) {
+            const statusEl = document.getElementById('verify-status');
+            statusEl.style.display = '';
+            statusEl.textContent = 'Verifying your login link…';
+
+            fetch(`${API}/auth/email/verify?token=${encodeURIComponent(emailToken)}`)
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok) throw new Error(data.error || 'Verification failed');
+                    localStorage.setItem('adminToken', data.token);
+                    location.replace('admin.html');
+                })
+                .catch(err => {
+                    statusEl.textContent = err.message;
+                    statusEl.style.color = '#c0392b';
+                });
+        }
+
+        // Passkey sign-in
+        document.getElementById('passkey-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('passkey-btn');
+            btn.disabled = true;
+            btn.textContent = 'Waiting for passkey…';
+            setMessage('');
+
+            try {
+                const startRes = await fetch(`${API}/auth/passkey/login/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const { options, sessionKey } = await startRes.json();
+
+                const response = await startAuthentication(options);
+
+                const finishRes = await fetch(`${API}/auth/passkey/login/finish`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ response, sessionKey }),
+                });
+                const data = await finishRes.json();
+                if (!finishRes.ok) throw new Error(data.error || 'Authentication failed');
+
+                localStorage.setItem('adminToken', data.token);
+                location.replace('admin.html');
+            } catch (err) {
+                if (err.name === 'NotAllowedError') {
+                    setMessage('Passkey sign-in was cancelled.', true);
+                } else {
+                    setMessage(err.message || 'Sign-in failed. Try the magic link instead.', true);
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign in with passkey';
+            }
+        });
+
+        // Email magic link
+        document.getElementById('email-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const email = document.getElementById('email-input').value.trim();
+            if (!email) return setMessage('Please enter your email.', true);
+
+            const btn = event.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+            setMessage('');
+
+            try {
+                const res = await fetch(`${API}/auth/email/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email }),
+                });
+                const data = await res.json();
+                setMessage(data.message || 'Check your inbox for the login link.');
+            } catch {
+                setMessage('Failed to send email. Is the backend running?', true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send magic link';
+            }
+        });
+    </script>
+</body>
+</html>

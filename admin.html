@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Dashboard | AK Portfolio</title>
+    <link rel="stylesheet" href="./resources/css/reset.css" />
+    <link rel="stylesheet" href="./resources/css/styles.css" />
+</head>
+<body>
+    <header>
+        <h1>A|K</h1>
+        <h2>Admin Dashboard</h2>
+    </header>
+    <nav>
+        <ul class="nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="login.html" id="logout-link">Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="admin-page">
+        <section class="sec-cont admin-panel">
+            <div class="admin-card">
+                <h2>Publish travel memories</h2>
+                <form id="travel-form">
+                    <label>Title
+                        <input id="travel-title" type="text" placeholder="Trip title" />
+                    </label>
+                    <label>Location
+                        <input id="travel-location" type="text" placeholder="City, country" />
+                    </label>
+                    <label>Notes
+                        <textarea id="travel-notes" rows="3" placeholder="Describe the moment"></textarea>
+                    </label>
+                    <label>Photo or video
+                        <input id="travel-file" type="file" accept="image/*,video/*" />
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit">Save memory</button>
+                        <button type="button" id="travel-clear">Clear</button>
+                    </div>
+                </form>
+                <div id="travel-preview" class="travel-preview hidden">
+                    <h4>Preview</h4>
+                    <div class="preview-media"></div>
+                    <div class="preview-text"></div>
+                </div>
+            </div>
+
+            <div class="admin-card private-card">
+                <h2>Private coding projects</h2>
+                <p>Private notes and project planning. GitHub integration can be added later.</p>
+                <label>Private notes
+                    <textarea id="private-notes" rows="6" placeholder="Save private project ideas here…"></textarea>
+                </label>
+                <div class="form-actions">
+                    <button id="save-private" type="button">Save notes</button>
+                    <button id="clear-private" type="button">Clear notes</button>
+                </div>
+                <p class="hint">Notes are saved locally in your browser.</p>
+            </div>
+
+            <div class="admin-card">
+                <h2>Manage passkeys</h2>
+                <p>Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
+                <div id="passkey-list">
+                    <p class="hint">Loading passkeys…</p>
+                </div>
+                <div class="form-actions">
+                    <button id="add-passkey-btn" type="button">Add passkey</button>
+                </div>
+                <p id="passkey-message" class="login-message"></p>
+            </div>
+        </section>
+    </main>
+
+    <script src="./resources/java/jquery-3.5.1.min.js"></script>
+    <script type="module" src="./resources/java/admin.js"></script>
+</body>
+</html>

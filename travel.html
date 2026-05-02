@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Travel Blog | AK Portfolio</title>
+    <link rel="shortcut icon" href="./resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="./resources/css/reset.css" />
+    <link rel="stylesheet" href="./resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header id="home">
+        <h1>A|K</h1>
+        <h2>Travel Blog</h2>
+    </header>
+    <nav>
+        <ul class="nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#portfolio">Projects</a></li>
+            <li><a href="index.html#ai-dev">AI Dev</a></li>
+            <li><a href="index.html#skills">Skills</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+            <li><a href="travel.html">Travel</a></li>
+            <li><a href="login.html">Admin</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section class="sec-cont" id="travel">
+            <h2>Travel Memories</h2>
+            <div class="travel-grid" id="travel-grid">
+                <!-- populated from localStorage by script.js -->
+            </div>
+            <div id="travel-empty" class="travel-empty hidden">
+                <p>No travel memories yet — check back soon.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <section class="sec-cont" id="contact">
+            <div class="footer-bottom">
+                <p>© 2026 Andrew Keys. All Rights Reserved.</p>
+            </div>
+        </section>
+    </footer>
+
+    <script src="./resources/java/jquery-3.5.1.min.js"></script>
+    <script src="./resources/java/script.js"></script>
+</body>
+</html>
