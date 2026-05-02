@@ -4,13 +4,74 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* ── CSS custom properties (colour tokens) ──────────────────────────────────── */
+
+:root {
+    --color-bg: #f4f4f4;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f7f7f7;
+    --color-header-bg: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    --color-nav-bg: #333;
+    --color-nav-text: #ffffff;
+    --color-text: #1a1a1a;
+    --color-text-secondary: #555;
+    --color-text-muted: #888;
+    --color-border: #e0e0e0;
+    --color-border-strong: #333;
+    --color-tag-bg: #f0f0f0;
+    --color-tag-text: #333;
+    --color-shadow: rgba(0, 0, 0, 0.08);
+    --color-shadow-hover: rgba(0, 0, 0, 0.14);
+    --color-accent: #0ea5e9;
+    --color-accent-hover: #0284c7;
+    --color-footer-bg: #1a1a1a;
+    --color-footer-text: #ffffff;
+    --color-footer-muted: #aaa;
+    --color-success: #27ae60;
+    --color-error: #c0392b;
+    --color-timeline-line: #ddd;
+    --color-timeline-marker: #333;
+    --color-timeline-marker-current: #0ea5e9;
+}
+
+[data-theme="dark"] {
+    --color-bg: #0f0f0f;
+    --color-surface: #1e1e1e;
+    --color-surface-alt: #252525;
+    --color-header-bg: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    --color-nav-bg: #1a1a1a;
+    --color-nav-text: #e0e0e0;
+    --color-text: #e8e8e8;
+    --color-text-secondary: #b0b0b0;
+    --color-text-muted: #888;
+    --color-border: #333;
+    --color-border-strong: #666;
+    --color-tag-bg: #2a2a2a;
+    --color-tag-text: #ccc;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+    --color-shadow-hover: rgba(0, 0, 0, 0.5);
+    --color-accent: #38bdf8;
+    --color-accent-hover: #7dd3fc;
+    --color-footer-bg: #0a0a0a;
+    --color-footer-text: #e0e0e0;
+    --color-footer-muted: #777;
+    --color-success: #2ecc71;
+    --color-error: #e74c3c;
+    --color-timeline-line: #333;
+    --color-timeline-marker: #666;
+    --color-timeline-marker-current: #38bdf8;
+}
+
 body {
     font-family: 'Inter', system-ui, sans-serif;
     margin: 0 10%;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 header {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    background: var(--color-header-bg);
     color: white;
     padding: 45px 20px;
     text-align: center;
@@ -51,7 +112,7 @@ section {
 section h2 {
     text-align: center;
     margin-bottom: 2rem;
-    color: #1a1a1a;
+    color: var(--color-text);
     font-size: 28px;
     position: relative;
     padding-bottom: 15px;
@@ -106,7 +167,7 @@ ul.nav {
     margin: 0 auto;
     padding: 0;
     list-style: none;
-    background-color: #333;
+    background-color: var(--color-nav-bg);
     font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 
@@ -121,7 +182,7 @@ ul.nav {
     text-align: center;
     padding: 14px 1.25rem;
     margin: 0;
-    color: white;
+    color: var(--color-nav-text);
     display: block;
     font-size: 0.95rem;
     transition: background-color 0.2s ease;
@@ -168,8 +229,8 @@ li a:hover {
     max-width: 720px;
     margin: 0 auto 1.5rem;
     padding: 1.25rem;
-    background: white;
-    box-shadow: 0 2px 14px rgba(0,0,0,0.08);
+    background: var(--color-surface);
+    box-shadow: 0 2px 14px var(--color-shadow);
     border-radius: 12px;
     text-align: left;
 }
@@ -318,8 +379,8 @@ footer a:hover {
     width: 100%;
     padding: 1rem;
     text-align: left;
-    background: white;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    background: var(--color-surface);
+    box-shadow: 0 2px 12px var(--color-shadow);
     border-radius: 10px;
 }
 
@@ -346,15 +407,15 @@ footer a:hover {
 
 .travel-content .meta {
     margin: 0 0 0.75rem 0;
-    color: #555;
+    color: var(--color-text-secondary);
     font-size: 0.95rem;
 }
 
 .travel-uploader {
     width: 100%;
     text-align: left;
-    background: white;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    background: var(--color-surface);
+    box-shadow: 0 2px 12px var(--color-shadow);
     border-radius: 10px;
     padding: 1rem;
 }
@@ -406,7 +467,7 @@ footer a:hover {
     padding: 1rem;
     border: 1px dashed #999;
     border-radius: 8px;
-    background: #f7f7f7;
+    background: var(--color-surface-alt);
 }
 
 .travel-preview.hidden {
@@ -432,10 +493,10 @@ footer a:hover {
 .about-cont {
     max-width: 900px;
     margin: 0 auto;
-    background: white;
+    background: var(--color-surface);
     padding: 2rem;
     border-radius: 12px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px var(--color-shadow);
 }
 
 .about-inner {
@@ -465,7 +526,7 @@ footer a:hover {
 .about-text p {
     margin-bottom: 1rem;
     line-height: 1.7;
-    color: #333;
+    color: var(--color-text);
 }
 
 /* Projects Grid */
@@ -478,17 +539,17 @@ footer a:hover {
 }
 
 .project-card {
-    background: white;
+    background: var(--color-surface);
     border-radius: 10px;
     padding: 1.75rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px var(--color-shadow);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
-    border-left: 4px solid #333;
+    border-left: 4px solid var(--color-border-strong);
 }
 
 .project-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .project-header {
@@ -498,7 +559,7 @@ footer a:hover {
 .project-card h3 {
     margin: 0 0 0.75rem 0;
     font-size: 1.25rem;
-    color: #1a1a1a;
+    color: var(--color-text);
 }
 
 .tech-tags {
@@ -509,8 +570,8 @@ footer a:hover {
 
 .tag {
     display: inline-block;
-    background: #f0f0f0;
-    color: #333;
+    background: var(--color-tag-bg);
+    color: var(--color-tag-text);
     padding: 0.35rem 0.75rem;
     border-radius: 20px;
     font-size: 0.85rem;
@@ -520,13 +581,13 @@ footer a:hover {
 .project-card p {
     margin: 0.75rem 0;
     line-height: 1.6;
-    color: #555;
+    color: var(--color-text-secondary);
 }
 
 .project-meta {
     margin-top: 1rem;
     font-size: 0.9rem;
-    color: #888;
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
@@ -540,18 +601,18 @@ footer a:hover {
 }
 
 .skill-category {
-    background: white;
+    background: var(--color-surface);
     padding: 1.75rem;
     border-radius: 10px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px var(--color-shadow);
 }
 
 .skill-category h3 {
     margin-top: 0;
     margin-bottom: 1.25rem;
-    color: #1a1a1a;
+    color: var(--color-text);
     font-size: 1.15rem;
-    border-bottom: 2px solid #333;
+    border-bottom: 2px solid var(--color-border-strong);
     padding-bottom: 0.75rem;
 }
 
@@ -563,9 +624,9 @@ footer a:hover {
 
 .skill-list li {
     padding: 0.5rem 0;
-    color: #555;
+    color: var(--color-text-secondary);
     line-height: 1.6;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .skill-list li:last-child {
@@ -574,13 +635,13 @@ footer a:hover {
 
 /* Contact & Footer */
 footer {
-    background: #1a1a1a;
-    color: white;
+    background: var(--color-footer-bg);
+    color: var(--color-footer-text);
     padding: 0;
 }
 
 #contact {
-    background: #1a1a1a;
+    background: var(--color-footer-bg);
     padding: 2rem 20px;
 }
 
@@ -614,14 +675,14 @@ footer {
 
 .contact-info a,
 .footer-links a {
-    color: #0ea5e9;
+    color: var(--color-accent);
     text-decoration: none;
     transition: color 0.3s ease;
 }
 
 .contact-info a:hover,
 .footer-links a:hover {
-    color: #0284c7;
+    color: var(--color-accent-hover);
     text-decoration: underline;
 }
 
@@ -629,7 +690,7 @@ footer {
     text-align: center;
     padding: 1.5rem 20px;
     border-top: 1px solid rgba(255,255,255,0.1);
-    color: #aaa;
+    color: var(--color-footer-muted);
     font-size: 0.9rem;
 }
 
@@ -637,7 +698,7 @@ footer {
 .travel-empty {
     text-align: center;
     padding: 3rem 1rem;
-    color: #888;
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
@@ -649,7 +710,7 @@ footer {
 .ai-dev-inner > p {
     margin-bottom: 1rem;
     line-height: 1.7;
-    color: #333;
+    color: var(--color-text);
 }
 
 .ai-dev-points {
@@ -660,20 +721,21 @@ footer {
 }
 
 .ai-point {
-    background: #f7f7f7;
+    background: var(--color-surface-alt);
     border-radius: 8px;
     padding: 1.25rem;
-    border-left: 3px solid #333;
+    border-left: 3px solid var(--color-border-strong);
 }
 
 .ai-point h3 {
     margin: 0 0 0.5rem;
     font-size: 1rem;
+    color: var(--color-text);
 }
 
 .ai-point p {
     margin: 0;
-    color: #555;
+    color: var(--color-text-secondary);
     line-height: 1.6;
 }
 
@@ -688,8 +750,8 @@ footer {
 .cert-row h3 {
     margin-bottom: 1rem;
     font-size: 1.1rem;
-    color: #1a1a1a;
-    border-bottom: 2px solid #333;
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-border-strong);
     padding-bottom: 0.5rem;
 }
 
@@ -698,10 +760,10 @@ footer {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    background: white;
+    background: var(--color-surface);
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px var(--color-shadow);
 }
 
 .cert-info {
@@ -712,29 +774,30 @@ footer {
 
 .cert-title {
     font-weight: 600;
-    color: #1a1a1a;
+    color: var(--color-text);
     font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 
 .cert-meta {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--color-text-secondary);
 }
 
 .cert-link {
     white-space: nowrap;
-    background: #1a1a1a;
-    color: white;
+    background: var(--color-text);
+    color: var(--color-bg);
     text-decoration: none;
     padding: 0.6rem 1.2rem;
     border-radius: 6px;
     font-size: 0.9rem;
     font-weight: 500;
-    transition: background 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease;
 }
 
 .cert-link:hover {
-    background: #444;
+    background: var(--color-text-secondary);
+    color: var(--color-bg);
 }
 
 @media screen and (max-width: 768px) {
@@ -814,4 +877,369 @@ footer {
     .travel-uploader {
         display: none;
     }
+}
+
+/* ── Dark mode toggle button ────────────────────────────────────────────────── */
+
+#dark-mode-toggle {
+    background: transparent;
+    border: none;
+    color: var(--color-nav-text);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 14px 1rem;
+    height: auto;
+    width: auto;
+    line-height: 1;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+#dark-mode-toggle:hover {
+    opacity: 0.75;
+    background: transparent;
+}
+
+/* ── Career Timeline (Issue #9) ─────────────────────────────────────────────── */
+
+.timeline {
+    max-width: 800px;
+    margin: 0 auto;
+    position: relative;
+    text-align: left;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-timeline-line);
+}
+
+.timeline-item {
+    position: relative;
+    padding: 0 0 2.5rem 3.5rem;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 12px;
+    top: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-timeline-marker);
+    border: 3px solid var(--color-bg);
+    box-shadow: 0 0 0 2px var(--color-timeline-marker);
+    z-index: 1;
+}
+
+.timeline-marker--current {
+    background: var(--color-timeline-marker-current);
+    box-shadow: 0 0 0 2px var(--color-timeline-marker-current);
+}
+
+.timeline-content {
+    background: var(--color-surface);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 12px var(--color-shadow);
+    transition: box-shadow 0.3s ease;
+}
+
+.timeline-content:hover {
+    box-shadow: 0 4px 20px var(--color-shadow-hover);
+}
+
+.timeline-date {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.4rem;
+}
+
+.timeline-content h3 {
+    margin: 0.25rem 0 0.75rem;
+    font-size: 1.15rem;
+    color: var(--color-text);
+}
+
+.timeline-content p {
+    color: var(--color-text-secondary);
+    line-height: 1.65;
+    margin-bottom: 0.75rem;
+}
+
+.timeline-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+}
+
+.timeline-link {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--color-accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.timeline-link:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .timeline::before {
+        left: 14px;
+    }
+    .timeline-item {
+        padding-left: 2.75rem;
+    }
+    .timeline-marker {
+        left: 6px;
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* ── GitHub activity widget (Issue #5) ──────────────────────────────────────── */
+
+.github-repos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    max-width: 1100px;
+    margin: 0 auto 1.5rem;
+    text-align: left;
+}
+
+.github-repo-card {
+    display: block;
+    background: var(--color-surface);
+    border-radius: 10px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 12px var(--color-shadow);
+    text-decoration: none;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    border-left: 3px solid var(--color-border-strong);
+}
+
+.github-repo-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
+}
+
+.github-repo-name {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--color-text);
+    margin-bottom: 0.4rem;
+}
+
+.github-repo-desc {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.github-repo-meta {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+}
+
+.github-repo-lang {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.github-fallback {
+    color: var(--color-text-secondary);
+    text-align: center;
+    width: 100%;
+}
+
+.github-fallback a {
+    color: var(--color-accent);
+}
+
+.github-profile-link {
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.github-profile-link a {
+    color: var(--color-accent);
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.github-profile-link a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+}
+
+/* ── Contact form (Issue #3) ────────────────────────────────────────────────── */
+
+.contact-form-wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    background: var(--color-surface);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 12px var(--color-shadow);
+    text-align: left;
+}
+
+#contact-form label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--color-text);
+    margin-bottom: 1rem;
+}
+
+#contact-form input[type="text"],
+#contact-form input[type="email"],
+#contact-form textarea {
+    display: block;
+    width: 100%;
+    margin-top: 0.35rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    background: var(--color-bg);
+    color: var(--color-text);
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+#contact-form input[type="text"]:focus,
+#contact-form input[type="email"]:focus,
+#contact-form textarea:focus {
+    outline: none;
+    border-color: var(--color-border-strong);
+}
+
+#contact-form button[type="submit"] {
+    background: var(--color-text);
+    color: var(--color-bg);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: auto;
+    height: auto;
+    transition: background 0.2s ease;
+    margin-top: 0.5rem;
+}
+
+#contact-form button[type="submit"]:hover {
+    background: var(--color-text-secondary);
+}
+
+#contact-form button[type="submit"]:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.contact-form-message {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    min-height: 1.4rem;
+}
+
+.contact-form-message.success {
+    color: var(--color-success);
+}
+
+.contact-form-message.error {
+    color: var(--color-error);
+}
+
+/* ── Admin saved memories list ──────────────────────────────────────────────── */
+
+.saved-memories {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 1rem;
+}
+
+.saved-memories h3 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-text);
+}
+
+.saved-memory-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.saved-memory-row:last-child {
+    border-bottom: none;
+}
+
+.saved-memory-info {
+    font-size: 0.9rem;
+    color: var(--color-text);
+}
+
+.saved-memory-location {
+    color: var(--color-text-secondary);
+}
+
+.saved-memory-date {
+    color: var(--color-text-muted);
+}
+
+.travel-delete-btn {
+    background: var(--color-error) !important;
+    color: white !important;
+    border: none;
+    padding: 0.35rem 0.85rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    height: auto;
+    width: auto;
+    flex-shrink: 0;
+}
+
+.hint {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
 }

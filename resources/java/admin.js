@@ -122,8 +122,6 @@ function setPasskeyMessage(msg, isError = false) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
-const travelStorageKey = 'travelMemoryDrafts';
-let travelDrafts = [];
 let currentFile = null;
 
 function escapeHtml(str) {
@@ -146,9 +144,9 @@ function showPreview(travel) {
             previewMedia.append('<img src="' + travel.mediaUrl + '" alt="Preview image">');
         }
     }
-    previewText.append('<p><strong>' + (travel.title || 'Untitled memory') + '</strong></p>');
-    previewText.append('<p>' + (travel.location || 'No location provided') + '</p>');
-    previewText.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
+    previewText.append('<p><strong>' + escapeHtml(travel.title || 'Untitled memory') + '</strong></p>');
+    previewText.append('<p>' + escapeHtml(travel.location || 'No location provided') + '</p>');
+    previewText.append('<p>' + escapeHtml(travel.notes || 'No notes yet.') + '</p>');
     $('#travel-preview').removeClass('hidden');
 }
 
@@ -161,20 +159,52 @@ function clearTravelForm() {
     $('#travel-file').val('');
 }
 
-function loadDrafts() {
-    if (!window.localStorage) return;
-    const saved = localStorage.getItem(travelStorageKey);
-    if (saved) {
-        try { travelDrafts = JSON.parse(saved) || []; } catch { /* ignore */ }
-    }
-    const notes = localStorage.getItem('privateProjectNotes');
-    if (notes) $('#private-notes').val(notes);
+function buildSavedMemoryRow(memory) {
+    const div = $('<div class="saved-memory-row"></div>');
+    const info = $('<div class="saved-memory-info"></div>');
+    info.append('<strong>' + escapeHtml(memory.title) + '</strong>');
+    if (memory.location) info.append('<span class="saved-memory-location"> — ' + escapeHtml(memory.location) + '</span>');
+    info.append('<span class="saved-memory-date"> · ' + new Date(memory.created_at).toLocaleDateString() + '</span>');
+    const delBtn = $('<button type="button" class="travel-delete-btn">Delete</button>');
+    delBtn.on('click', function () { deleteTravelMemory(memory.id); });
+    div.append(info).append(delBtn);
+    return div;
 }
 
-function saveDrafts() {
-    if (window.localStorage) {
-        localStorage.setItem(travelStorageKey, JSON.stringify(travelDrafts));
+async function loadTravelMemories() {
+    const list = $('#saved-memories-list');
+    list.html('<p class="hint">Loading…</p>');
+    try {
+        const res = await authFetch('/travel');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const memories = await res.json();
+        if (!memories.length) {
+            list.html('<p class="hint">No travel memories saved yet.</p>');
+            return;
+        }
+        list.empty();
+        memories.forEach(m => list.append(buildSavedMemoryRow(m)));
+    } catch {
+        list.html('<p class="hint" style="color:#c0392b;">Failed to load memories.</p>');
     }
+}
+
+async function deleteTravelMemory(id) {
+    if (!confirm('Delete this travel memory? This cannot be undone.')) return;
+    try {
+        const res = await authFetch(`/travel/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Delete failed');
+        await loadTravelMemories();
+    } catch {
+        alert('Failed to delete memory.');
+    }
+}
+
+function setTravelMessage(msg, isError = false) {
+    const el = document.getElementById('travel-message');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isError ? '#c0392b' : '#27ae60';
 }
 
 function initTravelForm() {
@@ -194,26 +224,55 @@ function initTravelForm() {
         reader.readAsDataURL(file);
     });
 
-    $('#travel-form').on('submit', function (event) {
+    $('#travel-form').on('submit', async function (event) {
         event.preventDefault();
+        const submitBtn = $(this).find('button[type="submit"]');
+        submitBtn.prop('disabled', true);
+        setTravelMessage('Saving…');
+
         const travel = {
             title: $('#travel-title').val().trim(),
             location: $('#travel-location').val().trim(),
             notes: $('#travel-notes').val().trim(),
             mediaUrl: currentFile ? currentFile.mediaUrl : null,
             mediaType: currentFile ? currentFile.mediaType : null,
-            createdAt: new Date().toISOString(),
         };
-        travelDrafts.unshift(travel);
-        saveDrafts();
-        clearTravelForm();
-        alert('Travel memory saved.');
+
+        if (!travel.title) {
+            setTravelMessage('Title is required.', true);
+            submitBtn.prop('disabled', false);
+            return;
+        }
+
+        try {
+            const res = await authFetch('/travel', {
+                method: 'POST',
+                body: JSON.stringify(travel),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+            setTravelMessage('Memory saved.');
+            clearTravelForm();
+            await loadTravelMemories();
+        } catch (err) {
+            setTravelMessage(err.message || 'Failed to save memory.', true);
+        } finally {
+            submitBtn.prop('disabled', false);
+        }
     });
 
     $('#travel-clear').on('click', clearTravelForm);
 }
 
+// ── Private notes ─────────────────────────────────────────────────────────────
+
+function loadPrivateNotes() {
+    const notes = localStorage.getItem('privateProjectNotes');
+    if (notes) $('#private-notes').val(notes);
+}
+
 function initPrivateNotes() {
+    loadPrivateNotes();
     $('#save-private').on('click', function () {
         localStorage.setItem('privateProjectNotes', $('#private-notes').val());
         alert('Private notes saved locally.');
@@ -236,8 +295,8 @@ function setLogout() {
 
 requireAuth();
 setLogout();
-loadDrafts();
 initTravelForm();
 initPrivateNotes();
+loadTravelMemories();
 loadPasskeys();
 document.getElementById('add-passkey-btn').addEventListener('click', addPasskey);
