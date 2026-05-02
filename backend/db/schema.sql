@@ -38,3 +38,13 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS travel_memories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  location VARCHAR(255),
+  notes TEXT,
+  media_url TEXT,
+  media_type VARCHAR(100),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
