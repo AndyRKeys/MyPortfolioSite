@@ -1,3 +1,6 @@
+// API base — empty string in production (Nginx proxy), backend URL in dev
+var API_BASE = '';
+
 // duration of scroll animation
 var scrollDuration = 300;
 // paddles
@@ -58,12 +61,6 @@ $('.hs').on('scroll', function() {
         $(rightPaddle).addClass('hidden');
     }
 
-    // print important values
-    // $('#print-wrapper-size span').text(menuWrapperSize);
-    // $('#print-menu-size span').text(menuSize);
-    // $('#print-menu-invisible-size span').text(menuInvisibleSize);
-    // $('#print-menu-position span').text(menuPosition);
-
 });
 
 // scroll to left
@@ -99,14 +96,18 @@ function setHeight(div, height) {
     div.style.height = height + "px";
 }
 
+// ── Travel memories ───────────────────────────────────────────────────────────
+
 function buildPublicTravelCard(travel) {
     var card = $('<article class="travel-card box draft-card"></article>');
     var media = $('<div class="media"></div>');
-    if (travel.mediaUrl) {
-        if (travel.mediaType && travel.mediaType.indexOf('video') === 0) {
-            media.append('<video controls src="' + travel.mediaUrl + '"></video>');
+    var mediaUrl = travel.media_url || travel.mediaUrl;
+    var mediaType = travel.media_type || travel.mediaType;
+    if (mediaUrl) {
+        if (mediaType && mediaType.indexOf('video') === 0) {
+            media.append('<video controls src="' + mediaUrl + '"></video>');
         } else {
-            media.append('<img src="' + travel.mediaUrl + '" alt="Travel snapshot">');
+            media.append('<img src="' + mediaUrl + '" alt="Travel snapshot">');
         }
     } else {
         media.append('<img src="./resources/img/placeholder-transparent.png" alt="Travel snapshot">');
@@ -120,31 +121,161 @@ function buildPublicTravelCard(travel) {
 }
 
 function loadPublicTravelPosts() {
-    if (!window.localStorage) {
-        return;
-    }
     var travelGrid = $('#travel-grid');
     if (!travelGrid.length) {
         return;
     }
-    var saved = localStorage.getItem('travelMemoryDrafts');
-    var travelDrafts = [];
-    if (saved) {
-        try {
-            travelDrafts = JSON.parse(saved) || [];
-        } catch (e) {
-            console.warn('Unable to load travel memories', e);
-        }
+
+    fetch(API_BASE + '/travel')
+        .then(function(res) {
+            if (!res.ok) throw new Error('Failed to load');
+            return res.json();
+        })
+        .then(function(memories) {
+            if (!memories.length) {
+                $('#travel-empty').removeClass('hidden');
+                return;
+            }
+            memories.forEach(function(travel) {
+                travelGrid.append(buildPublicTravelCard(travel));
+            });
+        })
+        .catch(function() {
+            $('#travel-empty').removeClass('hidden');
+        });
+}
+
+// ── GitHub activity widget ────────────────────────────────────────────────────
+
+function buildRepoCard(repo) {
+    var card = $('<a class="github-repo-card" target="_blank" rel="noopener noreferrer"></a>');
+    card.attr('href', repo.html_url);
+    var name = $('<div class="github-repo-name"></div>').text(repo.name);
+    var desc = $('<div class="github-repo-desc"></div>').text(repo.description || 'No description');
+    var meta = $('<div class="github-repo-meta"></div>');
+    if (repo.language) {
+        meta.append('<span class="github-repo-lang">' + repo.language + '</span>');
     }
-    if (travelDrafts.length === 0) {
-        $('#travel-empty').removeClass('hidden');
-        return;
-    }
-    travelDrafts.forEach(function(travel) {
-        travelGrid.append(buildPublicTravelCard(travel));
+    meta.append('<span class="github-repo-updated">Updated ' + formatRelativeDate(repo.pushed_at) + '</span>');
+    card.append(name).append(desc).append(meta);
+    return card;
+}
+
+function formatRelativeDate(isoString) {
+    var date = new Date(isoString);
+    var now = new Date();
+    var diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 30) return diffDays + ' days ago';
+    if (diffDays < 365) return Math.floor(diffDays / 30) + ' months ago';
+    return Math.floor(diffDays / 365) + ' years ago';
+}
+
+function loadGithubWidget() {
+    var container = $('#github-repos');
+    if (!container.length) return;
+
+    fetch('https://api.github.com/users/AndyRKeys/repos?sort=pushed&per_page=6')
+        .then(function(res) {
+            if (res.status === 403 || res.status === 429) {
+                throw new Error('rate-limited');
+            }
+            if (!res.ok) throw new Error('fetch-failed');
+            return res.json();
+        })
+        .then(function(repos) {
+            container.empty();
+            repos.forEach(function(repo) {
+                container.append(buildRepoCard(repo));
+            });
+        })
+        .catch(function(err) {
+            var msg = err.message === 'rate-limited'
+                ? 'GitHub API rate limit reached — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.'
+                : 'Could not load GitHub activity — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.';
+            container.html('<p class="github-fallback">' + msg + '</p>');
+        });
+}
+
+// ── Contact form ──────────────────────────────────────────────────────────────
+
+function initContactForm() {
+    var form = document.getElementById('contact-form');
+    if (!form) return;
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        var msgEl = document.getElementById('contact-form-message');
+        var submitBtn = form.querySelector('button[type="submit"]');
+
+        submitBtn.disabled = true;
+        msgEl.textContent = 'Sending…';
+        msgEl.className = 'contact-form-message';
+
+        var payload = {
+            name: document.getElementById('contact-name').value.trim(),
+            email: document.getElementById('contact-email').value.trim(),
+            message: document.getElementById('contact-message').value.trim(),
+            website: document.getElementById('contact-website').value, // honeypot
+        };
+
+        fetch(API_BASE + '/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
+            .then(function(result) {
+                if (result.ok) {
+                    msgEl.textContent = 'Message sent — I\'ll be in touch soon.';
+                    msgEl.className = 'contact-form-message success';
+                    form.reset();
+                } else {
+                    msgEl.textContent = result.data.error || 'Something went wrong. Please try emailing directly.';
+                    msgEl.className = 'contact-form-message error';
+                }
+            })
+            .catch(function() {
+                msgEl.textContent = 'Network error. Please try emailing directly.';
+                msgEl.className = 'contact-form-message error';
+            })
+            .finally(function() {
+                submitBtn.disabled = false;
+            });
     });
 }
 
+// ── Dark mode ─────────────────────────────────────────────────────────────────
+
+function initDarkMode() {
+    var toggleBtn = document.getElementById('dark-mode-toggle');
+    if (!toggleBtn) return;
+
+    function applyTheme(dark) {
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        toggleBtn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+        toggleBtn.textContent = dark ? '☀' : '☾';
+    }
+
+    var stored = localStorage.getItem('theme');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var isDark = stored ? stored === 'dark' : prefersDark;
+    applyTheme(isDark);
+
+    toggleBtn.addEventListener('click', function() {
+        var currentlyDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var next = !currentlyDark;
+        localStorage.setItem('theme', next ? 'dark' : 'light');
+        applyTheme(next);
+    });
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+
 $(document).ready(function() {
+    initDarkMode();
     loadPublicTravelPosts();
+    loadGithubWidget();
+    initContactForm();
 });

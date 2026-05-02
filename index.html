@@ -28,10 +28,13 @@
             <li><a href="#about">About</a></li>
             <li><a href="#portfolio">Projects</a></li>
             <li><a href="#ai-dev">AI Dev</a></li>
+            <li><a href="#timeline">Timeline</a></li>
             <li><a href="#skills">Skills</a></li>
+            <li><a href="#github-activity">GitHub</a></li>
             <li><a href="#contact">Contact</a></li>
             <li><a href="travel.html">Travel</a></li>
             <li><a href="login.html">Admin</a></li>
+            <li><button id="dark-mode-toggle" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
@@ -105,6 +108,74 @@
             </div>
         </section>
 
+        <!-- *************************Career Timeline************************* -->
+        <section class="sec-cont" id="timeline">
+            <h2>Career &amp; Learning Journey</h2>
+            <div class="timeline">
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <span class="timeline-date">2018 – 2022</span>
+                        <h3>Finance Analyst</h3>
+                        <p>Joined the financial services industry as a Finance Analyst. Built reporting infrastructure and ETL workflows for the eFront alternative investment platform, working extensively with T-SQL, SAS, and VBA. Qualified as a Chartered Accountant (ACA).</p>
+                        <div class="timeline-tags">
+                            <span class="tag">T-SQL</span>
+                            <span class="tag">SAS</span>
+                            <span class="tag">VBA</span>
+                            <span class="tag">ACA</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <span class="timeline-date">2022 – 2023</span>
+                        <h3>Transition to Data Engineering</h3>
+                        <p>Moved into a dedicated data engineering role, designing and building cloud data pipelines. Adopted Azure Databricks, Apache Spark (PySpark), and Delta Lake as core tools. Also pursued self-directed learning through Codecademy — Python, JavaScript, SQL, and web development.</p>
+                        <div class="timeline-tags">
+                            <span class="tag">Azure Databricks</span>
+                            <span class="tag">PySpark</span>
+                            <span class="tag">Delta Lake</span>
+                            <span class="tag">Codecademy</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <span class="timeline-date">Aug 2025</span>
+                        <h3>Udemy Databricks Certification</h3>
+                        <p>Completed the <em>Azure Databricks &amp; Spark Core for Data Engineers: Hands-on Project</em> course on Udemy — 20 hours of project-based learning covering distributed computing, structured streaming, and the Medallion architecture.</p>
+                        <div class="timeline-tags">
+                            <span class="tag">Certification</span>
+                            <span class="tag">Spark Streaming</span>
+                            <span class="tag">Medallion Architecture</span>
+                        </div>
+                        <a class="timeline-link" href="https://ude.my/UC-ff880281-0f4a-495a-bba0-ccea69cfa332" target="_blank" rel="noopener noreferrer">View certificate</a>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker timeline-marker--current"></div>
+                    <div class="timeline-content">
+                        <span class="timeline-date">2025 – Present</span>
+                        <h3>Claude AI Co-development</h3>
+                        <p>Building this portfolio site as a deliberate exercise in AI-assisted engineering. Full-stack work spanning WebAuthn/passkey authentication, JWT sessions, PostgreSQL, and a Node.js backend — all planned, reviewed, and owned by me with Claude as a pair programmer.</p>
+                        <div class="timeline-tags">
+                            <span class="tag">Node.js</span>
+                            <span class="tag">PostgreSQL</span>
+                            <span class="tag">WebAuthn</span>
+                            <span class="tag">AI Collaboration</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
         <!-- *************************Skills********************************* -->
         <section class="sec-cont" id="skills">
             <h2>Technical Skills</h2>
@@ -169,10 +240,44 @@
                 </div>
             </div>
         </section>
+
+        <!-- *************************GitHub Activity************************* -->
+        <section class="sec-cont" id="github-activity">
+            <h2>Recent GitHub Activity</h2>
+            <div id="github-repos" class="github-repos-grid">
+                <p class="hint">Loading GitHub activity…</p>
+            </div>
+            <div class="github-profile-link">
+                <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">View full GitHub profile</a>
+            </div>
+        </section>
+
+        <!-- *************************Contact Form*************************** -->
+        <section class="sec-cont" id="contact-form-section">
+            <h2>Send a message</h2>
+            <div class="contact-form-wrap">
+                <form id="contact-form" novalidate>
+                    <!-- Honeypot field — hidden from real users -->
+                    <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" style="display:none" aria-hidden="true" />
+                    <label>Name
+                        <input id="contact-name" type="text" placeholder="Your name" required />
+                    </label>
+                    <label>Email
+                        <input id="contact-email" type="email" placeholder="your@email.com" required />
+                    </label>
+                    <label>Message
+                        <textarea id="contact-message" rows="5" placeholder="What's on your mind?" required></textarea>
+                    </label>
+                    <button type="submit">Send message</button>
+                    <p id="contact-form-message" class="contact-form-message"></p>
+                </form>
+            </div>
+        </section>
+
     </main>
 
     <footer>
-        <!-- *************************Contact********************************* -->
+        <!-- *************************Contact Info*************************** -->
         <section class="sec-cont" id="contact">
             <div class="contact-wrapper">
                 <div class="contact-info">
