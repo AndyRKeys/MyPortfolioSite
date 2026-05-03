@@ -377,8 +377,8 @@ async function loadAdminPosts() {
 function loadPostForEdit(post) {
     $('#post-edit-id').val(post.id);
     $('#post-title').val(post.title);
-    // Fetch full body since admin list only has excerpt
-    authFetch(`/posts/${encodeURIComponent(post.slug)}`).then(async r => {
+    // Fetch full body via admin route so drafts (published_at IS NULL) are included
+    authFetch(`/posts/admin/${post.id}`).then(async r => {
         if (r.ok) {
             const full = await r.json();
             $('#post-body').val(full.body_markdown);
