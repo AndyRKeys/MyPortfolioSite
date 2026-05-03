@@ -126,20 +126,22 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 This SSHs into the Pi and runs `scripts/deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
-3. Runs `npm install` only if `package.json` changed
-4. Restarts PM2 only if backend files changed
-5. Reports PM2 status
+3. Runs `npm install` only if `backend/package.json` changed
+4. Re-runs `backend/db/schema.sql` only if it changed (idempotent migrations)
+5. Re-renders and reloads Nginx only if `scripts/nginx-portfolio.conf.template` changed (`nginx -t` is run before reload — a syntax error aborts the deploy)
+6. Restarts PM2 only if backend files changed
+7. Reports PM2 status
 
 ### What needs a restart?
 
 | Change type | Action needed |
 |-------------|--------------|
 | HTML / CSS / JS (frontend) | None — Nginx serves files directly |
-| Backend `.js` files | `pm2 restart portfolio-backend` |
-| `package.json` / new deps | `npm install --omit=dev` + `pm2 restart` |
+| Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
+| `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
+| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
+| `scripts/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
 | `.env` | Edit on server manually + `pm2 restart` |
-| Nginx config | `sudo nginx -t && sudo systemctl reload nginx` |
-| DB schema | Run schema file against DB + `pm2 restart` |
 
 ### Useful server commands
 
