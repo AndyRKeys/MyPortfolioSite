@@ -214,15 +214,47 @@ function formatVisitDate(dateStr) {
 }
 
 function buildPublicTravelCard(travel) {
-    return buildPostCard('travel', {
-        id:        travel.id,
-        title:     travel.title,
-        location:  travel.location,
-        date:      formatVisitDate(travel.visit_date),
-        notes:     travel.notes,
-        mediaUrl:  travel.media_url || travel.mediaUrl,
-        mediaType: travel.media_type || travel.mediaType,
-    });
+    var card = $('<article class="travel-card box draft-card"></article>');
+    card.attr('data-memory-id', travel.id);
+    var media = $('<div class="media"></div>');
+
+    // Use first item from post_media array if available, fall back to legacy media_url
+    var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+    var firstMedia = allMedia ? allMedia[0] : null;
+    var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
+    var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+    var extraCount = allMedia ? allMedia.length - 1 : 0;
+
+    var placeholder = './resources/img/placeholder-transparent.png';
+    if (mediaUrl) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
+        if (mediaType && mediaType.indexOf('video') === 0) {
+            mediaWrap.append('<video controls src="' + mediaUrl + '"></video>');
+        } else {
+            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            mediaWrap.append(img);
+        }
+        if (extraCount > 0) {
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+        }
+        media.append(mediaWrap);
+    } else {
+        media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
+    }
+
+    var content = $('<div class="travel-content"></div>');
+    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
+    var formattedDate = formatVisitDate(travel.visit_date);
+    var locationText = travel.location || 'Location not set';
+    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
+    if (formattedDate) {
+        metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
+    }
+    content.append('<p class="meta">' + metaHtml + '</p>');
+    content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
+    card.append(media).append(content);
+    return card;
 }
 
 // ── Travel map (Leaflet) ───────────────────────────────────────────────────────

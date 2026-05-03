@@ -481,6 +481,59 @@ footer a:hover {
     display: block;
 }
 
+.media-thumb-wrap {
+    position: relative;
+    display: block;
+}
+
+.media-extra-badge {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.media-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.media-list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.media-list-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+}
+
+.media-remove-btn {
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
 .travel-content h3 {
     margin: 0 0 0.35rem 0;
     font-size: 1.1rem;
