@@ -3,4 +3,4 @@
 #
 # Usage: .\scripts\prod-deploy.ps1
 
-& 'C:\Program Files\Git\bin\bash.exe' -c "ssh raspberrypi3 'bash ~/MyPortfolioSite/scripts/prod-deploy.sh'"
+ssh raspberrypi3 'bash ~/MyPortfolioSite/scripts/prod-deploy.sh'
