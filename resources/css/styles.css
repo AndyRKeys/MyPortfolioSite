@@ -1774,3 +1774,107 @@ footer {
     white-space: nowrap;
     max-width: 260px;
 }
+
+/* ── Issue #39: Custom coordinate stepper ─────────────────────────────────── */
+
+/* Hide native browser up/down spinner arrows on number inputs */
+.coord-stepper input[type="number"]::-webkit-outer-spin-button,
+.coord-stepper input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.coord-stepper input[type="number"] {
+    -moz-appearance: textfield; /* Firefox */
+    appearance: textfield;
+}
+
+/* Wrapper: [−] [input] [+] in a single row */
+.coord-stepper {
+    display: flex;
+    align-items: stretch;
+    margin-top: 0.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+}
+
+.coord-stepper:focus-within {
+    border-color: var(--color-accent);
+}
+
+/* Override the generic .admin-card input styles for number inputs inside steppers */
+.coord-stepper input[type="number"] {
+    flex: 1;
+    min-width: 0;
+    padding: 0.65rem 0.6rem;
+    margin-top: 0;        /* cancel the label-child offset */
+    border: none;         /* border is on the wrapper */
+    border-radius: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.coord-stepper input[type="number"]:focus {
+    outline: none;
+    border-color: transparent; /* focus ring is on the wrapper */
+}
+
+/* Step buttons */
+.coord-step-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: auto;
+    min-height: 38px;
+    padding: 0;
+    background: var(--color-surface-alt);
+    border: none;
+    border-radius: 0;
+    color: var(--color-text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.coord-step-btn:hover {
+    background: var(--color-border);
+    color: var(--color-text);
+}
+
+.coord-step-btn:active {
+    background: var(--color-border-strong);
+    color: var(--color-surface);
+}
+
+/* Dividers between btn and input */
+.coord-step-btn:first-child {
+    border-right: 1px solid var(--color-border);
+}
+
+.coord-step-btn:last-child {
+    border-left: 1px solid var(--color-border);
+}
+
+/* Mobile: taller tap targets */
+@media (max-width: 768px) {
+    .coord-step-btn {
+        width: 44px;
+        min-height: 44px;
+    }
+
+    .coord-stepper input[type="number"] {
+        font-size: 16px; /* prevent iOS zoom */
+        padding: 0.75rem 0.4rem;
+    }
+}
