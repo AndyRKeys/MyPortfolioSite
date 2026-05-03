@@ -20,10 +20,10 @@
         <ul class="nav">
             <li><a href="index.html">Home</a></li>
             <!-- Issue #32: quick links to public-facing pages -->
-            <li><a href="travel.html" target="_blank" rel="noopener noreferrer">&#9992; Travel</a></li>
-            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">&#9998; Blog</a></li>
+            <li><a href="travel.html" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
+            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
             <li><a href="login.html" id="logout-link">Logout</a></li>
-            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">&#9822;</button></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
@@ -46,7 +46,7 @@
                     <!-- Issue #34: styled file input -->
                     <label>Photo or video
                         <div class="file-input-wrap">
-                            <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photo or video">Browse&hellip;</button>
+                            <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photo or video">Browse…</button>
                             <span class="file-input-label">No file chosen</span>
                             <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" />
                         </div>
@@ -73,7 +73,7 @@
                 <div class="saved-memories">
                     <h3>Saved memories</h3>
                     <div id="saved-memories-list">
-                        <p class="hint">Loading&hellip;</p>
+                        <p class="hint">Loading…</p>
                     </div>
                 </div>
             </div>
@@ -87,7 +87,7 @@
                         <input id="post-title" type="text" placeholder="Post title" />
                     </label>
                     <label>Body (Markdown)
-                        <textarea id="post-body" rows="10" placeholder="Write in Markdown&hellip;"></textarea>
+                        <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
                     </label>
                     <div class="form-actions">
                         <button type="submit" id="post-save-btn" class="btn-primary">Save draft</button>
@@ -101,7 +101,7 @@
                 <div class="saved-memories" style="margin-top:1.5rem">
                     <h3>All posts</h3>
                     <div id="posts-admin-list">
-                        <p class="hint">Loading&hellip;</p>
+                        <p class="hint">Loading…</p>
                     </div>
                 </div>
             </div>
@@ -111,7 +111,7 @@
                 <h2>Private coding projects</h2>
                 <p>Private notes and project planning. GitHub integration can be added later.</p>
                 <label>Private notes
-                    <textarea id="private-notes" rows="6" placeholder="Save private project ideas here&hellip;"></textarea>
+                    <textarea id="private-notes" rows="6" placeholder="Save private project ideas here…"></textarea>
                 </label>
                 <div class="form-actions">
                     <button id="save-private" type="button" class="btn-primary">Save notes</button>
@@ -123,9 +123,9 @@
             <!-- ── Passkeys ────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2>Manage passkeys</h2>
-                <p>Passkeys let you sign in with your device's biometrics or PIN &mdash; no password needed.</p>
+                <p>Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
                 <div id="passkey-list">
-                    <p class="hint">Loading passkeys&hellip;</p>
+                    <p class="hint">Loading passkeys…</p>
                 </div>
                 <div class="form-actions">
                     <button id="add-passkey-btn" type="button" class="btn-primary">Add passkey</button>
