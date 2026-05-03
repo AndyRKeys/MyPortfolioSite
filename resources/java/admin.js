@@ -1,4 +1,5 @@
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
+import exifr from 'https://esm.sh/exifr@7.1.3';
 import { API } from './config.js';
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -195,12 +196,34 @@ function setTravelMessage(msg, isError = false) {
     el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
 }
 
+// Try to read GPS coords from image EXIF and populate the lat/lng inputs.
+// Silently no-ops on missing tags or unsupported file types — user can still type
+// coordinates manually.
+async function tryAutofillGpsFromFile(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return;
+    // Don't overwrite values the user has already typed
+    if ($('#travel-lat').val() || $('#travel-lng').val()) return;
+    try {
+        const gps = await exifr.gps(file);
+        if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
+            $('#travel-lat').val(gps.latitude.toFixed(6));
+            $('#travel-lng').val(gps.longitude.toFixed(6));
+            setTravelMessage('Location auto-filled from photo EXIF.');
+        }
+    } catch {
+        // EXIF parsing failed — not a problem, just continue
+    }
+}
+
 function initTravelForm() {
     // Show preview when file is selected (local preview before upload)
     $('#travel-file').on('change', function (event) {
         const file = event.target.files && event.target.files[0];
         if (!file) { currentFile = null; return; }
         currentFile = file;
+
+        tryAutofillGpsFromFile(file);
+
         const reader = new FileReader();
         reader.onload = function (e) {
             showPreview({
