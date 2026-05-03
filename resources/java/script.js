@@ -246,35 +246,9 @@ function initContactForm() {
     });
 }
 
-// ── Dark mode ─────────────────────────────────────────────────────────────────
-
-function initDarkMode() {
-    var toggleBtn = document.getElementById('dark-mode-toggle');
-    if (!toggleBtn) return;
-
-    function applyTheme(dark) {
-        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        toggleBtn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
-        toggleBtn.textContent = dark ? '☀' : '☾';
-    }
-
-    var stored = localStorage.getItem('theme');
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var isDark = stored ? stored === 'dark' : prefersDark;
-    applyTheme(isDark);
-
-    toggleBtn.addEventListener('click', function() {
-        var currentlyDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        var next = !currentlyDark;
-        localStorage.setItem('theme', next ? 'dark' : 'light');
-        applyTheme(next);
-    });
-}
-
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 $(document).ready(function() {
-    initDarkMode();
     loadPublicTravelPosts();
     loadGithubWidget();
     initContactForm();
