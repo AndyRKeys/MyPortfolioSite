@@ -126,7 +126,7 @@ section h2::after {
     transform: translateX(-50%);
     width: 60px;
     height: 3px;
-    background: linear-gradient(90deg, #333, #999, #333);
+    background: linear-gradient(90deg, var(--color-border-strong), var(--color-text-muted), var(--color-border-strong));
     border-radius: 2px;
 }
 
@@ -240,7 +240,7 @@ li a:hover {
 }
 
 .login-message {
-    color: #b02a37;
+    color: var(--color-error);
     margin-top: 0.75rem;
 }
 
@@ -257,7 +257,7 @@ li a:hover {
 
 .private-card .hint {
     margin-top: 1rem;
-    color: #555;
+    color: var(--color-text-muted);
     font-size: 0.9rem;
 }
 
@@ -311,10 +311,18 @@ img {
 
 button {
     align-self: center;
-    background-color: black;
-    border: none;
-    color: white;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
     height: 40px;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 6px;
+    transition: background 0.2s ease;
+}
+
+button:hover {
+    background: var(--color-border);
 }
 
 
@@ -440,9 +448,11 @@ footer a:hover {
     width: 100%;
     padding: 0.65rem;
     margin-top: 0.35rem;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     font-family: inherit;
+    background: var(--color-bg);
+    color: var(--color-text);
 }
 
 .form-actions {
@@ -455,11 +465,8 @@ footer a:hover {
 .travel-uploader button {
     cursor: pointer;
     min-width: 120px;
-    background-color: black;
-    color: white;
-    border: none;
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    height: auto;
 }
 
 .travel-preview {
@@ -857,17 +864,13 @@ footer {
         height: 600px;
     }
     
-    button {
+    .paddle {
+        top: auto;
         width: 10px;
         height: 100%;
         align-self: auto;
         z-index: 1;
         background-color: #f7f7f780;
-    }
-    
-    .paddle {
-        top: auto;
-        width: 10px;
     }
     
     .paddle p {
@@ -1058,6 +1061,7 @@ footer {
     margin-bottom: 0.75rem;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -1242,4 +1246,120 @@ footer {
 .hint {
     color: var(--color-text-muted);
     font-size: 0.9rem;
+}
+
+/* ── Button variants ────────────────────────────────────────────────────────── */
+
+.btn-primary {
+    background: var(--color-accent);
+    color: #fff;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    cursor: pointer;
+    height: auto;
+    width: auto;
+    letter-spacing: 0.2px;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.btn-primary:hover {
+    background: var(--color-accent-hover);
+    transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--color-text);
+    border: 2px solid var(--color-border-strong);
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    cursor: pointer;
+    height: auto;
+    width: auto;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: var(--color-surface-alt);
+    border-color: var(--color-text);
+}
+
+.btn-secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Full-width buttons on narrow login/setup cards */
+.login-section .btn-primary,
+.login-section .btn-secondary {
+    width: 100%;
+    text-align: center;
+}
+
+/* ── Admin card form inputs ─────────────────────────────────────────────────── */
+
+.admin-card label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    margin-bottom: 0.75rem;
+}
+
+.admin-card input[type="text"],
+.admin-card input[type="email"],
+.admin-card textarea,
+.admin-card input[type="file"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    margin-top: 0.35rem;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+.admin-card input[type="text"]:focus,
+.admin-card input[type="email"]:focus,
+.admin-card textarea:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+/* ── Login divider ──────────────────────────────────────────────────────────── */
+
+.login-divider {
+    display: flex;
+    align-items: center;
+    color: var(--color-text-muted);
+    margin: 1.25rem 0;
+    font-size: 0.85rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--color-border);
+}
+
+.login-divider span {
+    padding: 0 0.75rem;
 }
