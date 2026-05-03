@@ -6,3 +6,5 @@ backend/.env
 .DS_Store
 __MACOSX/
 .claude/settings.local.json
+uploads/*
+!uploads/.gitkeep
