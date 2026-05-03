@@ -46,5 +46,21 @@ CREATE TABLE IF NOT EXISTS travel_memories (
   notes TEXT,
   media_url TEXT,
   media_type VARCHAR(100),
+  lat DECIMAL(9,6),
+  lng DECIMAL(9,6),
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Migration: add lat/lng to existing deployments
+ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6);
+ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6);
+
+CREATE TABLE IF NOT EXISTS posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) UNIQUE NOT NULL,
+  body_markdown TEXT NOT NULL DEFAULT '',
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
