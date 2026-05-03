@@ -1,6 +1,6 @@
 /**
  * dev-env.js — Visual indicator for non-production environments.
- * Issue #31: Prepends [DEV] to the page title and tints the favicon
+ * Prepends [DEV] to the page title and tints the favicon
  * when running on localhost or 127.0.0.1, so the browser tab is
  * immediately distinguishable from the live site.
  */
