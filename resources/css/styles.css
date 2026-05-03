@@ -1364,43 +1364,7 @@ footer {
     padding: 0 0.75rem;
 }
 
-/* ── Issue #28: Admin quick-nav bar ─────────────────────────────────────────── */
-
-.admin-quicknav {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    padding: 0.75rem 1rem;
-    background: var(--color-surface-alt);
-    border-bottom: 1px solid var(--color-border);
-}
-
-.admin-quicknav-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 1.1rem;
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-weight: 500;
-    text-decoration: none;
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-    box-shadow: 0 1px 4px var(--color-shadow);
-}
-
-.admin-quicknav-link:hover {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: #fff;
-    text-decoration: none;
-}
-
-/* ── Issue #29: Styled file input ───────────────────────────────────────────── */
+/* ── Issue #34: Styled file input ───────────────────────────────────────────── */
 
 .file-input-wrap {
     display: flex;
