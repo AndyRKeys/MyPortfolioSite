@@ -1,23 +1,5 @@
 var API_BASE = '';
 
-function initDarkMode() {
-    var toggleBtn = document.getElementById('dark-mode-toggle');
-    if (!toggleBtn) return;
-    function applyTheme(dark) {
-        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        toggleBtn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
-        toggleBtn.textContent = dark ? '☀' : '☾';
-    }
-    var stored = localStorage.getItem('theme');
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    applyTheme(stored ? stored === 'dark' : prefersDark);
-    toggleBtn.addEventListener('click', function () {
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        localStorage.setItem('theme', isDark ? 'light' : 'dark');
-        applyTheme(!isDark);
-    });
-}
-
 function getSlug() {
     var params = new URLSearchParams(window.location.search);
     return params.get('slug');
@@ -60,6 +42,5 @@ function showError() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    initDarkMode();
     loadPost();
 });
