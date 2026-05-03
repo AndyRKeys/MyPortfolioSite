@@ -14,11 +14,15 @@
 <body>
     <header>
         <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
         <h2>Admin Dashboard</h2>
     </header>
     <nav>
         <ul class="nav">
             <li><a href="index.html">Home</a></li>
+            <!-- Issue #32: quick links to public-facing pages -->
+            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
+            <li><a href="travel.html" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
             <li><a href="login.html" id="logout-link">Logout</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
@@ -26,6 +30,8 @@
 
     <main class="admin-page">
         <section class="sec-cont admin-panel">
+
+            <!-- ── Travel memories ─────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2>Publish travel memories</h2>
                 <form id="travel-form">
@@ -38,9 +44,31 @@
                     <label>Notes
                         <textarea id="travel-notes" rows="3" placeholder="Describe the moment"></textarea>
                     </label>
+                    <!-- Issue #34: styled file input -->
                     <label>Photo or video
-                        <input id="travel-file" type="file" accept="image/*,video/*" />
+                        <div class="file-input-wrap">
+                            <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photo or video">Browse…</button>
+                            <span class="file-input-label">No file chosen</span>
+                            <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" />
+                        </div>
                     </label>
+                    <!-- Issue #39: custom coordinate steppers replacing native spinners -->
+                    <div class="coord-row">
+                        <label>Latitude
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
+                                <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase latitude">+</button>
+                            </div>
+                        </label>
+                        <label>Longitude
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="-1" aria-label="Decrease longitude">−</button>
+                                <input id="travel-lng" type="number" step="0.0001" placeholder="e.g. -0.1278" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase longitude">+</button>
+                            </div>
+                        </label>
+                    </div>
                     <div class="form-actions">
                         <button type="submit" class="btn-primary">Save memory</button>
                         <button type="button" id="travel-clear" class="btn-secondary">Clear</button>
@@ -60,6 +88,35 @@
                 </div>
             </div>
 
+            <!-- ── Blog posts ──────────────────────────────────────────────── -->
+            <div class="admin-card">
+                <h2>Blog posts</h2>
+                <form id="post-form">
+                    <input type="hidden" id="post-edit-id" value="" />
+                    <label>Title
+                        <input id="post-title" type="text" placeholder="Post title" />
+                    </label>
+                    <label>Body (Markdown)
+                        <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" id="post-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="post-publish-btn" class="btn-primary">Publish</button>
+                        <button type="button" id="post-template-btn" class="btn-secondary">Insert template</button>
+                        <button type="button" id="post-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
+                    </div>
+                </form>
+                <p id="post-message" class="login-message"></p>
+
+                <div class="saved-memories" style="margin-top:1.5rem">
+                    <h3>All posts</h3>
+                    <div id="posts-admin-list">
+                        <p class="hint">Loading…</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Private notes ───────────────────────────────────────────── -->
             <div class="admin-card private-card">
                 <h2>Private coding projects</h2>
                 <p>Private notes and project planning. GitHub integration can be added later.</p>
@@ -73,6 +130,7 @@
                 <p class="hint">Notes are saved locally in your browser.</p>
             </div>
 
+            <!-- ── Passkeys ────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2>Manage passkeys</h2>
                 <p>Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
@@ -84,11 +142,71 @@
                 </div>
                 <p id="passkey-message" class="login-message"></p>
             </div>
+
         </section>
     </main>
 
+    <!-- Issue #33: dev environment indicator -->
+    <script src="./resources/java/dev-env.js"></script>
     <script src="./resources/java/darkmode.js"></script>
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script type="module" src="./resources/java/admin.js"></script>
+    <script>
+        // Issue #34: wire styled file input button to hidden native input
+        (function () {
+            var btn = document.querySelector('.file-input-btn');
+            var input = document.getElementById('travel-file');
+            var label = document.querySelector('.file-input-label');
+            if (!btn || !input || !label) return;
+            btn.addEventListener('click', function () { input.click(); });
+            input.addEventListener('change', function () {
+                label.textContent = input.files.length > 0
+                    ? input.files[0].name
+                    : 'No file chosen';
+            });
+        })();
+
+        // Issue #39: custom coordinate stepper buttons
+        (function () {
+            var STEP = 0.0001;
+            var holdDelay = 400;  // ms before repeat starts
+            var holdInterval = 80; // ms between repeats while held
+
+            function nudge(inputId, direction) {
+                var el = document.getElementById(inputId);
+                if (!el) return;
+                var val = parseFloat(el.value) || 0;
+                var decimals = (STEP.toString().split('.')[1] || '').length;
+                el.value = (val + direction * STEP).toFixed(decimals);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            document.querySelectorAll('.coord-step-btn').forEach(function (btn) {
+                var timer, interval;
+
+                function startHold() {
+                    var targetId = btn.dataset.target;
+                    var dir = parseInt(btn.dataset.dir, 10);
+                    nudge(targetId, dir);
+                    timer = setTimeout(function () {
+                        interval = setInterval(function () { nudge(targetId, dir); }, holdInterval);
+                    }, holdDelay);
+                }
+
+                function stopHold() {
+                    clearTimeout(timer);
+                    clearInterval(interval);
+                }
+
+                btn.addEventListener('mousedown', startHold);
+                btn.addEventListener('touchstart', function (e) { e.preventDefault(); startHold(); }, { passive: false });
+                btn.addEventListener('mouseup', stopHold);
+                btn.addEventListener('mouseleave', stopHold);
+                btn.addEventListener('touchend', stopHold);
+                btn.addEventListener('touchcancel', stopHold);
+            });
+        })();
+    </script>
 </body>
 </html>

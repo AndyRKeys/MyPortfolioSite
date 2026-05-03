@@ -7,7 +7,7 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, title, location, notes, media_url, media_type, created_at FROM travel_memories ORDER BY created_at DESC'
+      'SELECT id, title, location, notes, media_url, media_type, lat, lng, created_at FROM travel_memories ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -18,13 +18,16 @@ router.get('/', async (req, res) => {
 
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { title, location, notes, mediaUrl, mediaType } = req.body;
+    const { title, location, notes, mediaUrl, mediaType, lat, lng } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
 
+    const latVal = lat !== undefined && lat !== '' ? parseFloat(lat) : null;
+    const lngVal = lng !== undefined && lng !== '' ? parseFloat(lng) : null;
+
     const result = await pool.query(
-      `INSERT INTO travel_memories (title, location, notes, media_url, media_type)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [title.trim(), location?.trim() || null, notes?.trim() || null, mediaUrl || null, mediaType || null]
+      `INSERT INTO travel_memories (title, location, notes, media_url, media_type, lat, lng)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title.trim(), location?.trim() || null, notes?.trim() || null, mediaUrl || null, mediaType || null, latVal, lngVal]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
