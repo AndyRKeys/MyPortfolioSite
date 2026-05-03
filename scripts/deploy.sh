@@ -78,8 +78,9 @@ if [ "$NGINX_CHANGED" -gt 0 ]; then
         else
             command -v envsubst >/dev/null || sudo apt-get install -y gettext-base
 
-            export DOMAIN REPO_DIR APP_PORT
-            envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT}' \
+            BACKEND_HOST=127.0.0.1
+            export DOMAIN REPO_DIR APP_PORT BACKEND_HOST
+            envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT} ${BACKEND_HOST}' \
                 < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
                 > /tmp/portfolio.conf
 

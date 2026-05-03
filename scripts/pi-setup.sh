@@ -105,8 +105,9 @@ echo "[7/7] Configuring Nginx..."
 # envsubst lives in gettext-base; install if missing
 command -v envsubst >/dev/null || sudo apt-get install -y gettext-base
 
-export DOMAIN REPO_DIR APP_PORT
-envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT}' \
+BACKEND_HOST=127.0.0.1
+export DOMAIN REPO_DIR APP_PORT BACKEND_HOST
+envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT} ${BACKEND_HOST}' \
     < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
     | sudo tee /etc/nginx/sites-available/portfolio > /dev/null
 
