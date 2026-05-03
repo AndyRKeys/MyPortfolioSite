@@ -65,6 +65,7 @@ services:
       DOMAIN: localhost
       REPO_DIR: /usr/share/nginx/html
       APP_PORT: ${PORT:-8080}
+      BACKEND_HOST: backend
     depends_on:
       backend:
         condition: service_healthy
