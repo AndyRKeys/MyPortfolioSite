@@ -8,6 +8,7 @@ import travelRoutes from './routes/travel.js';
 import contactRoutes from './routes/contact.js';
 import uploadRoutes from './routes/upload.js';
 import postsRoutes from './routes/posts.js';
+import statsRoutes from './routes/stats.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,7 @@ app.use('/travel', travelRoutes);
 app.use('/contact', contactRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/posts', postsRoutes);
+app.use('/stats', statsRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
