@@ -177,7 +177,7 @@ function initTravelMap(memories) {
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
-        attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(travelMap);
 
     var markers = [];
@@ -301,8 +301,8 @@ function loadGithubWidget() {
         })
         .catch(function(err) {
             var msg = err.message === 'rate-limited'
-                ? 'GitHub API rate limit reached \u2014 <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.'
-                : 'Could not load GitHub activity \u2014 <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.';
+                ? 'GitHub API rate limit reached — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.'
+                : 'Could not load GitHub activity — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.';
             container.html('<p class="github-fallback">' + msg + '</p>');
         });
 }
@@ -319,7 +319,7 @@ function initContactForm() {
         var submitBtn = form.querySelector('button[type="submit"]');
 
         submitBtn.disabled = true;
-        msgEl.textContent = 'Sending\u2026';
+        msgEl.textContent = 'Sending…';
         msgEl.className = 'contact-form-message';
 
         var payload = {
@@ -337,7 +337,7 @@ function initContactForm() {
             .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
             .then(function(result) {
                 if (result.ok) {
-                    msgEl.textContent = 'Message sent \u2014 I\'ll be in touch soon.';
+                    msgEl.textContent = 'Message sent — I\'ll be in touch soon.';
                     msgEl.className = 'contact-form-message success';
                     form.reset();
                 } else {
