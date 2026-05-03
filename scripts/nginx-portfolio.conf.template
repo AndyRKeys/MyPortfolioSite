@@ -1,6 +1,7 @@
 # Nginx server block for andykeys.me portfolio.
 # Rendered by `envsubst` with an explicit allow-list (DOMAIN, REPO_DIR,
-# APP_PORT) so Nginx-native $vars (e.g. $host, $uri) are preserved.
+# APP_PORT, BACKEND_HOST) so Nginx-native $vars (e.g. $host, $uri) are preserved.
+# BACKEND_HOST defaults to 127.0.0.1 for production, override to 'backend' for Docker.
 # Used by both scripts/pi-setup.sh (initial setup) and scripts/deploy.sh
 # (continuous deployment).
 server {
@@ -15,7 +16,7 @@ server {
 
     # Proxy all backend API routes to Node
     location ~ ^/(auth|travel|contact|posts|upload)(/|$) {
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_pass http://${BACKEND_HOST:-127.0.0.1}:${APP_PORT};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -24,7 +25,7 @@ server {
 
     # Health check
     location /health {
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_pass http://${BACKEND_HOST:-127.0.0.1}:${APP_PORT};
     }
 
     # Uploaded media served directly by Nginx from repo-root uploads/ dir
