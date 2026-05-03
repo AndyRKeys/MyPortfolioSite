@@ -2,11 +2,12 @@
 # Smart deploy script for andykeys.me
 # Detects what changed and only applies what's needed:
 #   - Always pulls latest code
+#   - Always runs npm install (ensures no missing packages after any change)
 #   - Always ensures nginx config is rendered and symlinked (idempotent)
-#   - npm install (if backend/package.json changed)
 #   - psql -f schema.sql (if backend/db/schema.sql changed)
 #   - render + reload nginx (if template changed or config missing)
 #   - pm2 restart (if any backend file changed)
+#   - Post-deploy health check (fails loudly if backend won't start)
 # Run on the Pi: bash ~/MyPortfolioSite/scripts/prod-deploy.sh
 set -e
 
@@ -19,7 +20,6 @@ git fetch origin main
 # Detect what's about to change before pulling
 CHANGES=$(git diff HEAD..origin/main --name-only)
 BACKEND_CHANGED=$(echo "$CHANGES" | grep -c "^backend/" || true)
-PACKAGES_CHANGED=$(echo "$CHANGES" | grep -c "^backend/package" || true)
 SCHEMA_CHANGED=$(echo "$CHANGES" | grep -c "^backend/db/schema.sql$" || true)
 NGINX_CHANGED=$(echo "$CHANGES" | grep -c "^scripts/nginx-portfolio.conf.template$" || true)
 
@@ -37,16 +37,16 @@ echo ""
 echo "=== Pulling ==="
 git pull origin main
 
-# Ensure uploads dir exists (covered by .gitkeep but be defensive)
+# Ensure uploads dir exists
 mkdir -p "$REPO_DIR/uploads"
 
-# Install deps if package.json changed
-if [ "$PACKAGES_CHANGED" -gt 0 ]; then
-    echo "=== package.json changed — installing dependencies ==="
-    cd backend
-    npm install --omit=dev --silent
-    cd "$REPO_DIR"
-fi
+# ── npm install (always) ──────────────────────────────────────────────────────
+# Run unconditionally — ensures packages are never missing regardless of what
+# changed. Uses --omit=dev to keep memory footprint small on the Pi.
+echo "=== Installing backend dependencies ==="
+cd "$REPO_DIR/backend"
+npm install --omit=dev --silent
+cd "$REPO_DIR"
 
 # Apply DB schema if it changed
 # Schema is idempotent (CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS)
@@ -54,10 +54,11 @@ if [ "$SCHEMA_CHANGED" -gt 0 ]; then
     echo "=== schema.sql changed — applying migration ==="
     if [ -f backend/.env ]; then
         DB_NAME=$(grep "^DB_NAME=" backend/.env | cut -d= -f2)
+        DB_USER=$(grep "^DB_USER=" backend/.env | cut -d= -f2)
         if [ -n "$DB_NAME" ]; then
             sudo -u postgres psql -d "$DB_NAME" -f backend/db/schema.sql
-            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $(grep '^DB_USER=' backend/.env | cut -d= -f2);"
-            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $(grep '^DB_USER=' backend/.env | cut -d= -f2);"
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $DB_USER;"
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;"
         else
             echo "  WARN: DB_NAME not set in backend/.env — skipping schema apply"
         fi
@@ -67,7 +68,6 @@ if [ "$SCHEMA_CHANGED" -gt 0 ]; then
 fi
 
 # ── Nginx — always ensure config is rendered and symlinked ───────────────────
-# Runs if: template changed OR config file is missing OR symlink is missing.
 NGINX_CONF=/etc/nginx/sites-available/portfolio
 NGINX_LINK=/etc/nginx/sites-enabled/portfolio
 
@@ -91,8 +91,6 @@ if [ "$NGINX_CHANGED" -gt 0 ] || [ ! -f "$NGINX_CONF" ] || [ ! -L "$NGINX_LINK" 
 
             sudo cp /tmp/portfolio.conf "$NGINX_CONF"
             rm /tmp/portfolio.conf
-
-            # Idempotent symlink
             sudo ln -sf "$NGINX_CONF" "$NGINX_LINK"
             sudo rm -f /etc/nginx/sites-enabled/default
 
@@ -100,7 +98,7 @@ if [ "$NGINX_CHANGED" -gt 0 ] || [ ! -f "$NGINX_CONF" ] || [ ! -L "$NGINX_LINK" 
                 sudo systemctl reload nginx
                 echo "  Nginx reloaded."
             else
-                echo "  ERROR: nginx -t failed — config not reloaded. Fix the template and re-deploy." >&2
+                echo "  ERROR: nginx -t failed — config not reloaded." >&2
                 exit 1
             fi
         fi
@@ -111,17 +109,42 @@ else
     echo "=== Nginx config unchanged and already applied — skipping ==="
 fi
 
-# Restart backend if any backend file changed
+# ── Restart backend if any backend file changed ───────────────────────────────
 if [ "$BACKEND_CHANGED" -gt 0 ]; then
     echo "=== Backend changed — restarting PM2 ==="
     pm2 restart portfolio-backend
-    sleep 1
 else
-    echo "=== No backend changes — PM2 not restarted ==="
+    echo "=== No backend changes — reloading PM2 to pick up fresh node_modules ==="
+    pm2 reload portfolio-backend
+fi
+
+# ── Post-deploy health check ──────────────────────────────────────────────────
+echo ""
+echo "=== Health check ==="
+MAX_WAIT=20
+ELAPSED=0
+until curl -sf http://localhost:8080/health > /dev/null 2>&1; do
+    if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+        echo "ERROR: Backend did not respond on :8080 after ${MAX_WAIT}s" >&2
+        echo "--- PM2 logs ---"
+        pm2 logs portfolio-backend --lines 30 --nostream
+        exit 1
+    fi
+    sleep 2
+    ELAPSED=$((ELAPSED + 2))
+done
+echo "Backend healthy on :8080 ✓"
+
+# Nginx proxy check
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/health)
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "Nginx proxy healthy (HTTP $HTTP_CODE) ✓"
+else
+    echo "WARN: Nginx proxy returned HTTP $HTTP_CODE — check nginx config" >&2
 fi
 
 echo ""
-echo "=== Status ==="
+echo "=== PM2 Status ==="
 pm2 status portfolio-backend
 
 echo ""
