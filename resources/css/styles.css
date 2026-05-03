@@ -882,7 +882,7 @@ footer {
     }
 }
 
-/* ── Dark mode toggle button ────────────────────────────────────────────────── */
+/* ── Dark mode toggle button ──────────────────────────────────────────────── */
 
 #dark-mode-toggle {
     background: transparent;
@@ -904,7 +904,7 @@ footer {
     background: transparent;
 }
 
-/* ── Career Timeline (Issue #9) ─────────────────────────────────────────────── */
+/* ── Career Timeline (Issue #9) ─────────────────────────────────────────── */
 
 .timeline {
     max-width: 800px;
@@ -1019,7 +1019,7 @@ footer {
     }
 }
 
-/* ── GitHub activity widget (Issue #5) ──────────────────────────────────────── */
+/* ── GitHub activity widget (Issue #5) ─────────────────────────────────────── */
 
 .github-repos-grid {
     display: grid;
@@ -1189,7 +1189,7 @@ footer {
     color: var(--color-error);
 }
 
-/* ── Admin saved memories list ──────────────────────────────────────────────── */
+/* ── Admin saved memories list ────────────────────────────────────────────── */
 
 .saved-memories {
     margin-top: 1.5rem;
@@ -1243,7 +1243,7 @@ footer {
     flex-shrink: 0;
 }
 
-/* ── Blog (Issue #7) ────────────────────────────────────────────────────────── */
+/* ── Blog (Issue #7) ──────────────────────────────────────────────────────── */
 
 .posts-list {
     max-width: 800px;
@@ -1462,7 +1462,7 @@ footer {
 
 .btn-small:hover { opacity: 0.85; }
 
-/* ── Travel map (Issue #8) ──────────────────────────────────────────────────── */
+/* ── Travel map (Issue #8) ───────────────────────────────────────────────────── */
 
 .travel-view-toggle {
     display: flex;
@@ -1559,7 +1559,7 @@ footer {
     font-size: 0.9rem;
 }
 
-/* ── Button variants ────────────────────────────────────────────────────────── */
+/* ── Button variants ─────────────────────────────────────────────────────────── */
 
 .btn-primary {
     background: var(--color-accent);
@@ -1632,6 +1632,7 @@ footer {
 
 .admin-card input[type="text"],
 .admin-card input[type="email"],
+.admin-card input[type="number"],
 .admin-card textarea,
 .admin-card input[type="file"] {
     width: 100%;
@@ -1649,6 +1650,7 @@ footer {
 
 .admin-card input[type="text"]:focus,
 .admin-card input[type="email"]:focus,
+.admin-card input[type="number"]:focus,
 .admin-card textarea:focus {
     outline: none;
     border-color: var(--color-accent);
@@ -1675,7 +1677,7 @@ footer {
     padding: 0 0.75rem;
 }
 
-/* ── Mobile-first post editor (Issue #7) ───────────────────────────────────── */
+/* ── Mobile-first post editor (Issue #7) ─────────────────────────────────────── */
 
 #post-form textarea#post-body {
     min-height: 240px;
@@ -1737,7 +1739,7 @@ footer {
     }
 }
 
-/* ── Issue #34: Styled file input ───────────────────────────────────────────── */
+/* ── Issue #34: Styled file input ─────────────────────────────────────────── */
 
 .file-input-wrap {
     display: flex;
