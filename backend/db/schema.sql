@@ -48,12 +48,16 @@ CREATE TABLE IF NOT EXISTS travel_memories (
   media_type VARCHAR(100),
   lat DECIMAL(9,6),
   lng DECIMAL(9,6),
+  visit_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Migration: add lat/lng to existing deployments
 ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6);
 ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6);
+
+-- Migration: add visit_date to existing deployments
+ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS visit_date DATE DEFAULT CURRENT_DATE;
 
 CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

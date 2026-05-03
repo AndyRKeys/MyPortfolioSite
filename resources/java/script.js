@@ -98,6 +98,12 @@ function setHeight(div, height) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
+function formatVisitDate(dateStr) {
+    if (!dateStr) return null;
+    var d = new Date(dateStr + 'T00:00:00'); // parse as local date, not UTC
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 function buildPublicTravelCard(travel) {
     var card = $('<article class="travel-card box draft-card"></article>');
     card.attr('data-memory-id', travel.id);
@@ -115,7 +121,12 @@ function buildPublicTravelCard(travel) {
     }
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
-    content.append('<p class="meta">' + (travel.location || 'Location not set') + '</p>');
+    var formattedDate = formatVisitDate(travel.visit_date);
+    var metaHtml = travel.location || 'Location not set';
+    if (formattedDate) {
+        metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
+    }
+    content.append('<p class="meta">' + metaHtml + '</p>');
     content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
     card.append(media).append(content);
     return card;
