@@ -49,6 +49,11 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function todayIso() {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+
 // ── Passkey management ────────────────────────────────────────────────────────
 
 async function loadPasskeys() {
@@ -123,7 +128,8 @@ function setPasskeyMessage(msg, isError = false) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
-let currentFile = null;  // { file: File } after upload, or null
+let currentFile = null;
+let editingTravelMedia = null; // preserved existing media when editing
 
 function showPreview(travel) {
     const previewMedia = $('.preview-media');
@@ -144,22 +150,41 @@ function showPreview(travel) {
 }
 
 function clearTravelForm() {
+    $('#travel-edit-id').val('');
     $('#travel-form')[0].reset();
+    $('#travel-cancel-btn').addClass('hidden');
+    $('.file-input-label').text('No file chosen');
+    $('#travel-date').val(todayIso());
     $('#travel-preview').addClass('hidden');
     $('.preview-media').empty();
     $('.preview-text').empty();
     currentFile = null;
+    editingTravelMedia = null;
+    setTravelMessage('');
 }
 
 function buildSavedMemoryRow(memory) {
     const div = $('<div class="saved-memory-row"></div>');
     const info = $('<div class="saved-memory-info"></div>');
-    info.append('<strong>' + escapeHtml(memory.title) + '</strong>');
+    const statusLabel = memory.published_at
+        ? '<span class="post-status published">Published</span>'
+        : '<span class="post-status draft">Draft</span>';
+    info.append('<strong>' + escapeHtml(memory.title) + '</strong> ' + statusLabel);
     if (memory.location) info.append('<span class="saved-memory-location"> — ' + escapeHtml(memory.location) + '</span>');
     info.append('<span class="saved-memory-date"> · ' + new Date(memory.created_at).toLocaleDateString() + '</span>');
+
+    const actions = $('<div class="post-admin-actions"></div>');
+    const editBtn = $('<button type="button" class="btn-small">Edit</button>');
+    editBtn.on('click', () => loadTravelForEdit(memory));
+
+    const toggleBtn = $('<button type="button" class="btn-small">' + (memory.published_at ? 'Unpublish' : 'Publish') + '</button>');
+    toggleBtn.on('click', () => toggleTravelPublish(memory));
+
     const delBtn = $('<button type="button" class="travel-delete-btn">Delete</button>');
     delBtn.on('click', () => deleteTravelMemory(memory.id));
-    div.append(info).append(delBtn);
+
+    actions.append(editBtn).append(toggleBtn).append(delBtn);
+    div.append(info).append(actions);
     return div;
 }
 
@@ -167,7 +192,7 @@ async function loadTravelMemories() {
     const list = $('#saved-memories-list');
     list.html('<p class="hint">Loading…</p>');
     try {
-        const res = await authFetch('/travel');
+        const res = await authFetch('/travel/all');
         if (!res.ok) throw new Error();
         const memories = await res.json();
         if (!memories.length) { list.html('<p class="hint">No travel memories saved yet.</p>'); return; }
@@ -175,6 +200,61 @@ async function loadTravelMemories() {
         memories.forEach(m => list.append(buildSavedMemoryRow(m)));
     } catch {
         list.html('<p class="hint" style="color:var(--color-error)">Failed to load memories.</p>');
+    }
+}
+
+async function loadTravelForEdit(memory) {
+    try {
+        const res = await authFetch(`/travel/admin/${memory.id}`);
+        if (!res.ok) throw new Error();
+        const full = await res.json();
+
+        $('#travel-edit-id').val(full.id);
+        $('#travel-title').val(full.title || '');
+        $('#travel-location').val(full.location || '');
+        $('#travel-notes').val(full.notes || '');
+        $('#travel-date').val(full.visit_date || todayIso());
+        $('#travel-lat').val(full.lat != null ? full.lat : '');
+        $('#travel-lng').val(full.lng != null ? full.lng : '');
+
+        editingTravelMedia = full.media_url ? { url: full.media_url, type: full.media_type } : null;
+        currentFile = null;
+        $('.file-input-label').text('No file chosen');
+
+        if (full.media_url) {
+            showPreview({ title: full.title, location: full.location, notes: full.notes, mediaUrl: full.media_url, mediaType: full.media_type });
+        } else {
+            $('#travel-preview').addClass('hidden');
+        }
+
+        $('#travel-cancel-btn').removeClass('hidden');
+        setTravelMessage('Editing: ' + full.title);
+        document.getElementById('travel-title').scrollIntoView({ behavior: 'smooth' });
+    } catch {
+        setTravelMessage('Failed to load memory for editing.', true);
+    }
+}
+
+async function toggleTravelPublish(memory) {
+    try {
+        const res = await authFetch(`/travel/${memory.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                title: memory.title,
+                location: memory.location || '',
+                notes: memory.notes || '',
+                visitDate: memory.visit_date || null,
+                mediaUrl: memory.media_url || null,
+                mediaType: memory.media_type || null,
+                lat: memory.lat,
+                lng: memory.lng,
+                publish: !memory.published_at,
+            }),
+        });
+        if (!res.ok) throw new Error();
+        await loadTravelMemories();
+    } catch {
+        alert('Failed to update memory.');
     }
 }
 
@@ -197,11 +277,8 @@ function setTravelMessage(msg, isError = false) {
 }
 
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
-// Silently no-ops on missing tags or unsupported file types — user can still type
-// coordinates manually.
 async function tryAutofillGpsFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
-    // Don't overwrite values the user has already typed
     if ($('#travel-lat').val() || $('#travel-lng').val()) return;
     try {
         const gps = await exifr.gps(file);
@@ -215,14 +292,34 @@ async function tryAutofillGpsFromFile(file) {
     }
 }
 
+// Try to read DateTimeOriginal from image EXIF and populate the date input.
+// Only fills if the current value is today's default (i.e. not deliberately set).
+async function tryAutofillDateFromFile(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return;
+    const currentVal = $('#travel-date').val();
+    if (currentVal && currentVal !== todayIso()) return;
+    try {
+        const tags = await exifr.parse(file, ['DateTimeOriginal']);
+        if (tags && tags.DateTimeOriginal instanceof Date) {
+            const d = tags.DateTimeOriginal;
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            $('#travel-date').val(`${yyyy}-${mm}-${dd}`);
+        }
+    } catch {
+        // EXIF date unavailable — ignore
+    }
+}
+
 function initTravelForm() {
-    // Show preview when file is selected (local preview before upload)
     $('#travel-file').on('change', function (event) {
         const file = event.target.files && event.target.files[0];
         if (!file) { currentFile = null; return; }
         currentFile = file;
 
         tryAutofillGpsFromFile(file);
+        tryAutofillDateFromFile(file);
 
         const reader = new FileReader();
         reader.onload = function (e) {
@@ -239,6 +336,8 @@ function initTravelForm() {
 
     $('#travel-form').on('submit', async function (event) {
         event.preventDefault();
+        const clickedBtn = document.activeElement;
+        const publish = clickedBtn && clickedBtn.id === 'travel-publish-btn';
         const submitBtns = $(this).find('button[type="submit"]');
         submitBtns.prop('disabled', true);
         setTravelMessage('Saving…');
@@ -251,10 +350,9 @@ function initTravelForm() {
         }
 
         try {
-            let mediaUrl = null;
-            let mediaType = null;
+            let mediaUrl = editingTravelMedia ? editingTravelMedia.url : null;
+            let mediaType = editingTravelMedia ? editingTravelMedia.type : null;
 
-            // Upload file first if one was selected
             if (currentFile) {
                 setTravelMessage('Uploading file…');
                 const fd = new FormData();
@@ -266,20 +364,25 @@ function initTravelForm() {
                 mediaType = upData.type;
             }
 
+            const editId = $('#travel-edit-id').val();
             const travel = {
                 title,
                 location: $('#travel-location').val().trim(),
                 notes: $('#travel-notes').val().trim(),
+                visitDate: $('#travel-date').val() || null,
                 mediaUrl,
                 mediaType,
                 lat: $('#travel-lat').val(),
                 lng: $('#travel-lng').val(),
+                publish,
             };
 
-            const res = await authFetch('/travel', { method: 'POST', body: JSON.stringify(travel) });
+            const method = editId ? 'PUT' : 'POST';
+            const path = editId ? `/travel/${editId}` : '/travel';
+            const res = await authFetch(path, { method, body: JSON.stringify(travel) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Save failed');
-            setTravelMessage('Memory saved.');
+            setTravelMessage(publish ? 'Memory published.' : 'Draft saved.');
             clearTravelForm();
             await loadTravelMemories();
         } catch (err) {
@@ -289,6 +392,7 @@ function initTravelForm() {
         }
     });
 
+    $('#travel-cancel-btn').on('click', clearTravelForm);
     $('#travel-clear').on('click', clearTravelForm);
 }
 
@@ -331,6 +435,7 @@ function clearPostForm() {
     $('#post-edit-id').val('');
     $('#post-title').val('');
     $('#post-body').val('');
+    $('#post-date').val('');
     $('#post-cancel-btn').addClass('hidden');
     setPostMessage('');
 }
@@ -382,6 +487,7 @@ function loadPostForEdit(post) {
         if (r.ok) {
             const full = await r.json();
             $('#post-body').val(full.body_markdown);
+            $('#post-date').val(full.post_date || '');
         }
     });
     $('#post-cancel-btn').removeClass('hidden');
@@ -430,6 +536,7 @@ function initPostForm() {
         const id = $('#post-edit-id').val();
         const title = $('#post-title').val().trim();
         const body_markdown = $('#post-body').val();
+        const post_date = $('#post-date').val() || null;
 
         if (!title) {
             setPostMessage('Title is required.', true);
@@ -442,7 +549,7 @@ function initPostForm() {
             const path = id ? `/posts/${id}` : '/posts';
             const res = await authFetch(path, {
                 method,
-                body: JSON.stringify({ title, body_markdown, publish }),
+                body: JSON.stringify({ title, body_markdown, post_date, publish }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Save failed');

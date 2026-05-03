@@ -20,7 +20,6 @@
     <nav>
         <ul class="nav">
             <li><a href="index.html">Home</a></li>
-            <!-- Issue #32: quick links to public-facing pages -->
             <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
             <li><a href="travel.html" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
             <li><a href="login.html" id="logout-link">Logout</a></li>
@@ -31,22 +30,22 @@
     <main class="admin-page">
         <section class="sec-cont admin-panel">
 
-            <!-- ── Travel memories ─────────────────────────────────────────── -->
+            <!-- ── Travel memories ─────────────────────────────────────────────────── -->
             <div class="admin-card">
-                <h2>Publish travel memories</h2>
+                <h2 class="admin-card-title">Travel memories</h2>
                 <form id="travel-form">
+                    <input type="hidden" id="travel-edit-id" value="" />
                     <label>Title
                         <input id="travel-title" type="text" placeholder="Trip title" />
+                    </label>
+                    <label>Date of visit
+                        <input id="travel-date" type="date" />
                     </label>
                     <label>Location
                         <input id="travel-location" type="text" placeholder="City, country" />
                     </label>
-                    <!-- Issue #24: visit date field, defaults to today -->
-                    <label>Date of visit
-                        <input id="travel-date" type="date" />
-                    </label>
                     <label>Notes
-                        <textarea id="travel-notes" rows="3" placeholder="Describe the moment"></textarea>
+                        <textarea id="travel-notes" rows="4" placeholder="Describe the moment…"></textarea>
                     </label>
                     <!-- Issue #34: styled file input -->
                     <label>Photo or video
@@ -62,7 +61,7 @@
                             <div class="coord-stepper">
                                 <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
                                 <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
-                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase latitude">+</button>
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="1" aria-label="Increase latitude">+</button>
                             </div>
                         </label>
                         <label>Longitude
@@ -74,31 +73,36 @@
                         </label>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="btn-primary">Save memory</button>
+                        <button type="submit" id="travel-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="travel-publish-btn" class="btn-primary">Publish</button>
                         <button type="button" id="travel-clear" class="btn-secondary">Clear</button>
+                        <button type="button" id="travel-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
                     </div>
                 </form>
-                <p id="travel-message" class="login-message"></p>
+                <p id="travel-message" class="admin-message"></p>
                 <div id="travel-preview" class="travel-preview hidden">
                     <h4>Preview</h4>
                     <div class="preview-media"></div>
                     <div class="preview-text"></div>
                 </div>
                 <div class="saved-memories">
-                    <h3>Saved memories</h3>
+                    <h3 class="saved-list-title">Saved memories</h3>
                     <div id="saved-memories-list">
                         <p class="hint">Loading…</p>
                     </div>
                 </div>
             </div>
 
-            <!-- ── Blog posts ──────────────────────────────────────────────── -->
+            <!-- ── Blog posts ────────────────────────────────────────────────────── -->
             <div class="admin-card">
-                <h2>Blog posts</h2>
+                <h2 class="admin-card-title">Blog posts</h2>
                 <form id="post-form">
                     <input type="hidden" id="post-edit-id" value="" />
                     <label>Title
                         <input id="post-title" type="text" placeholder="Post title" />
+                    </label>
+                    <label>Date
+                        <input id="post-date" type="date" />
                     </label>
                     <label>Body (Markdown)
                         <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
@@ -110,20 +114,18 @@
                         <button type="button" id="post-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
                     </div>
                 </form>
-                <p id="post-message" class="login-message"></p>
-
-                <div class="saved-memories" style="margin-top:1.5rem">
-                    <h3>All posts</h3>
+                <p id="post-message" class="admin-message"></p>
+                <div class="saved-memories">
+                    <h3 class="saved-list-title">All posts</h3>
                     <div id="posts-admin-list">
                         <p class="hint">Loading…</p>
                     </div>
                 </div>
             </div>
 
-            <!-- ── Private notes ───────────────────────────────────────────── -->
+            <!-- ── Private notes ───────────────────────────────────────────────────── -->
             <div class="admin-card private-card">
-                <h2>Private coding projects</h2>
-                <p>Private notes and project planning. GitHub integration can be added later.</p>
+                <h2 class="admin-card-title">Private coding projects</h2>
                 <label>Private notes
                     <textarea id="private-notes" rows="6" placeholder="Save private project ideas here…"></textarea>
                 </label>
@@ -131,20 +133,20 @@
                     <button id="save-private" type="button" class="btn-primary">Save notes</button>
                     <button id="clear-private" type="button" class="btn-secondary">Clear notes</button>
                 </div>
-                <p class="hint">Notes are saved locally in your browser.</p>
+                <p class="hint" style="margin-top:0.75rem">Notes are saved locally in your browser.</p>
             </div>
 
-            <!-- ── Passkeys ────────────────────────────────────────────────── -->
+            <!-- ── Passkeys ────────────────────────────────────────────────────────── -->
             <div class="admin-card">
-                <h2>Manage passkeys</h2>
-                <p>Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
+                <h2 class="admin-card-title">Manage passkeys</h2>
+                <p style="color:var(--color-text-secondary);margin-bottom:1rem">Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
                 <div id="passkey-list">
                     <p class="hint">Loading passkeys…</p>
                 </div>
-                <div class="form-actions">
+                <div class="form-actions" style="margin-top:1rem">
                     <button id="add-passkey-btn" type="button" class="btn-primary">Add passkey</button>
                 </div>
-                <p id="passkey-message" class="login-message"></p>
+                <p id="passkey-message" class="admin-message"></p>
             </div>
 
         </section>
@@ -156,16 +158,17 @@
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script type="module" src="./resources/java/admin.js"></script>
     <script>
-        // Issue #24: default date input to today
+        // Default travel date and post date to today
         (function () {
-            var dateInput = document.getElementById('travel-date');
-            if (dateInput) {
-                var today = new Date();
-                var yyyy = today.getFullYear();
-                var mm = String(today.getMonth() + 1).padStart(2, '0');
-                var dd = String(today.getDate()).padStart(2, '0');
-                dateInput.value = yyyy + '-' + mm + '-' + dd;
-            }
+            var today = new Date();
+            var yyyy = today.getFullYear();
+            var mm = String(today.getMonth() + 1).padStart(2, '0');
+            var dd = String(today.getDate()).padStart(2, '0');
+            var todayStr = yyyy + '-' + mm + '-' + dd;
+            var travelDate = document.getElementById('travel-date');
+            if (travelDate) travelDate.value = todayStr;
+            var postDate = document.getElementById('post-date');
+            if (postDate) postDate.value = todayStr;
         })();
 
         // Issue #34: wire styled file input button to hidden native input
@@ -185,8 +188,8 @@
         // Issue #39: custom coordinate stepper buttons
         (function () {
             var STEP = 0.0001;
-            var holdDelay = 400;  // ms before repeat starts
-            var holdInterval = 80; // ms between repeats while held
+            var holdDelay = 400;
+            var holdInterval = 80;
 
             function nudge(inputId, direction) {
                 var el = document.getElementById(inputId);

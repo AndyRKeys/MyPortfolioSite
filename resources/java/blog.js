@@ -14,7 +14,8 @@ function truncate(str, len) {
 function buildPostCard(post) {
     var card = $('<a class="post-card"></a>');
     card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(post.slug));
-    var date = post.published_at ? new Date(post.published_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+    var rawDate = post.post_date ? post.post_date + 'T00:00:00' : post.published_at;
+    var date = rawDate ? new Date(rawDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
     card.append('<h3 class="post-card-title">' + escapeHtml(post.title) + '</h3>');
     card.append('<p class="post-card-date">' + escapeHtml(date) + '</p>');
     if (post.excerpt) {
