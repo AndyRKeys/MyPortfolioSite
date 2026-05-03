@@ -228,11 +228,37 @@ li a:hover {
     width: 100%;
     max-width: 720px;
     margin: 0 auto 1.5rem;
-    padding: 1.25rem;
+    padding: 1.5rem 1.75rem;
     background: var(--color-surface);
     box-shadow: 0 2px 14px var(--color-shadow);
     border-radius: 12px;
     text-align: left;
+}
+
+.admin-card-title {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 1.2rem;
+}
+
+.admin-card-title::after { display: none; }
+
+.saved-list-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 1.5rem 0 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.admin-message {
+    min-height: 1.25em;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
 }
 
 .login-section .admin-card {
@@ -413,10 +439,22 @@ footer a:hover {
     font-size: 1.1rem;
 }
 
+/* Meta block: location on first line, date on second */
 .travel-content .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
     margin: 0 0 0.75rem 0;
-    color: var(--color-text-secondary);
     font-size: 0.95rem;
+}
+
+.travel-content .meta .travel-location {
+    color: var(--color-text-secondary);
+}
+
+.travel-content .meta .travel-date {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .travel-uploader {
@@ -437,10 +475,7 @@ footer a:hover {
     gap: 0.75rem;
 }
 
-.travel-uploader label {
-    display: block;
-    font-weight: 600;
-}
+/* Removed: .travel-uploader label — travel form now uses .admin-card label styles */
 
 .travel-uploader input[type="text"],
 .travel-uploader textarea,
@@ -1298,6 +1333,23 @@ footer {
     font-style: italic;
 }
 
+.post-back-bar {
+    max-width: 720px;
+    margin: 0 auto 0.75rem;
+    padding: 0 0.25rem;
+}
+
+.post-back-link {
+    color: var(--color-accent);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.post-back-link:hover {
+    text-decoration: underline;
+}
+
 .post-article {
     max-width: 720px;
     margin: 0 auto;
@@ -1308,6 +1360,34 @@ footer {
     box-shadow: 0 2px 12px var(--color-shadow);
 }
 
+.post-article-header {
+    margin-bottom: 0;
+}
+
+/* Scoped to the reader page only — must NOT bleed onto the admin #post-title input */
+.post-article #post-title {
+    text-align: left;
+    font-size: 2rem;
+    margin: 0 0 0.5rem;
+    color: var(--color-text);
+}
+
+.post-article #post-title::after { display: none; }
+
+.post-date {
+    color: var(--color-text-muted);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.9rem;
+    margin: 0 0 0.25rem;
+}
+
+.post-divider {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 1.5rem 0;
+}
+
+/* Legacy — keep in case of cached pages */
 .post-meta-bar {
     display: flex;
     justify-content: space-between;
@@ -1315,31 +1395,6 @@ footer {
     margin-bottom: 1rem;
     font-size: 0.9rem;
 }
-
-.post-back-link {
-    color: var(--color-accent);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.post-back-link:hover {
-    text-decoration: underline;
-}
-
-.post-date {
-    color: var(--color-text-muted);
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-}
-
-#post-title {
-    text-align: left !important;
-    font-size: 2rem;
-    margin: 0.5rem 0 1.5rem;
-    padding-bottom: 0.75rem;
-    color: var(--color-text);
-}
-
-#post-title::after { display: none; }
 
 .post-markdown {
     color: var(--color-text);
@@ -1622,12 +1677,20 @@ footer {
 
 /* ── Admin card form inputs ─────────────────────────────────────────────────── */
 
+/* Forms inside admin cards use a grid for consistent field spacing */
+#travel-form,
+#post-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
 .admin-card label {
     display: block;
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--color-text);
-    margin-bottom: 0.75rem;
+    /* No margin-bottom — gap on the parent grid handles spacing */
+    margin-bottom: 0;
 }
 
 .admin-card input[type="text"],
