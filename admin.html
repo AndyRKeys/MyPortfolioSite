@@ -42,7 +42,10 @@
                         <input id="travel-date" type="date" />
                     </label>
                     <label>Location
-                        <input id="travel-location" type="text" placeholder="City, country" />
+                        <div class="location-row">
+                            <input id="travel-location" type="text" placeholder="City, country" />
+                            <button type="button" id="geocode-btn" class="btn-secondary" title="Look up coordinates from location name">Geocode</button>
+                        </div>
                     </label>
                     <label>Notes
                         <textarea id="travel-notes" rows="4" placeholder="Describe the moment…"></textarea>

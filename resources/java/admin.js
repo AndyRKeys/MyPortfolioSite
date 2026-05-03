@@ -269,11 +269,11 @@ async function deleteTravelMemory(id) {
     }
 }
 
-function setTravelMessage(msg, isError = false) {
+function setTravelMessage(msg, isError = false, isHint = false) {
     const el = document.getElementById('travel-message');
     if (!el) return;
     el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
+    el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
 }
 
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
@@ -285,10 +285,42 @@ async function tryAutofillGpsFromFile(file) {
         if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
             $('#travel-lat').val(gps.latitude.toFixed(6));
             $('#travel-lng').val(gps.longitude.toFixed(6));
-            setTravelMessage('Location auto-filled from photo EXIF.');
+            setTravelMessage('GPS auto-filled from photo EXIF.');
+        } else {
+            setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
         }
     } catch {
-        // EXIF parsing failed — not a problem, just continue
+        setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
+    }
+}
+
+async function geocodeLocation() {
+    const q = $('#travel-location').val().trim();
+    if (!q) {
+        setTravelMessage('Enter a location name first.', true);
+        return;
+    }
+    const btn = document.getElementById('geocode-btn');
+    btn.disabled = true;
+    btn.textContent = 'Looking up…';
+    setTravelMessage('');
+    try {
+        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const results = await res.json();
+        if (!results.length) {
+            setTravelMessage('Location not found — try a more specific name.', true);
+            return;
+        }
+        const { lat, lon } = results[0];
+        $('#travel-lat').val(parseFloat(lat).toFixed(6));
+        $('#travel-lng').val(parseFloat(lon).toFixed(6));
+        setTravelMessage('Coordinates filled from location name.');
+    } catch {
+        setTravelMessage('Geocode failed — check your connection and try again.', true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Geocode';
     }
 }
 
@@ -313,6 +345,10 @@ async function tryAutofillDateFromFile(file) {
 }
 
 function initTravelForm() {
+    $('#geocode-btn').on('click', function () {
+        geocodeLocation();
+    });
+
     $('#travel-file').on('change', function (event) {
         const file = event.target.files && event.target.files[0];
         if (!file) { currentFile = null; return; }

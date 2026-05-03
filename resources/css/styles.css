@@ -1599,6 +1599,23 @@ footer {
 
 /* ── Admin coord row (Issue #8) ─────────────────────────────────────────────── */
 
+.location-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.location-row input {
+    flex: 1;
+}
+
+.location-row .btn-secondary {
+    flex-shrink: 0;
+    padding: 0 0.75rem;
+    height: 38px;
+    font-size: 0.85rem;
+}
+
 .coord-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
