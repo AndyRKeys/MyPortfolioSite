@@ -439,10 +439,22 @@ footer a:hover {
     font-size: 1.1rem;
 }
 
+/* Meta block: location on first line, date on second */
 .travel-content .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
     margin: 0 0 0.75rem 0;
-    color: var(--color-text-secondary);
     font-size: 0.95rem;
+}
+
+.travel-content .meta .travel-location {
+    color: var(--color-text-secondary);
+}
+
+.travel-content .meta .travel-date {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .travel-uploader {
