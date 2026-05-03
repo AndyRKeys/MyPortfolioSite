@@ -128,40 +128,63 @@ function setPasskeyMessage(msg, isError = false) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
-let currentFile = null;
-let editingTravelMedia = null;
-let geoconfirmMap = null;
-let geoconfirmMarker = null;
+let pendingFiles = [];         // File objects queued for upload
+let existingMedia = [];        // {id, url, type} from post_media (on edit)
+let removedMediaIds = [];      // post_media ids to delete on save
 
-function showPreview(travel) {
-    const previewMedia = $('.preview-media');
-    const previewText = $('.preview-text');
-    previewMedia.empty();
-    previewText.empty();
-    if (travel.mediaUrl) {
-        previewMedia.append(
-            travel.mediaType && travel.mediaType.startsWith('video')
-                ? `<video controls src="${travel.mediaUrl}"></video>`
-                : `<img src="${travel.mediaUrl}" alt="Preview image">`
-        );
-    }
-    previewText.append('<p><strong>' + escapeHtml(travel.title || 'Untitled memory') + '</strong></p>');
-    previewText.append('<p>' + escapeHtml(travel.location || 'No location provided') + '</p>');
-    previewText.append('<p>' + escapeHtml(travel.notes || 'No notes yet.') + '</p>');
-    $('#travel-preview').removeClass('hidden');
+function renderMediaList() {
+    const list = $('#travel-media-list');
+    list.empty();
+
+    const allItems = [
+        ...existingMedia.map(m => ({ kind: 'existing', ...m })),
+        ...pendingFiles.map((f, i) => ({ kind: 'pending', index: i, name: f.name, type: f.type })),
+    ];
+
+    if (!allItems.length) { list.addClass('hidden'); return; }
+    list.removeClass('hidden');
+
+    allItems.forEach(item => {
+        const row = $('<div class="media-list-row"></div>');
+        const icon = item.type && item.type.startsWith('video') ? '🎬' : '🖼';
+        const label = item.kind === 'existing'
+            ? `${icon} ${item.url.split('/').pop()}`
+            : `${icon} ${item.name} (pending)`;
+        row.append('<span class="media-list-label">' + escapeHtml(label) + '</span>');
+        const removeBtn = $('<button type="button" class="btn-small media-remove-btn">Remove</button>');
+        if (item.kind === 'existing') {
+            removeBtn.on('click', () => {
+                removedMediaIds.push(item.id);
+                existingMedia = existingMedia.filter(m => m.id !== item.id);
+                renderMediaList();
+            });
+        } else {
+            removeBtn.on('click', () => {
+                pendingFiles.splice(item.index, 1);
+                renderMediaList();
+                if (!pendingFiles.length && !existingMedia.length) {
+                    $('.file-input-label').text('No files chosen');
+                }
+            });
+        }
+        row.append(removeBtn);
+        list.append(row);
+    });
 }
 
 function clearTravelForm() {
     $('#travel-edit-id').val('');
     $('#travel-form')[0].reset();
     $('#travel-cancel-btn').addClass('hidden');
-    $('.file-input-label').text('No file chosen');
+    $('.file-input-label').text('No files chosen');
     $('#travel-date').val(todayIso());
     $('#travel-preview').addClass('hidden');
     $('.preview-media').empty();
     $('.preview-text').empty();
-    currentFile = null;
-    editingTravelMedia = null;
+    pendingFiles = [];
+    existingMedia = [];
+    removedMediaIds = [];
+    renderMediaList();
     setTravelMessage('');
     hideGeoconfirmMap();
 }
@@ -220,21 +243,20 @@ async function loadTravelForEdit(memory) {
         $('#travel-lat').val(full.lat != null ? full.lat : '');
         $('#travel-lng').val(full.lng != null ? full.lng : '');
 
-        editingTravelMedia = full.media_url ? { url: full.media_url, type: full.media_type } : null;
-        currentFile = null;
-        $('.file-input-label').text('No file chosen');
-
-        if (full.media_url) {
-            showPreview({ title: full.title, location: full.location, notes: full.notes, mediaUrl: full.media_url, mediaType: full.media_type });
-        } else {
-            $('#travel-preview').addClass('hidden');
-        }
+        pendingFiles = [];
+        removedMediaIds = [];
+        existingMedia = Array.isArray(full.media) && full.media.length
+            ? full.media.map(m => ({ id: m.id, url: m.url, type: m.type }))
+            : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
+        $('.file-input-label').text('No files chosen');
+        renderMediaList();
 
         // Show confirmation map if coords already exist on this memory
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
         }
 
+        $('#travel-preview').addClass('hidden');
         $('#travel-cancel-btn').removeClass('hidden');
         setTravelMessage('Editing: ' + full.title);
         document.getElementById('travel-title').scrollIntoView({ behavior: 'smooth' });
@@ -252,11 +274,10 @@ async function toggleTravelPublish(memory) {
                 location: memory.location || '',
                 notes: memory.notes || '',
                 visitDate: memory.visit_date || null,
-                mediaUrl: memory.media_url || null,
-                mediaType: memory.media_type || null,
                 lat: memory.lat,
                 lng: memory.lng,
                 publish: !memory.published_at,
+                // mediaItems undefined → backend leaves existing post_media untouched
             }),
         });
         if (!res.ok) throw new Error();
@@ -458,24 +479,21 @@ function initTravelForm() {
     });
 
     $('#travel-file').on('change', function (event) {
-        const file = event.target.files && event.target.files[0];
-        if (!file) { currentFile = null; return; }
-        currentFile = file;
+        const files = Array.from(event.target.files || []);
+        if (!files.length) return;
 
-        tryAutofillGpsFromFile(file);
-        tryAutofillDateFromFile(file);
+        // EXIF auto-fill from first image in the selection
+        const firstImage = files.find(f => f.type.startsWith('image/'));
+        if (firstImage) {
+            tryAutofillGpsFromFile(firstImage);
+            tryAutofillDateFromFile(firstImage);
+        }
 
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            showPreview({
-                title: $('#travel-title').val(),
-                location: $('#travel-location').val(),
-                notes: $('#travel-notes').val(),
-                mediaUrl: e.target.result,
-                mediaType: file.type,
-            });
-        };
-        reader.readAsDataURL(file);
+        pendingFiles = pendingFiles.concat(files);
+        $('.file-input-label').text(pendingFiles.length + ' file' + (pendingFiles.length !== 1 ? 's' : '') + ' selected');
+        // Reset the input so the same file can be re-added if removed
+        event.target.value = '';
+        renderMediaList();
     });
 
     $('#travel-form').on('submit', async function (event) {
@@ -494,19 +512,23 @@ function initTravelForm() {
         }
 
         try {
-            let mediaUrl = editingTravelMedia ? editingTravelMedia.url : null;
-            let mediaType = editingTravelMedia ? editingTravelMedia.type : null;
-
-            if (currentFile) {
-                setTravelMessage('Uploading file…');
+            // Upload all pending files
+            const uploadedItems = [];
+            for (let i = 0; i < pendingFiles.length; i++) {
+                setTravelMessage(`Uploading file ${i + 1} of ${pendingFiles.length}…`);
                 const fd = new FormData();
-                fd.append('file', currentFile);
+                fd.append('file', pendingFiles[i]);
                 const upRes = await authFetchMultipart('/upload', fd);
                 const upData = await upRes.json();
                 if (!upRes.ok) throw new Error(upData.error || 'Upload failed');
-                mediaUrl = upData.url;
-                mediaType = upData.type;
+                uploadedItems.push({ url: upData.url, type: upData.type });
             }
+
+            // Combine: remaining existing media first, then newly uploaded
+            const mediaItems = [
+                ...existingMedia.filter(m => m.id !== null).map(m => ({ url: m.url, type: m.type })),
+                ...uploadedItems,
+            ];
 
             const editId = $('#travel-edit-id').val();
             const travel = {
@@ -514,8 +536,7 @@ function initTravelForm() {
                 location: $('#travel-location').val().trim(),
                 notes: $('#travel-notes').val().trim(),
                 visitDate: $('#travel-date').val() || null,
-                mediaUrl,
-                mediaType,
+                mediaItems,
                 lat: $('#travel-lat').val(),
                 lng: $('#travel-lng').val(),
                 publish,
