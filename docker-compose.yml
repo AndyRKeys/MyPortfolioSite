@@ -38,6 +38,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      UPLOADS_DIR: /app/uploads
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     volumes:
