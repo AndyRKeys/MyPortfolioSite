@@ -1,0 +1,1 @@
+ssh raspberrypi3 "sudo systemctl stop apache2 && sudo systemctl disable apache2 && sudo systemctl enable nginx && sudo systemctl start nginx && sudo nginx -t && sudo systemctl reload nginx && sudo ss -tlnp | grep :80"
