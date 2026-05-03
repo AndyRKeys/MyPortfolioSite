@@ -35,6 +35,7 @@
             <div class="admin-card">
                 <h2>Publish travel memories</h2>
                 <form id="travel-form">
+                    <input type="hidden" id="travel-edit-id" value="" />
                     <label>Title
                         <input id="travel-title" type="text" placeholder="Trip title" />
                     </label>
@@ -62,7 +63,7 @@
                             <div class="coord-stepper">
                                 <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
                                 <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
-                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase latitude">+</button>
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="1" aria-label="Increase latitude">+</button>
                             </div>
                         </label>
                         <label>Longitude
@@ -74,7 +75,9 @@
                         </label>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="btn-primary">Save memory</button>
+                        <button type="submit" id="travel-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="travel-publish-btn" class="btn-primary">Publish</button>
+                        <button type="button" id="travel-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
                         <button type="button" id="travel-clear" class="btn-secondary">Clear</button>
                     </div>
                 </form>
@@ -99,6 +102,9 @@
                     <input type="hidden" id="post-edit-id" value="" />
                     <label>Title
                         <input id="post-title" type="text" placeholder="Post title" />
+                    </label>
+                    <label>Date
+                        <input id="post-date" type="date" />
                     </label>
                     <label>Body (Markdown)
                         <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
