@@ -1,170 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin | Andy Keys</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Dashboard | AK Portfolio</title>
+    <link rel="shortcut icon" href="./resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="./resources/css/reset.css" />
     <link rel="stylesheet" href="./resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
-        <h1>Admin Panel</h1>
-        <h2>Andy Keys</h2>
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>Admin Dashboard</h2>
     </header>
     <nav>
         <ul class="nav">
-            <li><a href="./index.html">Home</a></li>
-            <li><a href="./blog.html">Blog</a></li>
-            <li><a href="./travel.html">Travel</a></li>
-            <li><a href="./admin.html">Admin</a></li>
-            <li><button id="dark-mode-toggle" aria-label="Toggle dark mode">🌙</button></li>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
+            <li><a href="travel.html" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
+            <li><a href="login.html" id="logout-link">Logout</a></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
-    <main>
-        <!-- ── Travel uploader ─────────────────────────────────────────── -->
-        <section id="travel-admin" class="admin-page login-section" style="display:none">
-            <h2>Upload Travel Memory</h2>
+    <main class="admin-page">
+        <section class="sec-cont admin-panel">
+
+            <!-- ── Travel memories ─────────────────────────────────────────────────── -->
             <div class="admin-card">
-                <h3 class="admin-card-title">New memory</h3>
+                <h2 class="admin-card-title">Travel memories</h2>
                 <form id="travel-form">
-                    <label>
-                        Title
-                        <input id="travel-title" type="text" placeholder="e.g. Sunset at Santorini" />
+                    <input type="hidden" id="travel-edit-id" value="" />
+                    <label>Title
+                        <input id="travel-title" type="text" placeholder="Trip title" />
                     </label>
-                    <label>
-                        Location
-                        <input id="travel-location" type="text" placeholder="e.g. Santorini, Greece" />
-                    </label>
-                    <label>
-                        Date
+                    <label>Date of visit
                         <input id="travel-date" type="date" />
                     </label>
-                    <label>
-                        Caption
-                        <textarea id="travel-caption" rows="3" placeholder="A short description…"></textarea>
+                    <label>Location
+                        <input id="travel-location" type="text" placeholder="City, country" />
                     </label>
-                    <label>
-                        Coordinates (optional)
-                        <div class="coord-row">
-                            <label>
-                                Latitude
-                                <div class="coord-stepper">
-                                    <button type="button" class="coord-step-btn" data-target="travel-lat" data-step="-0.0001">−</button>
-                                    <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 36.3932" />
-                                    <button type="button" class="coord-step-btn" data-target="travel-lat" data-step="0.0001">+</button>
-                                </div>
-                            </label>
-                            <label>
-                                Longitude
-                                <div class="coord-stepper">
-                                    <button type="button" class="coord-step-btn" data-target="travel-lng" data-step="-0.0001">−</button>
-                                    <input id="travel-lng" type="number" step="0.0001" placeholder="e.g. 25.4615" />
-                                    <button type="button" class="coord-step-btn" data-target="travel-lng" data-step="0.0001">+</button>
-                                </div>
-                            </label>
-                        </div>
+                    <label>Notes
+                        <textarea id="travel-notes" rows="4" placeholder="Describe the moment…"></textarea>
                     </label>
-                    <label>
-                        Photo / Video
+                    <!-- Issue #34: styled file input -->
+                    <label>Photo or video
                         <div class="file-input-wrap">
-                            <button type="button" class="file-input-btn">Choose file</button>
+                            <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photo or video">Browse…</button>
                             <span class="file-input-label">No file chosen</span>
                             <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" />
                         </div>
                     </label>
-                    <div id="travel-preview" class="travel-preview hidden">
-                        <div class="preview-media"></div>
-                        <div class="preview-text"></div>
+                    <!-- Issue #39: custom coordinate steppers replacing native spinners -->
+                    <div class="coord-row">
+                        <label>Latitude
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
+                                <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="1" aria-label="Increase latitude">+</button>
+                            </div>
+                        </label>
+                        <label>Longitude
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="-1" aria-label="Decrease longitude">−</button>
+                                <input id="travel-lng" type="number" step="0.0001" placeholder="e.g. -0.1278" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase longitude">+</button>
+                            </div>
+                        </label>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" id="travel-submit" class="btn-primary">Upload</button>
-                        <button type="button" id="travel-reset" class="btn-secondary">Clear</button>
+                        <button type="submit" id="travel-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="travel-publish-btn" class="btn-primary">Publish</button>
+                        <button type="button" id="travel-clear" class="btn-secondary">Clear</button>
+                        <button type="button" id="travel-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
                     </div>
                 </form>
                 <p id="travel-message" class="admin-message"></p>
-
-                <h4 class="saved-list-title">Saved memories</h4>
-                <div id="saved-memories-list"></div>
+                <div id="travel-preview" class="travel-preview hidden">
+                    <h4>Preview</h4>
+                    <div class="preview-media"></div>
+                    <div class="preview-text"></div>
+                </div>
+                <div class="saved-memories">
+                    <h3 class="saved-list-title">Saved memories</h3>
+                    <div id="saved-memories-list">
+                        <p class="hint">Loading…</p>
+                    </div>
+                </div>
             </div>
-        </section>
 
-        <!-- ── Blog post editor ────────────────────────────────────────── -->
-        <section id="blog-admin" class="admin-page login-section" style="display:none">
-            <h2>Blog Posts</h2>
+            <!-- ── Blog posts ────────────────────────────────────────────────────── -->
             <div class="admin-card">
-                <h3 class="admin-card-title" id="post-form-heading">New post</h3>
+                <h2 class="admin-card-title">Blog posts</h2>
                 <form id="post-form">
                     <input type="hidden" id="post-edit-id" value="" />
-                    <label>
-                        Title
-                        <input id="post-title" type="text" placeholder="Post title…" />
+                    <label>Title
+                        <input id="post-title" type="text" placeholder="Post title" />
                     </label>
-                    <label>
-                        Date
+                    <label>Date
                         <input id="post-date" type="date" />
                     </label>
-                    <label>
-                        Body <span style="font-weight:400;color:var(--color-text-muted);font-size:0.85rem">(Markdown supported)</span>
-                        <textarea id="post-body" rows="10" placeholder="Write your post in Markdown…"></textarea>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-                        <input id="post-published" type="checkbox" style="width:auto;margin:0" />
-                        Publish immediately
+                    <label>Body (Markdown)
+                        <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
                     </label>
                     <div class="form-actions">
-                        <button type="submit" id="post-submit" class="btn-primary">Save post</button>
-                        <button type="button" id="post-cancel" class="btn-secondary" style="display:none">Cancel</button>
+                        <button type="submit" id="post-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="post-publish-btn" class="btn-primary">Publish</button>
+                        <button type="button" id="post-template-btn" class="btn-secondary">Insert template</button>
+                        <button type="button" id="post-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
                     </div>
                 </form>
                 <p id="post-message" class="admin-message"></p>
-
-                <h4 class="saved-list-title">Saved posts</h4>
-                <div id="saved-posts-list"></div>
-            </div>
-        </section>
-
-        <!-- ── Login gate (shown until authenticated) ──────────────────── -->
-        <section id="login-section" class="login-section">
-            <h2>Admin Login</h2>
-            <div class="admin-card">
-                <h3 class="admin-card-title">Sign in</h3>
-                <form id="login-form">
-                    <label>
-                        Password
-                        <input id="login-password" type="password" placeholder="Enter admin password" autocomplete="current-password" />
-                    </label>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary">Login</button>
+                <div class="saved-memories">
+                    <h3 class="saved-list-title">All posts</h3>
+                    <div id="posts-admin-list">
+                        <p class="hint">Loading…</p>
                     </div>
-                </form>
-                <p id="login-message" class="login-message"></p>
+                </div>
             </div>
+
+            <!-- ── Private notes ───────────────────────────────────────────────────── -->
+            <div class="admin-card private-card">
+                <h2 class="admin-card-title">Private coding projects</h2>
+                <label>Private notes
+                    <textarea id="private-notes" rows="6" placeholder="Save private project ideas here…"></textarea>
+                </label>
+                <div class="form-actions">
+                    <button id="save-private" type="button" class="btn-primary">Save notes</button>
+                    <button id="clear-private" type="button" class="btn-secondary">Clear notes</button>
+                </div>
+                <p class="hint" style="margin-top:0.75rem">Notes are saved locally in your browser.</p>
+            </div>
+
+            <!-- ── Passkeys ────────────────────────────────────────────────────────── -->
+            <div class="admin-card">
+                <h2 class="admin-card-title">Manage passkeys</h2>
+                <p style="color:var(--color-text-secondary);margin-bottom:1rem">Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
+                <div id="passkey-list">
+                    <p class="hint">Loading passkeys…</p>
+                </div>
+                <div class="form-actions" style="margin-top:1rem">
+                    <button id="add-passkey-btn" type="button" class="btn-primary">Add passkey</button>
+                </div>
+                <p id="passkey-message" class="admin-message"></p>
+            </div>
+
         </section>
     </main>
 
-    <footer>
-        <div id="contact">
-            <div class="contact-wrapper">
-                <div class="contact-info">
-                    <h3>Get In Touch</h3>
-                    <p>📧 <a href="mailto:andy@andykeys.dev">andy@andykeys.dev</a></p>
-                    <p>💼 <a href="https://linkedin.com/in/andy-keys" target="_blank" rel="noopener noreferrer">LinkedIn</a></p>
-                    <p>🐙 <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">GitHub</a></p>
-                </div>
-                <div class="footer-links">
-                    <h3>Quick Links</h3>
-                    <p><a href="./index.html">Home</a></p>
-                    <p><a href="./blog.html">Blog</a></p>
-                    <p><a href="./travel.html">Travel</a></p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>© 2025 Andy Keys. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
-
+    <!-- Issue #33: dev environment indicator -->
+    <script src="./resources/java/dev-env.js"></script>
+    <script src="./resources/java/darkmode.js"></script>
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script type="module" src="./resources/java/admin.js"></script>
     <script>
@@ -189,35 +179,51 @@
             if (!btn || !input || !label) return;
             btn.addEventListener('click', function () { input.click(); });
             input.addEventListener('change', function () {
-                label.textContent = input.files.length ? input.files[0].name : 'No file chosen';
+                label.textContent = input.files.length > 0
+                    ? input.files[0].name
+                    : 'No file chosen';
             });
         })();
 
-        // Issue #39: coordinate stepper buttons
+        // Issue #39: custom coordinate stepper buttons
         (function () {
+            var STEP = 0.0001;
+            var holdDelay = 400;
+            var holdInterval = 80;
+
+            function nudge(inputId, direction) {
+                var el = document.getElementById(inputId);
+                if (!el) return;
+                var val = parseFloat(el.value) || 0;
+                var decimals = (STEP.toString().split('.')[1] || '').length;
+                el.value = (val + direction * STEP).toFixed(decimals);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
             document.querySelectorAll('.coord-step-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var targetId = btn.getAttribute('data-target');
-                    var step = parseFloat(btn.getAttribute('data-step'));
-                    var input = document.getElementById(targetId);
-                    if (!input) return;
-                    var current = parseFloat(input.value) || 0;
-                    input.value = (current + step).toFixed(4);
-                });
-            });
-        })();
+                var timer, interval;
 
-        // Dark mode toggle
-        (function () {
-            var toggle = document.getElementById('dark-mode-toggle');
-            var root = document.documentElement;
-            var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            root.setAttribute('data-theme', dark ? 'dark' : 'light');
-            if (toggle) toggle.textContent = dark ? '☀️' : '🌙';
-            if (toggle) toggle.addEventListener('click', function () {
-                dark = !dark;
-                root.setAttribute('data-theme', dark ? 'dark' : 'light');
-                toggle.textContent = dark ? '☀️' : '🌙';
+                function startHold() {
+                    var targetId = btn.dataset.target;
+                    var dir = parseInt(btn.dataset.dir, 10);
+                    nudge(targetId, dir);
+                    timer = setTimeout(function () {
+                        interval = setInterval(function () { nudge(targetId, dir); }, holdInterval);
+                    }, holdDelay);
+                }
+
+                function stopHold() {
+                    clearTimeout(timer);
+                    clearInterval(interval);
+                }
+
+                btn.addEventListener('mousedown', startHold);
+                btn.addEventListener('touchstart', function (e) { e.preventDefault(); startHold(); }, { passive: false });
+                btn.addEventListener('mouseup', stopHold);
+                btn.addEventListener('mouseleave', stopHold);
+                btn.addEventListener('touchend', stopHold);
+                btn.addEventListener('touchcancel', stopHold);
             });
         })();
     </script>
