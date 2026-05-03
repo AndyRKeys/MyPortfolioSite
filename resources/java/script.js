@@ -100,7 +100,10 @@ function setHeight(div, height) {
 
 function formatVisitDate(dateStr) {
     if (!dateStr) return null;
-    var d = new Date(dateStr + 'T00:00:00'); // parse as local date, not UTC
+    // Accept "YYYY-MM-DD" or full ISO timestamps — always parse as local date
+    var datePart = String(dateStr).slice(0, 10);
+    var d = new Date(datePart + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
@@ -125,7 +128,8 @@ function buildPublicTravelCard(travel) {
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
     var formattedDate = formatVisitDate(travel.visit_date);
-    var metaHtml = travel.location || 'Location not set';
+    var locationText = travel.location || 'Location not set';
+    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
     if (formattedDate) {
         metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
     }
