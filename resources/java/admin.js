@@ -271,6 +271,32 @@ function initTravelForm() {
 
 // ── Blog posts ────────────────────────────────────────────────────────────────
 
+const POST_TEMPLATE = `_Short tagline or subtitle._
+
+## Introduction
+
+Open with the why — what prompted this post and what the reader will get out of it.
+
+## Main idea
+
+The core of the piece. Use **bold** for emphasis, _italics_ for nuance, and short paragraphs for rhythm.
+
+> A pull quote or callout that anchors the section.
+
+\`\`\`js
+// inline code samples render in a monospaced block
+function example() { return 'hello'; }
+\`\`\`
+
+- Bullet one
+- Bullet two
+- Bullet three
+
+## Wrap-up
+
+End with a takeaway, a question, or a link to what's next.
+`;
+
 function setPostMessage(msg, isError = false) {
     const el = document.getElementById('post-message');
     if (!el) return;
@@ -408,6 +434,14 @@ function initPostForm() {
     });
 
     $('#post-cancel-btn').on('click', clearPostForm);
+
+    $('#post-template-btn').on('click', function () {
+        const body = $('#post-body');
+        const current = body.val();
+        if (current.trim() && !confirm('The body has content — replace it with the template?')) return;
+        body.val(POST_TEMPLATE);
+        body.focus();
+    });
 }
 
 // ── Private notes ─────────────────────────────────────────────────────────────
