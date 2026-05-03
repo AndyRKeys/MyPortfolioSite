@@ -12,8 +12,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header>
+    <!-- Issue #38: add id="home" to header (matches index.html / travel.html) -->
+    <header id="home">
         <h1>A|K</h1>
+        <p class="site-tagline">Andy | Keys</p>
         <h2>Writing</h2>
     </header>
     <nav>
@@ -21,11 +23,17 @@
             <li><a href="index.html">🏠 Home</a></li>
             <li><a href="index.html#about">👤 About</a></li>
             <li><a href="index.html#portfolio">💼 Projects</a></li>
+            <!-- Issue #38: add missing nav items to match index.html -->
+            <li><a href="index.html#ai-dev">🤖 AI Dev</a></li>
+            <li><a href="index.html#timeline">📅 Timeline</a></li>
+            <li><a href="index.html#skills">🛠 Skills</a></li>
+            <li><a href="index.html#github-activity">🐙 GitHub</a></li>
             <li><a href="blog.html">✏ Blog</a></li>
             <li><a href="travel.html">✈ Travel</a></li>
             <li><a href="index.html#contact">✉ Contact</a></li>
             <li><a href="login.html">🔒 Admin</a></li>
-            <li><button id="dark-mode-toggle" aria-label="Switch to dark mode">☾</button></li>
+            <!-- Issue #38: add type="button" to dark mode toggle -->
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 

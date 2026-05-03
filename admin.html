@@ -14,6 +14,7 @@
 <body>
     <header>
         <h1>A|K</h1>
+        <p class="site-tagline">Andy | Keys</p>
         <h2>Admin Dashboard</h2>
     </header>
     <nav>
@@ -51,12 +52,21 @@
                             <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" />
                         </div>
                     </label>
+                    <!-- Issue #39: custom coordinate steppers replacing native spinners -->
                     <div class="coord-row">
                         <label>Latitude
-                            <input id="travel-lat" type="number" step="any" placeholder="e.g. 51.5074" />
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
+                                <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase latitude">+</button>
+                            </div>
                         </label>
                         <label>Longitude
-                            <input id="travel-lng" type="number" step="any" placeholder="e.g. -0.1278" />
+                            <div class="coord-stepper">
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="-1" aria-label="Decrease longitude">−</button>
+                                <input id="travel-lng" type="number" step="0.0001" placeholder="e.g. -0.1278" />
+                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase longitude">+</button>
+                            </div>
                         </label>
                     </div>
                     <div class="form-actions">
@@ -153,6 +163,48 @@
                 label.textContent = input.files.length > 0
                     ? input.files[0].name
                     : 'No file chosen';
+            });
+        })();
+
+        // Issue #39: custom coordinate stepper buttons
+        (function () {
+            var STEP = 0.0001;
+            var holdDelay = 400;  // ms before repeat starts
+            var holdInterval = 80; // ms between repeats while held
+
+            function nudge(inputId, direction) {
+                var el = document.getElementById(inputId);
+                if (!el) return;
+                var val = parseFloat(el.value) || 0;
+                var decimals = (STEP.toString().split('.')[1] || '').length;
+                el.value = (val + direction * STEP).toFixed(decimals);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            document.querySelectorAll('.coord-step-btn').forEach(function (btn) {
+                var timer, interval;
+
+                function startHold() {
+                    var targetId = btn.dataset.target;
+                    var dir = parseInt(btn.dataset.dir, 10);
+                    nudge(targetId, dir);
+                    timer = setTimeout(function () {
+                        interval = setInterval(function () { nudge(targetId, dir); }, holdInterval);
+                    }, holdDelay);
+                }
+
+                function stopHold() {
+                    clearTimeout(timer);
+                    clearInterval(interval);
+                }
+
+                btn.addEventListener('mousedown', startHold);
+                btn.addEventListener('touchstart', function (e) { e.preventDefault(); startHold(); }, { passive: false });
+                btn.addEventListener('mouseup', stopHold);
+                btn.addEventListener('mouseleave', stopHold);
+                btn.addEventListener('touchend', stopHold);
+                btn.addEventListener('touchcancel', stopHold);
             });
         })();
     </script>
