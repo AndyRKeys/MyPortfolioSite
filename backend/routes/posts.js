@@ -55,6 +55,21 @@ router.get('/all', authenticate, async (req, res) => {
   }
 });
 
+// Admin: single post by id — includes drafts
+router.get('/admin/:id', authenticate, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, title, slug, body_markdown, published_at, created_at FROM posts WHERE id = $1',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Post not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Public: single post by slug
 router.get('/:slug', async (req, res) => {
   try {
