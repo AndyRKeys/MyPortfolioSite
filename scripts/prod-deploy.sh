@@ -2,9 +2,10 @@
 # Smart deploy script for andykeys.me
 # Detects what changed and only applies what's needed:
 #   - Always pulls latest code
+#   - Always ensures nginx config is rendered and symlinked (idempotent)
 #   - npm install (if backend/package.json changed)
 #   - psql -f schema.sql (if backend/db/schema.sql changed)
-#   - render + reload nginx (if nginx template changed)
+#   - render + reload nginx (if template changed or config missing)
 #   - pm2 restart (if any backend file changed)
 # Run on the Pi: bash ~/MyPortfolioSite/scripts/prod-deploy.sh
 set -e
@@ -65,9 +66,13 @@ if [ "$SCHEMA_CHANGED" -gt 0 ]; then
     fi
 fi
 
-# Render and reload Nginx if template changed
-if [ "$NGINX_CHANGED" -gt 0 ]; then
-    echo "=== nginx template changed — rendering and reloading ==="
+# ── Nginx — always ensure config is rendered and symlinked ───────────────────
+# Runs if: template changed OR config file is missing OR symlink is missing.
+NGINX_CONF=/etc/nginx/sites-available/portfolio
+NGINX_LINK=/etc/nginx/sites-enabled/portfolio
+
+if [ "$NGINX_CHANGED" -gt 0 ] || [ ! -f "$NGINX_CONF" ] || [ ! -L "$NGINX_LINK" ]; then
+    echo "=== Rendering and applying nginx config ==="
     if [ -f backend/.env ]; then
         DOMAIN=$(grep "^WEBAUTHN_RP_ID=" backend/.env | cut -d= -f2)
         APP_PORT=$(grep "^PORT=" backend/.env | cut -d= -f2)
@@ -84,8 +89,12 @@ if [ "$NGINX_CHANGED" -gt 0 ]; then
                 < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
                 > /tmp/portfolio.conf
 
-            sudo cp /tmp/portfolio.conf /etc/nginx/sites-available/portfolio
+            sudo cp /tmp/portfolio.conf "$NGINX_CONF"
             rm /tmp/portfolio.conf
+
+            # Idempotent symlink
+            sudo ln -sf "$NGINX_CONF" "$NGINX_LINK"
+            sudo rm -f /etc/nginx/sites-enabled/default
 
             if sudo nginx -t; then
                 sudo systemctl reload nginx
@@ -98,6 +107,8 @@ if [ "$NGINX_CHANGED" -gt 0 ]; then
     else
         echo "  WARN: backend/.env missing — skipping nginx update"
     fi
+else
+    echo "=== Nginx config unchanged and already applied — skipping ==="
 fi
 
 # Restart backend if any backend file changed
