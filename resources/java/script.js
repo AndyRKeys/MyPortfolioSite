@@ -100,6 +100,7 @@ function setHeight(div, height) {
 
 function buildPublicTravelCard(travel) {
     var card = $('<article class="travel-card box draft-card"></article>');
+    card.attr('data-memory-id', travel.id);
     var media = $('<div class="media"></div>');
     var mediaUrl = travel.media_url || travel.mediaUrl;
     var mediaType = travel.media_type || travel.mediaType;
@@ -120,6 +121,97 @@ function buildPublicTravelCard(travel) {
     return card;
 }
 
+// ── Travel map (Leaflet) ──────────────────────────────────────────────────────
+
+var travelMap = null;
+
+function escHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildPopupHtml(memory) {
+    var mediaUrl = memory.media_url || memory.mediaUrl;
+    var mediaType = memory.media_type || memory.mediaType;
+    var thumb = '';
+    if (mediaUrl && mediaType && mediaType.indexOf('image') === 0) {
+        thumb = '<img class="popup-thumb" src="' + escHtml(mediaUrl) + '" alt="">';
+    }
+    return (
+        '<div class="popup-content">' +
+        thumb +
+        '<strong>' + escHtml(memory.title) + '</strong>' +
+        (memory.location ? '<div class="popup-location">' + escHtml(memory.location) + '</div>' : '') +
+        '</div>'
+    );
+}
+
+function initTravelMap(memories) {
+    if (typeof L === 'undefined') return;
+    var mapEl = document.getElementById('travel-map');
+    if (!mapEl) return;
+
+    var withCoords = memories.filter(function (m) {
+        return m.lat !== null && m.lng !== null && m.lat !== undefined && m.lng !== undefined;
+    });
+
+    if (!withCoords.length) {
+        mapEl.classList.add('hidden');
+        $('.travel-view-toggle').addClass('hidden');
+        return;
+    }
+
+    travelMap = L.map('travel-map', { scrollWheelZoom: false }).setView([20, 0], 2);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(travelMap);
+
+    var markers = [];
+    withCoords.forEach(function (m) {
+        var lat = parseFloat(m.lat);
+        var lng = parseFloat(m.lng);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+        var marker = L.marker([lat, lng]).addTo(travelMap).bindPopup(buildPopupHtml(m));
+        markers.push(marker);
+    });
+
+    if (markers.length === 1) {
+        travelMap.setView(markers[0].getLatLng(), 6);
+    } else if (markers.length > 1) {
+        var group = L.featureGroup(markers);
+        travelMap.fitBounds(group.getBounds().pad(0.2));
+    }
+}
+
+function initViewToggle() {
+    $('.view-toggle-btn').on('click', function () {
+        var view = $(this).data('view');
+        $('.view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
+        $(this).addClass('active').attr('aria-selected', 'true');
+
+        var mapEl = $('#travel-map');
+        var grid = $('#travel-grid');
+
+        if (view === 'map') {
+            mapEl.removeClass('hidden');
+            grid.addClass('hidden');
+        } else if (view === 'cards') {
+            mapEl.addClass('hidden');
+            grid.removeClass('hidden');
+        } else {
+            mapEl.removeClass('hidden');
+            grid.removeClass('hidden');
+        }
+
+        if (travelMap && view !== 'cards') {
+            setTimeout(function () { travelMap.invalidateSize(); }, 50);
+        }
+    });
+}
+
 function loadPublicTravelPosts() {
     var travelGrid = $('#travel-grid');
     if (!travelGrid.length) {
@@ -134,14 +226,20 @@ function loadPublicTravelPosts() {
         .then(function(memories) {
             if (!memories.length) {
                 $('#travel-empty').removeClass('hidden');
+                $('#travel-map').addClass('hidden');
+                $('.travel-view-toggle').addClass('hidden');
                 return;
             }
             memories.forEach(function(travel) {
                 travelGrid.append(buildPublicTravelCard(travel));
             });
+            initTravelMap(memories);
+            initViewToggle();
         })
         .catch(function() {
             $('#travel-empty').removeClass('hidden');
+            $('#travel-map').addClass('hidden');
+            $('.travel-view-toggle').addClass('hidden');
         });
 }
 
