@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "format": "prettier --write \"**/*.{js,html,css,json}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{js,html,css,json}\" --ignore-path .prettierignore"
+  },
   "devDependencies": {
     "prettier": "2.7.1"
   }
