@@ -475,10 +475,7 @@ footer a:hover {
     gap: 0.75rem;
 }
 
-.travel-uploader label {
-    display: block;
-    font-weight: 600;
-}
+/* Removed: .travel-uploader label — travel form now uses .admin-card label styles */
 
 .travel-uploader input[type="text"],
 .travel-uploader textarea,
@@ -1679,12 +1676,20 @@ footer {
 
 /* ── Admin card form inputs ─────────────────────────────────────────────────── */
 
+/* Forms inside admin cards use a grid for consistent field spacing */
+#travel-form,
+#post-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
 .admin-card label {
     display: block;
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--color-text);
-    margin-bottom: 0.75rem;
+    /* No margin-bottom — gap on the parent grid handles spacing */
+    margin-bottom: 0;
 }
 
 .admin-card input[type="text"],
