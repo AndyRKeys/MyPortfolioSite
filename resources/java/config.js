@@ -1,3 +1,2 @@
-// Development: point at the local backend port
-// Production: set to '' (empty string) — Nginx proxies /auth/* to Node on the same domain
-export const API = '';
+const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+export const API = isDev ? 'http://localhost:8080' : '';
