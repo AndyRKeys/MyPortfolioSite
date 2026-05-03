@@ -47,6 +47,10 @@ sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON ALL TABLES IN SCHEMA public T
 sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;"
 echo "  DB password: $DB_PASS (saved to $REPO_DIR/backend/.env)"
 
+# ── Uploads directory (served by Nginx as static files) ──────────────────────
+mkdir -p "$REPO_DIR/uploads"
+chmod 755 "$REPO_DIR/uploads"
+
 # ── 5. Backend .env ───────────────────────────────────────────────────────────
 echo "[5/7] Writing backend .env..."
 
@@ -97,34 +101,14 @@ cd "$HOME"
 
 # ── 7. Nginx ──────────────────────────────────────────────────────────────────
 echo "[7/7] Configuring Nginx..."
-sudo tee /etc/nginx/sites-available/portfolio > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN www.$DOMAIN raspberrypi3.local;
 
-    root $REPO_DIR;
-    index index.html;
+# envsubst lives in gettext-base; install if missing
+command -v envsubst >/dev/null || sudo apt-get install -y gettext-base
 
-    # Proxy auth API to Node backend
-    location /auth/ {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    # Health check
-    location /health {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-    }
-
-    # Static files
-    location / {
-        try_files \$uri \$uri/ \$uri.html =404;
-    }
-}
-EOF
+export DOMAIN REPO_DIR APP_PORT
+envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT}' \
+    < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
+    | sudo tee /etc/nginx/sites-available/portfolio > /dev/null
 
 sudo ln -sf /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/portfolio
 sudo rm -f /etc/nginx/sites-enabled/default

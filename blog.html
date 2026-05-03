@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blog | AK Portfolio</title>
+    <link rel="shortcut icon" href="./resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="./resources/css/reset.css" />
+    <link rel="stylesheet" href="./resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>A|K</h1>
+        <h2>Writing</h2>
+    </header>
+    <nav>
+        <ul class="nav">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="index.html#portfolio">Projects</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="travel.html">Travel</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+            <li><a href="login.html">Admin</a></li>
+            <li><button id="dark-mode-toggle" aria-label="Switch to dark mode">☾</button></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section class="sec-cont" id="blog">
+            <h2>Posts</h2>
+            <div id="posts-list" class="posts-list">
+                <p class="hint">Loading posts…</p>
+            </div>
+            <div id="posts-empty" class="posts-empty hidden">
+                <p>No posts yet — check back soon.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <section class="sec-cont" id="contact">
+            <div class="footer-bottom">
+                <p>© 2026 Andrew Keys. All Rights Reserved.</p>
+            </div>
+        </section>
+    </footer>
+
+    <script src="./resources/java/darkmode.js"></script>
+    <script src="./resources/java/jquery-3.5.1.min.js"></script>
+    <script src="./resources/java/blog.js"></script>
+</body>
+</html>
