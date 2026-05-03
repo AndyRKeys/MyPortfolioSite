@@ -3,7 +3,8 @@
     Local development helper for andykeys.me (Windows/Git Bash wrapper for dev-local.sh)
 
 .DESCRIPTION
-    Calls dev-local.sh via Git Bash. Requires Git for Windows to be installed.
+    Passes the command through to dev-local.sh via Git Bash.
+    Requires Git for Windows to be installed.
     Run from the repo root: .\scripts\dev-local.ps1 <command>
 
 .PARAMETER Command
@@ -43,8 +44,7 @@ if (-not $Command) {
     exit 1
 }
 
-# Resolve the repo root and convert to a Unix-style path for Git Bash
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$unixRoot = $repoRoot -replace '\\', '/' -replace '^([A-Za-z]):', { '/mnt/' + $args[0].Groups[1].Value.ToLower() }
+# Git Bash accepts Windows paths with forward slashes (C:/...) — not WSL-style (/mnt/c/...)
+$repoRoot = (Split-Path -Parent $PSScriptRoot) -replace '\\', '/'
 
-& $gitBash -c "bash '$unixRoot/scripts/dev-local.sh' $Command"
+& $gitBash -c "bash '$repoRoot/scripts/dev-local.sh' $Command"
