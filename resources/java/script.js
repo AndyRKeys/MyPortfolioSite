@@ -100,7 +100,10 @@ function setHeight(div, height) {
 
 function formatVisitDate(dateStr) {
     if (!dateStr) return null;
-    var d = new Date(dateStr + 'T00:00:00'); // parse as local date, not UTC
+    // Accept "YYYY-MM-DD" or full ISO timestamps — always parse as local date
+    var datePart = String(dateStr).slice(0, 10);
+    var d = new Date(datePart + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
