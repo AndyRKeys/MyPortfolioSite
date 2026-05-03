@@ -1633,6 +1633,7 @@ footer {
 .admin-card input[type="text"],
 .admin-card input[type="email"],
 .admin-card input[type="number"],
+.admin-card input[type="date"],
 .admin-card textarea,
 .admin-card input[type="file"] {
     width: 100%;
@@ -1651,9 +1652,20 @@ footer {
 .admin-card input[type="text"]:focus,
 .admin-card input[type="email"]:focus,
 .admin-card input[type="number"]:focus,
-.admin-card textarea:focus {
+.admin-card input[type="date"]:focus {
     outline: none;
     border-color: var(--color-accent);
+}
+
+/* Suppress WebKit's native calendar icon so the field looks clean */
+.admin-card input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
+    filter: invert(var(--calendar-icon-invert, 0));
+    cursor: pointer;
+}
+
+[data-theme="dark"] .admin-card input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
 }
 
 /* ── Login divider ──────────────────────────────────────────────────────────── */
@@ -1697,6 +1709,7 @@ footer {
     .admin-card input[type="text"],
     .admin-card input[type="email"],
     .admin-card input[type="number"],
+    .admin-card input[type="date"],
     .admin-card input[type="password"],
     .admin-card textarea {
         font-size: 16px;
