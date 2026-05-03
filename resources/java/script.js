@@ -139,6 +139,35 @@ function buildPublicTravelCard(travel) {
     return card;
 }
 
+function buildTravelTimelineItem(travel) {
+    var item = $('<div class="timeline-item"></div>');
+    item.append('<div class="timeline-marker"></div>');
+    var content = $('<div class="timeline-content"></div>');
+
+    var formattedDate = formatVisitDate(travel.visit_date);
+    if (formattedDate) {
+        content.append('<span class="timeline-date">' + formattedDate + '</span>');
+    }
+    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
+    if (travel.location) {
+        content.append('<p class="timeline-location">📍 ' + travel.location + '</p>');
+    }
+    if (travel.notes) {
+        content.append('<p>' + travel.notes + '</p>');
+    }
+
+    var mediaUrl = travel.media_url || travel.mediaUrl;
+    var mediaType = travel.media_type || travel.mediaType;
+    if (mediaUrl && mediaType && mediaType.indexOf('image') === 0) {
+        var img = $('<img class="timeline-thumb" alt="Travel snapshot">').attr('src', mediaUrl);
+        img.on('error', function () { $(this).remove(); });
+        content.append(img);
+    }
+
+    item.append(content);
+    return item;
+}
+
 // ── Travel map (Leaflet) ──────────────────────────────────────────────────────
 
 var travelMap = null;
@@ -212,19 +241,27 @@ function initViewToggle() {
 
         var mapEl = $('#travel-map');
         var grid = $('#travel-grid');
+        var timeline = $('#travel-timeline');
 
         if (view === 'map') {
             mapEl.removeClass('hidden');
             grid.addClass('hidden');
+            timeline.addClass('hidden');
         } else if (view === 'cards') {
             mapEl.addClass('hidden');
             grid.removeClass('hidden');
+            timeline.addClass('hidden');
+        } else if (view === 'timeline') {
+            mapEl.addClass('hidden');
+            grid.addClass('hidden');
+            timeline.removeClass('hidden');
         } else {
             mapEl.removeClass('hidden');
             grid.removeClass('hidden');
+            timeline.addClass('hidden');
         }
 
-        if (travelMap && view !== 'cards') {
+        if (travelMap && (view === 'map' || view === 'both')) {
             setTimeout(function () { travelMap.invalidateSize(); }, 50);
         }
     });
@@ -248,9 +285,21 @@ function loadPublicTravelPosts() {
                 $('.travel-view-toggle').addClass('hidden');
                 return;
             }
+
             memories.forEach(function(travel) {
                 travelGrid.append(buildPublicTravelCard(travel));
             });
+
+            var sorted = memories.slice().sort(function(a, b) {
+                var da = a.visit_date ? String(a.visit_date).slice(0, 10) : '';
+                var db = b.visit_date ? String(b.visit_date).slice(0, 10) : '';
+                return db < da ? -1 : db > da ? 1 : 0;
+            });
+            var timelineEl = $('#travel-timeline');
+            sorted.forEach(function(travel) {
+                timelineEl.append(buildTravelTimelineItem(travel));
+            });
+
             initTravelMap(memories);
             initViewToggle();
         })
