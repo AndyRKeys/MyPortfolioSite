@@ -128,7 +128,8 @@ function buildPublicTravelCard(travel) {
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
     var formattedDate = formatVisitDate(travel.visit_date);
-    var metaHtml = travel.location || 'Location not set';
+    var locationText = travel.location || 'Location not set';
+    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
     if (formattedDate) {
         metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
     }
