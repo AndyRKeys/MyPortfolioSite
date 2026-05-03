@@ -110,14 +110,17 @@ function buildPublicTravelCard(travel) {
     var media = $('<div class="media"></div>');
     var mediaUrl = travel.media_url || travel.mediaUrl;
     var mediaType = travel.media_type || travel.mediaType;
+    var placeholder = './resources/img/placeholder-transparent.png';
     if (mediaUrl) {
         if (mediaType && mediaType.indexOf('video') === 0) {
             media.append('<video controls src="' + mediaUrl + '"></video>');
         } else {
-            media.append('<img src="' + mediaUrl + '" alt="Travel snapshot">');
+            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            media.append(img);
         }
     } else {
-        media.append('<img src="./resources/img/placeholder-transparent.png" alt="Travel snapshot">');
+        media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
     }
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
