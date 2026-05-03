@@ -1,4 +1,5 @@
-var API_BASE = '';
+// API base — /api in production (Nginx proxy strips prefix), empty string in dev
+var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? '' : '/api';
 
 function escapeHtml(str) {
     return String(str)
