@@ -101,44 +101,14 @@ cd "$HOME"
 
 # ── 7. Nginx ──────────────────────────────────────────────────────────────────
 echo "[7/7] Configuring Nginx..."
-sudo tee /etc/nginx/sites-available/portfolio > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN www.$DOMAIN raspberrypi3.local;
 
-    root $REPO_DIR;
-    index index.html;
+# envsubst lives in gettext-base; install if missing
+command -v envsubst >/dev/null || sudo apt-get install -y gettext-base
 
-    # Allow larger file uploads (matches multer 20 MB limit + headroom)
-    client_max_body_size 25M;
-
-    # Proxy all backend API routes to Node
-    location ~ ^/(auth|travel|contact|posts|upload)(/|\$) {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    # Health check
-    location /health {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-    }
-
-    # Uploaded media served directly by Nginx from repo-root uploads/ dir
-    location /uploads/ {
-        alias $REPO_DIR/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Static files
-    location / {
-        try_files \$uri \$uri/ \$uri.html =404;
-    }
-}
-EOF
+export DOMAIN REPO_DIR APP_PORT
+envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT}' \
+    < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
+    | sudo tee /etc/nginx/sites-available/portfolio > /dev/null
 
 sudo ln -sf /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/portfolio
 sudo rm -f /etc/nginx/sites-enabled/default
