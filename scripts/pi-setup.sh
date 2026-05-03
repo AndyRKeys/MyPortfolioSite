@@ -47,6 +47,10 @@ sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON ALL TABLES IN SCHEMA public T
 sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;"
 echo "  DB password: $DB_PASS (saved to $REPO_DIR/backend/.env)"
 
+# ── Uploads directory (served by Nginx as static files) ──────────────────────
+mkdir -p "$REPO_DIR/uploads"
+chmod 755 "$REPO_DIR/uploads"
+
 # ── 5. Backend .env ───────────────────────────────────────────────────────────
 echo "[5/7] Writing backend .env..."
 
@@ -105,8 +109,11 @@ server {
     root $REPO_DIR;
     index index.html;
 
-    # Proxy auth API to Node backend
-    location /auth/ {
+    # Allow larger file uploads (matches multer 20 MB limit + headroom)
+    client_max_body_size 25M;
+
+    # Proxy all backend API routes to Node
+    location ~ ^/(auth|travel|contact|posts|upload)(/|\$) {
         proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -117,6 +124,13 @@ server {
     # Health check
     location /health {
         proxy_pass http://127.0.0.1:$APP_PORT;
+    }
+
+    # Uploaded media served directly by Nginx from repo-root uploads/ dir
+    location /uploads/ {
+        alias $REPO_DIR/uploads/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
     }
 
     # Static files
