@@ -14,15 +14,15 @@
 <body>
     <header>
         <h1>A|K</h1>
-        <h2>Andy | Keys</h2>
+        <p class="site-tagline">Andy | Keys</p>
         <h2>Admin Dashboard</h2>
     </header>
     <nav>
         <ul class="nav">
             <li><a href="index.html">Home</a></li>
             <!-- Issue #32: quick links to public-facing pages -->
-            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
             <li><a href="travel.html" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
+            <li><a href="blog.html" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
             <li><a href="login.html" id="logout-link">Logout</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
@@ -41,6 +41,10 @@
                     <label>Location
                         <input id="travel-location" type="text" placeholder="City, country" />
                     </label>
+                    <!-- Issue #24: visit date field, defaults to today -->
+                    <label>Date of visit
+                        <input id="travel-date" type="date" />
+                    </label>
                     <label>Notes
                         <textarea id="travel-notes" rows="3" placeholder="Describe the moment"></textarea>
                     </label>
@@ -58,7 +62,7 @@
                             <div class="coord-stepper">
                                 <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="-1" aria-label="Decrease latitude">−</button>
                                 <input id="travel-lat" type="number" step="0.0001" placeholder="e.g. 51.5074" />
-                                <button type="button" class="coord-step-btn" data-target="travel-lng" data-dir="1" aria-label="Increase latitude">+</button>
+                                <button type="button" class="coord-step-btn" data-target="travel-lat" data-dir="1" aria-label="Increase latitude">+</button>
                             </div>
                         </label>
                         <label>Longitude
@@ -152,6 +156,18 @@
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script type="module" src="./resources/java/admin.js"></script>
     <script>
+        // Issue #24: default date input to today
+        (function () {
+            var dateInput = document.getElementById('travel-date');
+            if (dateInput) {
+                var today = new Date();
+                var yyyy = today.getFullYear();
+                var mm = String(today.getMonth() + 1).padStart(2, '0');
+                var dd = String(today.getDate()).padStart(2, '0');
+                dateInput.value = yyyy + '-' + mm + '-' + dd;
+            }
+        })();
+
         // Issue #34: wire styled file input button to hidden native input
         (function () {
             var btn = document.querySelector('.file-input-btn');
@@ -169,8 +185,8 @@
         // Issue #39: custom coordinate stepper buttons
         (function () {
             var STEP = 0.0001;
-            var holdDelay = 400;  // ms before repeat starts
-            var holdInterval = 80; // ms between repeats while held
+            var holdDelay = 400;
+            var holdInterval = 80;
 
             function nudge(inputId, direction) {
                 var el = document.getElementById(inputId);
