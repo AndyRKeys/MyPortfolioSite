@@ -4,9 +4,27 @@
 # BACKEND_HOST defaults to 127.0.0.1 for production, override to 'backend' for Docker.
 # Used by both scripts/pi-setup.sh (initial setup) and scripts/prod-deploy.sh
 # (continuous deployment).
+#
+# SSL NOTE: Certificate paths are fixed by certbot on first run of pi-setup.sh.
+# Re-rendering this template on deploy does NOT break HTTPS because the cert
+# paths are hardcoded here — certbot manages cert renewal, not nginx config.
+
+# HTTP → HTTPS redirect
 server {
     listen 80;
-    server_name ${DOMAIN} www.${DOMAIN} raspberrypi3.local;
+    server_name ${DOMAIN} www.${DOMAIN};
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN} www.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
 
     root ${REPO_DIR};
     index index.html;
