@@ -24,10 +24,14 @@
         </ul>
     </nav>
 
+    <!-- Issue #28: Quick-nav to public-facing pages -->
+    <div class="admin-quicknav">
+        <a href="travel.html" target="_blank" rel="noopener noreferrer" class="admin-quicknav-link">✈ Travel</a>
+        <a href="#blog" target="_blank" rel="noopener noreferrer" class="admin-quicknav-link">✏ Blog</a>
+    </div>
+
     <main class="admin-page">
         <section class="sec-cont admin-panel">
-
-            <!-- ── Travel memories ─────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2>Publish travel memories</h2>
                 <form id="travel-form">
@@ -40,17 +44,14 @@
                     <label>Notes
                         <textarea id="travel-notes" rows="3" placeholder="Describe the moment"></textarea>
                     </label>
+                    <!-- Issue #29: styled file input -->
                     <label>Photo or video
-                        <input id="travel-file" type="file" accept="image/*,video/*" />
+                        <div class="file-input-wrap">
+                            <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photo or video">Browse…</button>
+                            <span class="file-input-label">No file chosen</span>
+                            <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" />
+                        </div>
                     </label>
-                    <div class="coord-row">
-                        <label>Latitude
-                            <input id="travel-lat" type="number" step="any" placeholder="e.g. 51.5074" />
-                        </label>
-                        <label>Longitude
-                            <input id="travel-lng" type="number" step="any" placeholder="e.g. -0.1278" />
-                        </label>
-                    </div>
                     <div class="form-actions">
                         <button type="submit" class="btn-primary">Save memory</button>
                         <button type="button" id="travel-clear" class="btn-secondary">Clear</button>
@@ -70,35 +71,6 @@
                 </div>
             </div>
 
-            <!-- ── Blog posts ──────────────────────────────────────────────── -->
-            <div class="admin-card">
-                <h2>Blog posts</h2>
-                <form id="post-form">
-                    <input type="hidden" id="post-edit-id" value="" />
-                    <label>Title
-                        <input id="post-title" type="text" placeholder="Post title" />
-                    </label>
-                    <label>Body (Markdown)
-                        <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
-                    </label>
-                    <div class="form-actions">
-                        <button type="submit" id="post-save-btn" class="btn-primary">Save draft</button>
-                        <button type="submit" id="post-publish-btn" class="btn-primary">Publish</button>
-                        <button type="button" id="post-template-btn" class="btn-secondary">Insert template</button>
-                        <button type="button" id="post-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
-                    </div>
-                </form>
-                <p id="post-message" class="login-message"></p>
-
-                <div class="saved-memories" style="margin-top:1.5rem">
-                    <h3>All posts</h3>
-                    <div id="posts-admin-list">
-                        <p class="hint">Loading…</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ── Private notes ───────────────────────────────────────────── -->
             <div class="admin-card private-card">
                 <h2>Private coding projects</h2>
                 <p>Private notes and project planning. GitHub integration can be added later.</p>
@@ -112,7 +84,6 @@
                 <p class="hint">Notes are saved locally in your browser.</p>
             </div>
 
-            <!-- ── Passkeys ────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2>Manage passkeys</h2>
                 <p>Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
@@ -124,12 +95,27 @@
                 </div>
                 <p id="passkey-message" class="login-message"></p>
             </div>
-
         </section>
     </main>
 
+    <script src="./resources/java/dev-env.js"></script>
     <script src="./resources/java/darkmode.js"></script>
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script type="module" src="./resources/java/admin.js"></script>
+    <script>
+        // Issue #29: wire styled file input button to hidden native input
+        (function () {
+            const btn = document.querySelector('.file-input-btn');
+            const input = document.getElementById('travel-file');
+            const label = document.querySelector('.file-input-label');
+            if (!btn || !input || !label) return;
+            btn.addEventListener('click', function () { input.click(); });
+            input.addEventListener('change', function () {
+                label.textContent = input.files.length > 0
+                    ? input.files[0].name
+                    : 'No file chosen';
+            });
+        })();
+    </script>
 </body>
 </html>
