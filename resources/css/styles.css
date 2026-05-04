@@ -1726,7 +1726,7 @@ footer {
 }
 
 .post-article-header {
-    margin-bottom: 0;
+    margin-bottom: 0.25rem;
 }
 
 /* Scoped to the reader page only — must NOT bleed onto the admin #post-title input */
@@ -2335,4 +2335,95 @@ footer {
         font-size: 16px; /* prevent iOS zoom */
         padding: 0.75rem 0.4rem;
     }
+}
+
+/* ── Issue #78: clickable cards & detail page styles ────────────────────────── */
+
+/* Travel card now an <a> — strip default link styling */
+a.travel-card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+a.travel-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--color-shadow);
+}
+
+a.travel-card:visited {
+    color: inherit;
+}
+
+/* Timeline item link wrapping <h3> (used by both blog and travel) */
+.timeline-content a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.timeline-content a:hover h3 {
+    color: var(--color-accent);
+}
+
+.timeline-item .media-thumb-wrap {
+    transition: opacity 0.15s ease;
+}
+
+.timeline-item .media-thumb-wrap:hover {
+    opacity: 0.85;
+}
+
+/* ── Post detail pages (blog + travel) ───────────────────────────────────────── */
+
+.post-meta {
+    color: var(--color-text-muted);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.95rem;
+    margin: 0.25rem 0 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.post-meta .travel-location::before {
+    content: "📍 ";
+}
+
+.post-meta .travel-date::before,
+.post-meta .blog-date::before {
+    content: "📅 ";
+}
+
+.post-media-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin: 1.25rem 0;
+}
+
+.gallery-thumb {
+    cursor: pointer;
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    background: #eaeaea;
+    transition: transform 0.15s ease;
+}
+
+.gallery-thumb:hover {
+    transform: scale(1.02);
+}
+
+.gallery-thumb img,
+.gallery-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.travel-post-map {
+    border: 1px solid var(--color-border);
 }

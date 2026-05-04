@@ -10,6 +10,11 @@ import uploadRoutes from './routes/upload.js';
 import postsRoutes from './routes/posts.js';
 import statsRoutes from './routes/stats.js';
 
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set');
+  process.exit(1);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();

@@ -137,3 +137,35 @@ WHERE post_type = 'travel'
     SELECT 1 FROM post_media pm WHERE pm.post_id = posts.id
   );
 
+-- DB-backed rate limiting for contact form (#79)
+-- One row per IP; window_start resets when the window expires.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  ip VARCHAR(45) PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 1,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ── Indexes on hot query columns (#79) ───────────────────────────────────────
+-- slug is already covered by the UNIQUE constraint (implicit index).
+-- These cover the ORDER BY / WHERE clauses used by the public and admin list routes.
+
+CREATE INDEX IF NOT EXISTS idx_posts_post_type
+  ON posts (post_type);
+
+CREATE INDEX IF NOT EXISTS idx_posts_published_at
+  ON posts (published_at DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS idx_posts_post_date
+  ON posts (post_date DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS idx_posts_created_at
+  ON posts (created_at DESC);
+
+-- Composite index for the most common public query pattern:
+-- WHERE post_type = ? AND published_at IS NOT NULL ORDER BY post_date DESC
+CREATE INDEX IF NOT EXISTS idx_posts_type_published_date
+  ON posts (post_type, published_at DESC NULLS LAST, post_date DESC NULLS LAST);
+
+-- post_media is always queried by post_id
+CREATE INDEX IF NOT EXISTS idx_post_media_post_id
+  ON post_media (post_id);

@@ -1,4 +1,21 @@
-var API_BASE = '';
+// API_BASE: prefer the value set by config.js (window.API_BASE), fall back to /api.
+// config.js uses ES module export so it can't set a global directly in non-module
+// scripts. The shim below means blog-post.js works whether or not config.js has
+// been loaded first, and the value can be overridden by a window.API_BASE assignment
+// in a <script> tag above this file if needed.
+var API_BASE = (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : '/api';
+
+function sanitizeHtml(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var remove = temp.querySelectorAll('script, iframe, object, embed, [onclick], [onload], [onerror]');
+    remove.forEach(function(el) { el.remove(); });
+    temp.querySelectorAll('[href*="javascript:"], [src*="javascript:"]').forEach(function(el) {
+        el.removeAttribute('href');
+        el.removeAttribute('src');
+    });
+    return temp.innerHTML;
+}
 
 function getSlug() {
     var params = new URLSearchParams(window.location.search);
@@ -29,10 +46,9 @@ function loadPost() {
                 : '';
 
             var md = post.body_markdown || '';
-            // Handle both sync and async versions of marked
             var result = marked.parse(md);
             Promise.resolve(result).then(function (html) {
-                document.getElementById('post-markdown').innerHTML = html;
+                document.getElementById('post-markdown').innerHTML = sanitizeHtml(html);
             });
 
             document.getElementById('post-loading').classList.add('hidden');
