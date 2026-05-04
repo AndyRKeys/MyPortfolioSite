@@ -16,6 +16,7 @@ import contactRoutes from './routes/contact.js';
 import uploadRoutes  from './routes/upload.js';
 import postsRoutes   from './routes/posts.js';
 import statsRoutes   from './routes/stats.js';
+import cvRoutes      from './routes/cv.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,7 @@ export function createApp() {
   app.use('/upload',  uploadRoutes);
   app.use('/posts',   postsRoutes);
   app.use('/stats',   statsRoutes);
+  app.use('/cv',      cvRoutes);
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
