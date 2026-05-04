@@ -59,7 +59,7 @@
                         <div class="about-actions">
                             <!-- CV download: shown only if a CV is available via the API.
                                  Falls back gracefully — no button shown if no CV is uploaded.
-                                 Static href removed to fix #110 (hardcoded path caused 404). -->
+                                 Re-checked on visibilitychange so returning from admin is reactive. -->
                             <button id="cv-download-btn" class="btn-download" style="display:none" type="button">
                                 Download CV
                             </button>
@@ -359,21 +359,35 @@
     <script type="module" src="./resources/java/script.js"></script>
 
     <script>
-        // CV download button — shown only if a CV is available via the API (#110)
+        // CV download button — reactive, no manual reload needed (#110)
+        // checkCvExists() is called on load AND whenever the page regains
+        // visibility (e.g. switching back from the admin tab).
         (function () {
             var btn = document.getElementById('cv-download-btn');
             if (!btn) return;
 
-            fetch('/api/cv/exists')
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data && data.exists) {
-                        btn.style.display = '';
-                    }
-                })
-                .catch(function () {
-                    // API unreachable — silently hide button (no broken UI)
-                });
+            function checkCvExists() {
+                fetch('/api/cv/exists')
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        btn.style.display = (data && data.exists) ? '' : 'none';
+                    })
+                    .catch(function () {
+                        btn.style.display = 'none'; // API unreachable — hide safely
+                    });
+            }
+
+            // Initial check on page load
+            checkCvExists();
+
+            // Re-check whenever this tab becomes visible again
+            // (covers navigating back from admin.html in the same tab,
+            //  or switching back from another tab)
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    checkCvExists();
+                }
+            });
 
             btn.addEventListener('click', function () {
                 btn.disabled = true;
