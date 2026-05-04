@@ -1726,7 +1726,7 @@ footer {
 }
 
 .post-article-header {
-    margin-bottom: 0;
+    margin-bottom: 0.25rem;
 }
 
 /* Scoped to the reader page only — must NOT bleed onto the admin #post-title input */
@@ -2374,23 +2374,25 @@ a.travel-card:visited {
     opacity: 0.85;
 }
 
-/* ── Travel post detail page ─────────────────────────────────────────────────── */
+/* ── Post detail pages (blog + travel) ───────────────────────────────────────── */
 
 .post-meta {
     color: var(--color-text-muted);
     font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 0.95rem;
-    margin: 0.25rem 0 1rem;
+    margin: 0.25rem 0 1.25rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+    align-items: center;
 }
 
 .post-meta .travel-location::before {
     content: "📍 ";
 }
 
-.post-meta .travel-date::before {
+.post-meta .travel-date::before,
+.post-meta .blog-date::before {
     content: "📅 ";
 }
 
