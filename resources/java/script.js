@@ -469,14 +469,25 @@ function loadPublicTravelPosts() {
                 var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
                 var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
 
-                timelineEl.append(buildTimelineItem({
+                var item = buildTimelineItem({
                     dateStr:   formatVisitDate(travel.visit_date),
                     title:     travel.title,
                     location:  travel.location,
                     notes:     travel.notes,
                     mediaUrl:  mediaUrl,
                     mediaType: mediaType,
-                }));
+                });
+
+                // Wire up lightbox for timeline image if media array exists
+                if (allMedia && allMedia.length > 0) {
+                    item.find('.timeline-thumb').css('cursor', 'pointer').on('click', function(e) {
+                        e.preventDefault();
+                        var mediaItems = allMedia.map(function(m) { return { url: m.url, type: m.type }; });
+                        openLightbox(mediaItems, 0, travel.title);
+                    });
+                }
+
+                timelineEl.append(item);
             });
 
             // All containers must be populated before initViewToggle wires the buttons.
