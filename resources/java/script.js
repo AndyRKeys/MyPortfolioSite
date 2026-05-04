@@ -251,33 +251,30 @@ function initTravelMap(memories) {
 }
 
 function applyTravelView(view) {
-    var mapEl = $('#travel-map');
-    var grid  = $('#travel-grid');
+    var mapEl   = $('#travel-map');
+    var grid    = $('#travel-grid');
     var timeline = $('#travel-timeline');
 
-    if (view === 'all') {
+    // Hide all first, then reveal only what this view needs
+    mapEl.addClass('hidden');
+    grid.addClass('hidden');
+    timeline.addClass('hidden');
+
+    if (view === 'map-timeline') {
         mapEl.removeClass('hidden');
-        grid.removeClass('hidden');
         timeline.removeClass('hidden');
     } else if (view === 'both') {
         mapEl.removeClass('hidden');
         grid.removeClass('hidden');
-        timeline.addClass('hidden');
     } else if (view === 'map') {
         mapEl.removeClass('hidden');
-        grid.addClass('hidden');
-        timeline.addClass('hidden');
     } else if (view === 'cards') {
-        mapEl.addClass('hidden');
         grid.removeClass('hidden');
-        timeline.addClass('hidden');
     } else if (view === 'timeline') {
-        mapEl.addClass('hidden');
-        grid.addClass('hidden');
         timeline.removeClass('hidden');
     }
 
-    if (travelMap && (view === 'all' || view === 'map' || view === 'both')) {
+    if (travelMap && (view === 'map-timeline' || view === 'map' || view === 'both')) {
         setTimeout(function () { travelMap.invalidateSize(); }, 50);
     }
 }
@@ -285,8 +282,8 @@ function applyTravelView(view) {
 function initViewToggle() {
     // Scoped to .travel-view-toggle to avoid colliding with .blog-view-toggle
     // when both script.js and blog.js are loaded on blog.html.
-    // Cards, timeline and map must all be populated before this is called.
-    var activeView = $('.travel-view-toggle .view-toggle-btn.active').data('view') || 'all';
+    // All containers must be populated before this is called.
+    var activeView = $('.travel-view-toggle .view-toggle-btn.active').data('view') || 'map-timeline';
     applyTravelView(activeView);
 
     $('.travel-view-toggle .view-toggle-btn').on('click', function () {
@@ -337,7 +334,7 @@ function loadPublicTravelPosts() {
                 }));
             });
 
-            // Cards, timeline and map must all be populated before initViewToggle wires the buttons.
+            // All containers must be populated before initViewToggle wires the buttons.
             initTravelMap(memories);
             initViewToggle();
         })

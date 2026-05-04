@@ -39,16 +39,16 @@
             <h2>Posts</h2>
 
             <div class="blog-view-toggle" role="tablist">
-                <button type="button" class="view-toggle-btn active" data-view="cards" role="tab" aria-selected="true">Cards</button>
-                <button type="button" class="view-toggle-btn" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
+                <button type="button" class="view-toggle-btn active" data-view="timeline" role="tab" aria-selected="true">Timeline</button>
+                <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards</button>
             </div>
 
-            <div id="posts-list" class="posts-list">
-                <p class="hint">Loading posts…</p>
+            <!-- hidden until cards view is selected -->
+            <div id="posts-list" class="posts-list hidden">
+                <!-- populated from API by blog.js -->
             </div>
 
-            <!-- hidden until timeline view is selected -->
-            <div id="blog-timeline" class="timeline hidden">
+            <div id="blog-timeline" class="timeline">
                 <!-- populated from API by blog.js -->
             </div>
 
