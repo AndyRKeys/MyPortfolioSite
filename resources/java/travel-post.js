@@ -152,20 +152,25 @@ function renderTravelPost(travel) {
     var notesEl = document.getElementById('post-notes');
     notesEl.textContent = travel.notes || '';
 
-    // Render map if coordinates exist
-    if (travel.lat != null && travel.lng != null) {
-        var mapEl = document.getElementById('post-map');
-        mapEl.style.display = 'block';
-        var map = L.map(mapEl).setView([parseFloat(travel.lat), parseFloat(travel.lng)], 11);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19,
-        }).addTo(map);
-        L.marker([parseFloat(travel.lat), parseFloat(travel.lng)]).addTo(map);
-    }
-
     document.getElementById('post-loading').classList.add('hidden');
     document.getElementById('post-body').classList.remove('hidden');
+
+    // Render map after post-body is visible so Leaflet can measure real dimensions
+    if (travel.lat != null && travel.lng != null) {
+        var lat = parseFloat(travel.lat);
+        var lng = parseFloat(travel.lng);
+        var mapEl = document.getElementById('post-map');
+        mapEl.style.display = 'block';
+        requestAnimationFrame(function () {
+            var map = L.map(mapEl).setView([lat, lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19,
+            }).addTo(map);
+            L.marker([lat, lng]).addTo(map);
+            map.invalidateSize();
+        });
+    }
 }
 
 function showError() {
