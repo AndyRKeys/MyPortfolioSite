@@ -3,7 +3,8 @@
 # Mirrors prod-deploy.sh behaviour for the Docker dev environment.
 #
 # Commands:
-#   up             — build & start all containers; auto-applies schema.sql if changed
+#   up             — build & start all containers; always applies schema.sql on
+#                    a fresh/empty DB; re-applies if schema.sql has changed
 #   down           — stop containers (DB volume is preserved)
 #   reset          — full teardown including DB volume, then rebuild (clean slate)
 #   logs           — tail backend container logs
@@ -20,11 +21,6 @@ cd "$REPO_DIR"
 case "$1" in
 
   up)
-    # Detect uncommitted or committed-but-not-applied schema changes.
-    # Covers both: changes staged/unstaged locally, and changes that were
-    # just pulled (matching the prod-deploy.sh detection pattern).
-    SCHEMA_CHANGED=$(git diff HEAD -- backend/db/schema.sql | wc -l)
-
     echo "=== Starting containers ==="
     docker compose up --build -d
 
@@ -34,7 +30,25 @@ case "$1" in
       sleep 1
     done
 
-    if [ "$SCHEMA_CHANGED" -gt 0 ]; then
+    # Determine whether the DB is fresh (no tables yet) or already populated.
+    # On a fresh clone or after `reset`, TABLE_COUNT will be 0 and we always
+    # apply the full schema regardless of git-diff status.
+    TABLE_COUNT=$(docker compose exec -T postgres psql \
+      -U "${DB_USER:-postgres}" \
+      -d "${DB_NAME:-portfolio_dev}" \
+      -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null || echo "0")
+    TABLE_COUNT=$(echo "$TABLE_COUNT" | tr -d '[:space:]')
+
+    SCHEMA_CHANGED=$(git diff HEAD -- backend/db/schema.sql | wc -l)
+
+    if [ "$TABLE_COUNT" -eq 0 ]; then
+      echo "=== Fresh DB detected — applying full schema ==="
+      docker compose exec -T postgres psql \
+        -U "${DB_USER:-postgres}" \
+        -d "${DB_NAME:-portfolio_dev}" \
+        -f /docker-entrypoint-initdb.d/01-schema.sql
+      echo "  Schema applied."
+    elif [ "$SCHEMA_CHANGED" -gt 0 ]; then
       echo "=== schema.sql changed — applying to dev DB ==="
       docker compose exec -T postgres psql \
         -U "${DB_USER:-postgres}" \
@@ -42,7 +56,7 @@ case "$1" in
         -f /docker-entrypoint-initdb.d/01-schema.sql
       echo "  Schema applied."
     else
-      echo "=== schema.sql unchanged — skipping migration ==="
+      echo "=== DB already populated and schema.sql unchanged — skipping migration ==="
     fi
 
     echo ""
@@ -64,6 +78,19 @@ case "$1" in
       docker compose down -v
       echo "=== Rebuilding from scratch ==="
       docker compose up --build -d
+
+      echo "=== Waiting for Postgres to be ready ==="
+      until docker compose exec -T postgres pg_isready -U "${DB_USER:-postgres}" > /dev/null 2>&1; do
+        sleep 1
+      done
+
+      echo "=== Applying full schema to clean DB ==="
+      docker compose exec -T postgres psql \
+        -U "${DB_USER:-postgres}" \
+        -d "${DB_NAME:-portfolio_dev}" \
+        -f /docker-entrypoint-initdb.d/01-schema.sql
+      echo "  Schema applied."
+
       echo ""
       echo "Clean dev environment running at http://localhost"
     else
@@ -99,7 +126,7 @@ case "$1" in
   *)
     echo "Usage: bash scripts/dev-local.sh [up|down|reset|logs|db|test|test:coverage]"
     echo ""
-    echo "  up             Build & start all containers; auto-migrates schema if changed"
+    echo "  up             Build & start all containers; auto-migrates schema"
     echo "  down           Stop containers (DB volume preserved)"
     echo "  reset          Full teardown + rebuild — wipes local DB data"
     echo "  logs           Tail backend container logs"
