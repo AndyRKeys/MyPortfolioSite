@@ -55,7 +55,7 @@
     <script src="./resources/java/dev-env.js"></script>
     <script type="module">
         import { startAuthentication } from 'https://esm.sh/@simplewebauthn/browser@7';
-        import { API } from './resources/java/config.js';
+        import { API_BASE } from './resources/java/config.js';
         import { isAdminSession } from './resources/java/auth-utils.js';
 
         function setMessage(msg, isError = false) {
@@ -76,7 +76,7 @@
             statusEl.style.display = '';
             statusEl.textContent = 'Verifying your login link…';
 
-            fetch(`${API}/auth/email/verify?token=${encodeURIComponent(emailToken)}`)
+            fetch(`${API_BASE}/auth/email/verify?token=${encodeURIComponent(emailToken)}`)
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
                 .then(({ ok, data }) => {
                     if (!ok) throw new Error(data.error || 'Verification failed');
@@ -97,7 +97,7 @@
             setMessage('');
 
             try {
-                const startRes = await fetch(`${API}/auth/passkey/login/start`, {
+                const startRes = await fetch(`${API_BASE}/auth/passkey/login/start`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({}),
@@ -106,7 +106,7 @@
 
                 const response = await startAuthentication(options);
 
-                const finishRes = await fetch(`${API}/auth/passkey/login/finish`, {
+                const finishRes = await fetch(`${API_BASE}/auth/passkey/login/finish`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ response, sessionKey }),
@@ -140,7 +140,7 @@
             setMessage('');
 
             try {
-                const res = await fetch(`${API}/auth/email/send`, {
+                const res = await fetch(`${API_BASE}/auth/email/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email }),
