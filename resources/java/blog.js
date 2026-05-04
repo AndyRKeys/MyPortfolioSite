@@ -1,15 +1,14 @@
-// API base — always /api, nginx strips prefix before forwarding to backend
-var API_BASE = '/api';
+var API_BASE = API_BASE || '/api';
 
 function escapeHtml(str) {
-    return String(str)
+    return String(str || '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function truncate(str, len) {
     if (!str) return '';
-    return str.length > len ? str.slice(0, len).trimEnd() + '…' : str;
+    return str.length > len ? str.slice(0, len).trimEnd() + '\u2026' : str;
 }
 
 function formatPostDate(post) {
@@ -19,15 +18,14 @@ function formatPostDate(post) {
 }
 
 function buildPostCard(post) {
-    var card = $('<a class="post-card"></a>');
-    card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(post.slug));
-    var date = formatPostDate(post);
-    card.append('<h3 class="post-card-title">' + escapeHtml(post.title) + '</h3>');
-    card.append('<p class="post-card-date">' + escapeHtml(date) + '</p>');
-    if (post.excerpt) {
-        card.append('<p class="post-card-excerpt">' + escapeHtml(truncate(post.excerpt, 200)) + '</p>');
-    }
-    return card;
+    // Delegate to the shared buildPostCard helper in script.js (window.buildPostCard)
+    // so blog and travel cards share the same structure and cannot drift apart.
+    return window.buildPostCard('blog', {
+        slug:    post.slug,
+        title:   post.title,
+        date:    formatPostDate(post),
+        excerpt: post.excerpt ? truncate(post.excerpt, 150) : null,
+    });
 }
 
 // ── Blog view toggle ───────────────────────────────────────────────────────────
@@ -106,7 +104,4 @@ function loadPosts() {
 
 $(document).ready(function () {
     loadPosts();
-    if (!isAdminSession()) {
-        fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
-    }
 });

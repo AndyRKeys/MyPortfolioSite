@@ -122,7 +122,7 @@ function buildTimelineItem(opts) {
     }
 
     if (opts.location) {
-        $('<p class="timeline-location"></p>').text('📍 ' + opts.location).appendTo(content);
+        $('<p class="timeline-location"></p>').text('\uD83D\uDCCD ' + opts.location).appendTo(content);
     }
 
     if (opts.notes) {
@@ -142,6 +142,66 @@ function buildTimelineItem(opts) {
 // Expose for blog.js (loaded separately on blog.html)
 window.buildTimelineItem = buildTimelineItem;
 
+// ── Shared post card builder ───────────────────────────────────────────────────
+// buildPostCard(type, data) — single source of truth for card markup used by both
+// blog and travel sections, preventing the two from drifting apart.
+//
+// type: 'blog' | 'travel'
+// data (blog):   { slug, title, date, excerpt }
+// data (travel): { id, title, location, date, notes, mediaUrl, mediaType }
+//
+// All user-supplied strings are set via .text() / .attr() — no XSS risk.
+
+function buildPostCard(type, data) {
+    if (type === 'blog') {
+        var card = $('<a class="post-card"></a>');
+        card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(data.slug));
+        $('<h3 class="post-card-title"></h3>').text(data.title || 'Untitled').appendTo(card);
+        if (data.date) {
+            $('<p class="post-card-date"></p>').text(data.date).appendTo(card);
+        }
+        if (data.excerpt) {
+            $('<p class="post-card-excerpt"></p>').text(data.excerpt).appendTo(card);
+        }
+        return card;
+    }
+
+    // type === 'travel'
+    var placeholder = './resources/img/placeholder-transparent.png';
+    var card = $('<article class="travel-card box draft-card"></article>');
+    card.attr('data-memory-id', data.id);
+
+    var media = $('<div class="media"></div>');
+    if (data.mediaUrl) {
+        if (data.mediaType && data.mediaType.indexOf('video') === 0) {
+            $('<video controls></video>').attr('src', data.mediaUrl).appendTo(media);
+        } else {
+            var img = $('<img alt="Travel snapshot">').attr('src', data.mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            media.append(img);
+        }
+    } else {
+        $('<img alt="Travel snapshot">').attr('src', placeholder).appendTo(media);
+    }
+
+    var content = $('<div class="travel-content"></div>');
+    $('<h3></h3>').text(data.title || 'Untitled memory').appendTo(content);
+
+    var meta = $('<p class="meta"></p>');
+    $('<span class="travel-location"></span>').text(data.location || 'Location not set').appendTo(meta);
+    if (data.date) {
+        $('<span class="travel-date"></span>').text(data.date).appendTo(meta);
+    }
+    meta.appendTo(content);
+    $('<p></p>').text(data.notes || 'No notes yet.').appendTo(content);
+
+    card.append(media).append(content);
+    return card;
+}
+
+// Expose for blog.js (loaded separately on blog.html)
+window.buildPostCard = buildPostCard;
+
 // ── Travel memories ────────────────────────────────────────────────────────────
 
 function formatVisitDate(dateStr) {
@@ -154,35 +214,15 @@ function formatVisitDate(dateStr) {
 }
 
 function buildPublicTravelCard(travel) {
-    var card = $('<article class="travel-card box draft-card"></article>');
-    card.attr('data-memory-id', travel.id);
-    var media = $('<div class="media"></div>');
-    var mediaUrl = travel.media_url || travel.mediaUrl;
-    var mediaType = travel.media_type || travel.mediaType;
-    var placeholder = './resources/img/placeholder-transparent.png';
-    if (mediaUrl) {
-        if (mediaType && mediaType.indexOf('video') === 0) {
-            media.append('<video controls src="' + mediaUrl + '"></video>');
-        } else {
-            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
-            img.on('error', function () { $(this).attr('src', placeholder); });
-            media.append(img);
-        }
-    } else {
-        media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
-    }
-    var content = $('<div class="travel-content"></div>');
-    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
-    var formattedDate = formatVisitDate(travel.visit_date);
-    var locationText = travel.location || 'Location not set';
-    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
-    if (formattedDate) {
-        metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
-    }
-    content.append('<p class="meta">' + metaHtml + '</p>');
-    content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
-    card.append(media).append(content);
-    return card;
+    return buildPostCard('travel', {
+        id:        travel.id,
+        title:     travel.title,
+        location:  travel.location,
+        date:      formatVisitDate(travel.visit_date),
+        notes:     travel.notes,
+        mediaUrl:  travel.media_url || travel.mediaUrl,
+        mediaType: travel.media_type || travel.mediaType,
+    });
 }
 
 // ── Travel map (Leaflet) ───────────────────────────────────────────────────────
@@ -230,7 +270,7 @@ function initTravelMap(memories) {
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(travelMap);
 
     var markers = [];
@@ -410,7 +450,7 @@ function initContactForm() {
         var submitBtn = form.querySelector('button[type="submit"]');
 
         submitBtn.disabled = true;
-        msgEl.textContent = 'Sending…';
+        msgEl.textContent = 'Sending\u2026';
         msgEl.className = 'contact-form-message';
 
         var payload = {
@@ -428,7 +468,7 @@ function initContactForm() {
             .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
             .then(function(result) {
                 if (result.ok) {
-                    msgEl.textContent = 'Message sent — I\'ll be in touch soon.';
+                    msgEl.textContent = 'Message sent \u2014 I\'ll be in touch soon.';
                     msgEl.className = 'contact-form-message success';
                     form.reset();
                 } else {
