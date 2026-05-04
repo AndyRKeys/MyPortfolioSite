@@ -122,6 +122,24 @@ Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexit
 - ❌ `Fixed bug` (too vague, missing scope)
 - ❌ `WIP` (incomplete, no description)
 
+## Developer Environment
+
+### Terminal
+
+- **Preferred terminal: PowerShell** (Windows). Use PowerShell syntax for all shell commands, scripts, and examples provided by the AI.
+- Use backtick (`` ` ``) for line continuation, not `\`.
+- Use `curl.exe` (not `curl`) to invoke real curl — `curl` in PowerShell is an alias for `Invoke-WebRequest` and behaves differently.
+- Escape inner double-quotes in `-d` bodies with `\"` when using `curl.exe`.
+- For multi-line `curl.exe` commands:
+
+```powershell
+curl.exe -s -X POST http://localhost/api/contact `
+  -H 'Content-Type: application/json' `
+  -d '{\"name\":\"Test\",\"email\":\"test@example.com\",\"message\":\"Hello\"}'
+```
+
+- Bash scripts (`*.sh`) are still used for Pi/server-side operations and Docker. When providing commands intended to run on the Pi or inside a container, Bash syntax is correct. When providing commands to run on your local Windows machine, use PowerShell.
+
 ## Code Style
 
 ### Comments
@@ -189,6 +207,7 @@ var name = user.name; // Get the user's name
 - Verify the golden path and edge cases
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the UI
+- When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
 
 ## Database
 
@@ -222,6 +241,7 @@ When working with this project:
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
 - **Deployment:** Smart deploy script detects changes and restarts only what's needed
+- **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
 
 See README.md for full details, scripts, and local dev setup.
 
