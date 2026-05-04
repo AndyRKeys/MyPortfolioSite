@@ -126,14 +126,19 @@ docker-compose down -v && docker-compose up
 ## Branching Strategy
 
 ```
-main  ←── dev  ←── feature/issue-N-description
+main  ←── release/YYYY-MM-DD ←── dev ←── feature/issue-N-description
+                                     ←── fix/issue-N-description
+main  ←── hotfix/issue-N-description (emergency fixes only)
 ```
 
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production — always deployable, mirrors what's live |
-| `dev` | Integration branch — features merge here first |
-| `feature/*` | One branch per GitHub Issue |
+| `release/YYYY-MM-DD` | Release staging — branched from `dev`, PR'd to `main` |
+| `dev` | Integration branch — features and fixes merge here first |
+| `feature/issue-N-*` | Feature per GitHub Issue |
+| `fix/issue-N-*` | Bug fix per GitHub Issue |
+| `hotfix/issue-N-*` | Emergency production fix — branched from `main` |
 
 ### Workflow
 
