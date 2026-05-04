@@ -12,7 +12,12 @@ function truncate(str, len) {
 }
 
 function formatPostDate(post) {
-    var rawDate = post.post_date ? post.post_date + 'T00:00:00' : post.published_at;
+    // post_date may arrive as a full ISO timestamp ("2026-05-04T00:00:00.000Z")
+    // or as a bare date string ("2026-05-04"). Always slice to YYYY-MM-DD first
+    // so we never produce an unparseable string like "2026-05-04T00:00:00.000ZT00:00:00".
+    var rawDate = post.post_date
+        ? String(post.post_date).slice(0, 10) + 'T00:00:00'
+        : post.published_at;
     if (!rawDate) return '';
     return new Date(rawDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
 }
@@ -28,7 +33,7 @@ function buildPostCard(post) {
     });
 }
 
-// ── Blog view toggle ───────────────────────────────────────────────────────────
+// ── Blog view toggle ──────────────────────────────────────────────────────────────
 
 function applyBlogView(view) {
     if (view === 'timeline') {
@@ -79,8 +84,8 @@ function loadPosts() {
 
             // Timeline view — sorted descending by post_date / published_at
             var sorted = posts.slice().sort(function (a, b) {
-                var da = a.post_date || (a.published_at ? a.published_at.slice(0, 10) : '');
-                var db = b.post_date || (b.published_at ? b.published_at.slice(0, 10) : '');
+                var da = a.post_date ? String(a.post_date).slice(0, 10) : (a.published_at ? a.published_at.slice(0, 10) : '');
+                var db = b.post_date ? String(b.post_date).slice(0, 10) : (b.published_at ? b.published_at.slice(0, 10) : '');
                 return db < da ? -1 : db > da ? 1 : 0;
             });
             var timelineEl = $('#blog-timeline');
