@@ -131,6 +131,8 @@ function setPasskeyMessage(msg, isError = false) {
 let pendingFiles = [];         // File objects queued for upload
 let existingMedia = [];        // {id, url, type} from post_media (on edit)
 let removedMediaIds = [];      // post_media ids to delete on save
+let geoconfirmMap = null;      // Leaflet map for coordinate confirmation
+let geoconfirmMarker = null;   // Leaflet marker on confirmation map
 
 function renderMediaList() {
     const list = $('#travel-media-list');
