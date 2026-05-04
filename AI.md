@@ -27,8 +27,6 @@ feature/* or fix/* (per GitHub issue)
 
 ## Expected AI Workflow
 
-This is the standard workflow for AI-assisted work on this project:
-
 ### 1. Issue Creation
 If the issue doesn't exist yet, create it on GitHub with:
 - Clear title and description
@@ -40,40 +38,41 @@ If the issue doesn't exist yet, create it on GitHub with:
 Before writing code:
 - Read the issue and any linked context
 - Examine existing code patterns and architecture
-- Draft a plan (can be brief: "I'll update X file, add Y function, then test Z")
+- Comment a plan on the issue before starting work
 - Ask for clarification if requirements are ambiguous
 
 ### 3. Implementation
-- Create a feature or fix branch from `dev`
+- Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
 - Commit regularly with clear messages
 - Keep changes focused — one issue per branch
-- Test locally with Docker Compose or manual setup
 - Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
 Once implementation is complete:
-- Create a PR from your branch → `dev`
-- Include a summary of what changed and why
+- Raise a PR from the branch → `dev`
 - Link the issue number (`Closes #N`)
-- Self-review the diff for obvious issues
-- Wait for your review and testing
+- Include a clear summary of what changed and why
+- Wait for review, testing, and approval before merging
 
-**You** will:
-- Review the PR
-- Test the changes locally
-- Approve or request changes
-- Merge when ready
+**You** will review, test locally, and merge when ready. The AI does not merge PRs.
 
-### 5. Release to Main
-After testing on `dev`:
-- Create a PR from `dev` → `main`
-- Include release notes or changelog
-- Merge to deploy to production
+### 5. Release
+When you are ready to release, instruct the AI to:
+1. Create a `release/YYYY-MM-DD` branch from `dev`
+   - If releasing more than once on the same day: `release/YYYY-MM-DD-2`, `release/YYYY-MM-DD-3`, etc.
+2. Raise a PR from `release/YYYY-MM-DD` → `main` summarising:
+   - All features added
+   - All bugs fixed
+   - Any breaking changes or deployment notes
 
-**Do not:**
-- Create or merge PRs without being asked
-- Force-push to `dev` or `main`
-- Skip testing before asking you to review
+**You** approve all merges to `main`. The AI never merges to main.
+
+### Branching diagram
+
+```
+main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/issue-N-*
+                                                   ←── fix/issue-N-*
+```
 
 ## Commit Conventions
 
@@ -158,21 +157,14 @@ var name = user.name; // Get the user's name
 - Validate user input at system boundaries only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
 
-## Release Branches (Optional)
+## Hotfixes
 
-Currently, the workflow is `feature/fix → dev → main`, but consider adding intermediate branches for:
+For urgent production bugs that can't wait for the normal release cycle:
 
-- **`release/X.X.X`** — Staging branch before production release
-  - Allows final testing and fixes without blocking ongoing dev work
-  - Useful if you need to hotfix live issues separately from new features
-  - Pattern: `release/1.2.0 ← dev`, test, then `release/1.2.0 → main`
-
-- **`hotfix/issue-N-*`** — Emergency fixes for production issues
-  - Branch from `main`, not `dev`
-  - Merged back to both `main` and `dev`
-  - Pattern: `hotfix/issue-X-critical-bug → main` (immediately), then cherry-pick to `dev`
-
-**Current recommendation:** Keep the simple three-tier model (`main ← dev ← feature/fix`) until you need concurrent releases or frequent production hotfixes. This file can be updated when/if that's needed.
+- Branch from `main` as `hotfix/issue-N-short-description`
+- Fix, commit, and raise a PR → `main` with a hotfix summary
+- After merging to `main`, also merge back to `dev` to keep branches in sync
+- Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
 
 ## Context for AI Models
 
