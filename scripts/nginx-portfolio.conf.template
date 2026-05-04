@@ -1,11 +1,30 @@
 # Nginx server block for andykeys.me portfolio.
 # Rendered by `envsubst` with an explicit allow-list (DOMAIN, REPO_DIR,
-# APP_PORT) so Nginx-native $vars (e.g. $host, $uri) are preserved.
-# Used by both scripts/pi-setup.sh (initial setup) and scripts/deploy.sh
+# APP_PORT, BACKEND_HOST) so Nginx-native $vars (e.g. $host, $uri) are preserved.
+# BACKEND_HOST defaults to 127.0.0.1 for production, override to 'backend' for Docker.
+# Used by both scripts/pi-setup.sh (initial setup) and scripts/prod-deploy.sh
 # (continuous deployment).
+#
+# SSL NOTE: Certificate paths are fixed by certbot on first run of pi-setup.sh.
+# Re-rendering this template on deploy does NOT break HTTPS because the cert
+# paths are hardcoded here — certbot manages cert renewal, not nginx config.
+
+# HTTP → HTTPS redirect
 server {
     listen 80;
-    server_name ${DOMAIN} www.${DOMAIN} raspberrypi3.local;
+    server_name ${DOMAIN} www.${DOMAIN};
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN} www.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
 
     root ${REPO_DIR};
     index index.html;
@@ -13,9 +32,11 @@ server {
     # Allow larger file uploads (matches multer 20 MB limit + headroom)
     client_max_body_size 25M;
 
-    # Proxy all backend API routes to Node
-    location ~ ^/(auth|travel|contact|posts|upload)(/|$) {
-        proxy_pass http://127.0.0.1:${APP_PORT};
+    # Proxy all API traffic to Node backend.
+    # The /api prefix is stripped before forwarding (trailing slash on proxy_pass).
+    location /api/ {
+        proxy_pass http://${BACKEND_HOST}:${APP_PORT}/;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -24,7 +45,8 @@ server {
 
     # Health check
     location /health {
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_pass http://${BACKEND_HOST}:${APP_PORT}/health;
+        proxy_set_header Host $host;
     }
 
     # Uploaded media served directly by Nginx from repo-root uploads/ dir

@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 import { authenticate } from '../middleware/authenticate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
+// UPLOADS_DIR env var overrides the default so Docker can point to /app/uploads
+// without the two-level relative path resolving to the container root.
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),

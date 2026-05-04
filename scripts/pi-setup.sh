@@ -13,7 +13,7 @@ echo "=== Portfolio Pi Setup ==="
 # ── 1. System packages ────────────────────────────────────────────────────────
 echo "[1/7] Installing system packages..."
 sudo apt-get update -qq
-sudo apt-get install -y curl git nginx postgresql postgresql-contrib
+sudo apt-get install -y curl git nginx postgresql postgresql-contrib gettext-base
 
 # ── 2. Node.js 20 LTS ─────────────────────────────────────────────────────────
 echo "[2/7] Installing Node.js 20..."
@@ -102,11 +102,9 @@ cd "$HOME"
 # ── 7. Nginx ──────────────────────────────────────────────────────────────────
 echo "[7/7] Configuring Nginx..."
 
-# envsubst lives in gettext-base; install if missing
-command -v envsubst >/dev/null || sudo apt-get install -y gettext-base
-
-export DOMAIN REPO_DIR APP_PORT
-envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT}' \
+BACKEND_HOST=127.0.0.1
+export DOMAIN REPO_DIR APP_PORT BACKEND_HOST
+envsubst '${DOMAIN} ${REPO_DIR} ${APP_PORT} ${BACKEND_HOST}' \
     < "$REPO_DIR/scripts/nginx-portfolio.conf.template" \
     | sudo tee /etc/nginx/sites-available/portfolio > /dev/null
 
@@ -122,10 +120,9 @@ echo "  Nginx:   serving on port 80"
 echo "  Domain:  http://$DOMAIN"
 echo ""
 echo "Next steps:"
-echo "  1. Clone or copy your site to: $REPO_DIR"
-echo "     (if not already there — this script assumed it exists)"
-echo "  2. Update resources/java/config.js: set API = ''"
-echo "  3. Set up Cloudflare Tunnel for HTTPS public access"
-echo "  4. Visit http://$DOMAIN/setup.html to create your admin account"
+echo "  1. Set up SSL: run scripts/setup-ssl.ps1 or configure Certbot/Cloudflare Tunnel"
+echo "  2. Visit https://$DOMAIN/setup.html to create your admin account"
+echo "  3. Future deploys: bash ~/MyPortfolioSite/scripts/prod-deploy.sh"
 echo ""
 echo "Test backend: curl http://localhost:$APP_PORT/health"
+echo "Test via nginx: curl http://localhost/api/health"

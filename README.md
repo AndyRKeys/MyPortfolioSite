@@ -39,11 +39,33 @@ In production `config.js` exports `API = ''` so `/auth/*` calls are same-origin 
 ## Local Development
 
 ### Prerequisites
-- Node.js 20+
-- PostgreSQL
+- Node.js 20+ **OR** Docker Desktop (for containerized dev)
+- PostgreSQL (not needed if using Docker)
 - A passkey-capable browser (Chrome, Safari, Edge)
 
-### Setup
+### Quick Start with Docker (Recommended)
+
+```bash
+# 1. Clone
+git clone https://github.com/AndyRKeys/MyPortfolioSite.git
+cd MyPortfolioSite
+
+# 2. Copy Docker env
+cp docker/.env.example .env
+
+# 3. Start all services (Node backend, PostgreSQL, Nginx)
+docker-compose up
+
+# 4. Open in browser
+# Frontend: http://localhost (served by Nginx)
+# or directly: http://localhost:3000 with Live Server
+```
+
+Services start in ~30s. PostgreSQL schema auto-initializes. Backend auto-reloads on code changes via volume mount.
+
+Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
+
+### Setup (Manual without Docker)
 
 ```bash
 # 1. Clone
@@ -68,6 +90,36 @@ npm run dev
 Serve the frontend with VS Code Live Server and open **http://localhost:3000** (not 127.0.0.1 — WebAuthn requires `localhost` or HTTPS).
 
 Visit `http://localhost:3000/setup.html` to create the admin account and register your first passkey.
+
+### Docker Reference
+
+**Useful commands:**
+```bash
+# Start services in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f postgres
+
+# Stop services
+docker-compose down
+
+# Rebuild backend image (after dependencies change)
+docker-compose build --no-cache backend
+
+# Access PostgreSQL shell
+docker-compose exec postgres psql -U postgres -d portfolio_dev
+
+# Fresh start (delete data)
+docker-compose down -v && docker-compose up
+```
+
+**Troubleshooting:**
+- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
+- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy (check `docker-compose logs postgres`)
+- **Schema not initialized**: Manually run `docker-compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
+- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email
 
 ---
 

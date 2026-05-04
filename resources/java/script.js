@@ -1,5 +1,5 @@
-// API base — empty string in production (Nginx proxy), backend URL in dev
-var API_BASE = '';
+// API base — /api in production (Nginx proxy strips prefix), empty string in dev
+var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? '' : '/api';
 
 // duration of scroll animation
 var scrollDuration = 300;
@@ -98,24 +98,42 @@ function setHeight(div, height) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
+function formatVisitDate(dateStr) {
+    if (!dateStr) return null;
+    // Accept "YYYY-MM-DD" or full ISO timestamps — always parse as local date
+    var datePart = String(dateStr).slice(0, 10);
+    var d = new Date(datePart + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 function buildPublicTravelCard(travel) {
     var card = $('<article class="travel-card box draft-card"></article>');
     card.attr('data-memory-id', travel.id);
     var media = $('<div class="media"></div>');
     var mediaUrl = travel.media_url || travel.mediaUrl;
     var mediaType = travel.media_type || travel.mediaType;
+    var placeholder = './resources/img/placeholder-transparent.png';
     if (mediaUrl) {
         if (mediaType && mediaType.indexOf('video') === 0) {
             media.append('<video controls src="' + mediaUrl + '"></video>');
         } else {
-            media.append('<img src="' + mediaUrl + '" alt="Travel snapshot">');
+            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            media.append(img);
         }
     } else {
-        media.append('<img src="./resources/img/placeholder-transparent.png" alt="Travel snapshot">');
+        media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
     }
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
-    content.append('<p class="meta">' + (travel.location || 'Location not set') + '</p>');
+    var formattedDate = formatVisitDate(travel.visit_date);
+    var locationText = travel.location || 'Location not set';
+    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
+    if (formattedDate) {
+        metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
+    }
+    content.append('<p class="meta">' + metaHtml + '</p>');
     content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
     card.append(media).append(content);
     return card;
