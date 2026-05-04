@@ -31,7 +31,7 @@ const VALID_CONTACT = {
 };
 
 describe('POST /contact', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     // Default: no existing rate-limit record
     const { Pool } = vi.mocked(await import('pg'));

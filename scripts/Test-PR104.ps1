@@ -1,90 +1,289 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Smoke test script for PR #104 — automated testing (Vitest + Supertest).
+    Smoke tests for PR #104 — automated test suite (Vitest + Supertest).
 
 .DESCRIPTION
-  Verifies the test suite runs correctly inside the Docker backend container.
-  Run this after `dev-local.ps1 up` has completed successfully.
+    Runs the Vitest unit/integration suite inside the backend Docker container,
+    then runs HTTP smoke tests against the local dev stack.
 
-.EXAMPLE
-  .\scripts\Test-PR104.ps1
+    Output is written to the console AND to a timestamped file in test-results\
+    Use Tee-Object automatically — no extra flags needed.
+
+    Requires the dev stack to be running:
+        . scripts\dev-local.ps1
+
+    For authenticated routes, pass your JWT via the -Token parameter:
+        .\scripts\Test-PR104.ps1 -Token "eyJ..."
+
+.PARAMETER Token
+    Admin JWT for authenticated routes (POST /api/posts, POST /api/travel).
+    Authenticated tests are skipped if not provided.
+
+.PARAMETER BaseUrl
+    Base URL of the running stack. Defaults to http://localhost
+
+.PARAMETER SkipVitest
+    Skip the Vitest suite and run only the HTTP smoke tests.
 #>
+param(
+    [string]$Token      = '',
+    [string]$BaseUrl    = 'http://localhost',
+    [switch]$SkipVitest
+)
 
-$ErrorActionPreference = 'Stop'
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$pass = @()
-$fail = @()
+# ---------------------------------------------------------------------------
+# Output capture — write to console AND a timestamped file simultaneously
+# ---------------------------------------------------------------------------
+$resultsDir = Join-Path $PSScriptRoot '..' 'test-results'
+if (-not (Test-Path $resultsDir)) {
+    New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+}
+$timestamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
+$logFile    = Join-Path $resultsDir "PR104-$timestamp.txt"
+Start-Transcript -Path $logFile -Append | Out-Null
 
-function Test-Step {
-  param([string]$Name, [scriptblock]$Block)
-  Write-Host "`n--- $Name ---" -ForegroundColor Cyan
-  try {
-    & $Block
-    $script:pass += $Name
-    Write-Host "PASS: $Name" -ForegroundColor Green
-  } catch {
-    $script:fail += $Name
-    Write-Host "FAIL: $Name `n  $_" -ForegroundColor Red
-  }
+$pass    = 0
+$fail    = 0
+$skip    = 0
+$results = @()
+
+function Test-Endpoint {
+    param(
+        [string]$Name,
+        [string]$Method,
+        [string]$Url,
+        [string]$Body       = '',
+        [string[]]$Headers  = @(),
+        [int]$ExpectStatus,
+        [string]$ExpectBody = '',
+        [bool]$RequiresAuth = $false
+    )
+
+    if ($RequiresAuth -and -not $Token) {
+        Write-Host "  [SKIP] $Name (no token provided)" -ForegroundColor DarkYellow
+        $script:skip++
+        $script:results += [PSCustomObject]@{ Result = 'SKIP'; Name = $Name; Detail = 'No token' }
+        return
+    }
+
+    $curlArgs = @('-s', '-o', 'tmp_body.txt', '-w', '%{http_code}', '-X', $Method)
+
+    foreach ($h in $Headers) {
+        $curlArgs += @('-H', $h)
+    }
+
+    if ($Body) {
+        $curlArgs += @('-d', $Body)
+    }
+
+    $curlArgs += $Url
+
+    $statusCode = curl.exe @curlArgs
+    $bodyText   = if (Test-Path tmp_body.txt) { Get-Content tmp_body.txt -Raw } else { '' }
+    if (Test-Path tmp_body.txt) { Remove-Item tmp_body.txt -Force }
+
+    $statusOk = ([int]$statusCode -eq $ExpectStatus)
+    $bodyOk   = (-not $ExpectBody) -or ($bodyText -like "*$ExpectBody*")
+    $passed   = $statusOk -and $bodyOk
+
+    if ($passed) {
+        Write-Host "  [PASS] $Name" -ForegroundColor Green
+        $script:pass++
+        $script:results += [PSCustomObject]@{ Result = 'PASS'; Name = $Name; Detail = "$statusCode" }
+    } else {
+        $detail = "Expected $ExpectStatus got $statusCode"
+        if (-not $bodyOk) { $detail += " | body mismatch: $($bodyText.Trim())" }
+        Write-Host "  [FAIL] $Name — $detail" -ForegroundColor Red
+        $script:fail++
+        $script:results += [PSCustomObject]@{ Result = 'FAIL'; Name = $Name; Detail = $detail }
+    }
 }
 
-# ── Pre-flight: containers must be running ──────────────────────────────────────────
-Write-Host "═" * 60 -ForegroundColor DarkGray
-Write-Host " PR #104 — Automated Testing Smoke Test" -ForegroundColor White
-Write-Host "═" * 60 -ForegroundColor DarkGray
+$jsonHeader = 'Content-Type: application/json'
+$authHeader = "Authorization: Bearer $Token"
 
-$containers = docker compose --project-directory $RepoRoot ps --format json 2>$null | ConvertFrom-Json
-$backendRunning = $containers | Where-Object { $_.Service -eq 'backend' -and $_.State -eq 'running' }
-if (-not $backendRunning) {
-  Write-Host ""
-  Write-Host "Backend container is not running. Start it first:" -ForegroundColor Yellow
-  Write-Host "  .\scripts\dev-local.ps1 up" -ForegroundColor Yellow
-  exit 1
-}
-Write-Host "Backend container is running. Proceeding...`n" -ForegroundColor Green
-
-# ── Tests ───────────────────────────────────────────────────────────────────
-Test-Step 'Install devDependencies in container' {
-  docker compose --project-directory $RepoRoot exec backend npm install --silent
-}
-
-Test-Step 'npm test — all tests pass' {
-  docker compose --project-directory $RepoRoot exec backend npm test
-}
-
-Test-Step 'npm run test:coverage — coverage report generated' {
-  docker compose --project-directory $RepoRoot exec backend npm run test:coverage
-}
-
-Test-Step 'Health endpoint still responds (server.js unchanged)' {
-  $resp = Invoke-WebRequest -Uri 'http://localhost:8080/health' -UseBasicParsing
-  if ($resp.StatusCode -ne 200) { throw "Expected 200, got $($resp.StatusCode)" }
-  $body = $resp.Content | ConvertFrom-Json
-  if ($body.status -ne 'ok') { throw "Expected status=ok, got $($body.status)" }
-}
-
-Test-Step 'POST /contact returns 400 for missing name (validation active)' {
-  try {
-    Invoke-WebRequest -Uri 'http://localhost:8080/contact' -Method POST `
-      -ContentType 'application/json' `
-      -Body '{"email":"test@example.com","message":"Hi"}' `
-      -UseBasicParsing | Out-Null
-    throw 'Expected 400 but got 2xx'
-  } catch {
-    if ($_.Exception.Response.StatusCode.value__ -ne 400) { throw $_ }
-  }
-}
-
-# ── Summary ───────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "═" * 60 -ForegroundColor DarkGray
-Write-Host " Results: $($pass.Count) passed, $($fail.Count) failed" -ForegroundColor $(if ($fail.Count -eq 0) { 'Green' } else { 'Red' })
-Write-Host "═" * 60 -ForegroundColor DarkGray
+Write-Host "══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  PR #104 Test Run — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
+Write-Host "  Base URL : $BaseUrl"
+Write-Host "  Token    : $(if ($Token) { 'provided' } else { 'not provided (auth tests skipped)' })"
+Write-Host "  Log file : $logFile"
+Write-Host "══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host ""
 
-if ($pass.Count -gt 0) {
-  $pass | ForEach-Object { Write-Host "  ✓ $_" -ForegroundColor Green }
+# ---------------------------------------------------------------------------
+# Section 1 — Vitest unit + integration suite
+# ---------------------------------------------------------------------------
+if ($SkipVitest) {
+    Write-Host "--- Vitest suite (skipped via -SkipVitest) ---" -ForegroundColor DarkYellow
+    $skip++
+    $results += [PSCustomObject]@{ Result = 'SKIP'; Name = 'Vitest suite'; Detail = '-SkipVitest flag set' }
+} else {
+    Write-Host "--- Vitest unit + integration suite ---" -ForegroundColor White
+    Write-Host "  Running inside backend container..." -ForegroundColor DarkGray
+
+    docker compose exec backend npm install --silent 2>&1
+    docker compose exec backend npm test 2>&1
+    $vitestExit = $LASTEXITCODE
+
+    if ($vitestExit -eq 0) {
+        Write-Host "  [PASS] Vitest suite" -ForegroundColor Green
+        $pass++
+        $results += [PSCustomObject]@{ Result = 'PASS'; Name = 'Vitest suite'; Detail = 'exit 0' }
+    } else {
+        Write-Host "  [FAIL] Vitest suite (exit $vitestExit)" -ForegroundColor Red
+        $fail++
+        $results += [PSCustomObject]@{ Result = 'FAIL'; Name = 'Vitest suite'; Detail = "exit $vitestExit" }
+    }
 }
-if ($fail.Count -gt 0) {
-  $fail | ForEach-Object { Write-Host "  ✗ $_" -ForegroundColor Red }
-  exit 1
+
+# ---------------------------------------------------------------------------
+# Section 2 — HTTP smoke tests
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Contact form (POST /api/contact) ---" -ForegroundColor White
+
+Test-Endpoint `
+    -Name         'Contact: valid request reaches handler' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/contact" `
+    -Headers      @($jsonHeader) `
+    -Body         '{"name":"Test","email":"test@example.com","message":"Hello"}' `
+    -ExpectStatus 200
+
+Test-Endpoint `
+    -Name         'Contact: missing name -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/contact" `
+    -Headers      @($jsonHeader) `
+    -Body         '{"name":"","email":"test@example.com","message":"Hello"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'name'
+
+Test-Endpoint `
+    -Name         'Contact: invalid email -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/contact" `
+    -Headers      @($jsonHeader) `
+    -Body         '{"name":"Test","email":"not-an-email","message":"Hello"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'email'
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Blog posts (POST /api/posts) ---" -ForegroundColor White
+
+Test-Endpoint `
+    -Name         'Posts: valid create -> 201' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/posts" `
+    -Headers      @($jsonHeader, $authHeader) `
+    -Body         '{"title":"Test Post","body_markdown":"## Hello","publish":false}' `
+    -ExpectStatus 201 `
+    -RequiresAuth $true
+
+Test-Endpoint `
+    -Name         'Posts: missing title -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/posts" `
+    -Headers      @($jsonHeader, $authHeader) `
+    -Body         '{"body_markdown":"## Hello"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'title' `
+    -RequiresAuth $true
+
+Test-Endpoint `
+    -Name         'Posts: invalid date format -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/posts" `
+    -Headers      @($jsonHeader, $authHeader) `
+    -Body         '{"title":"Test","post_date":"04-05-2026"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'YYYY-MM-DD' `
+    -RequiresAuth $true
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Travel posts (POST /api/travel) ---" -ForegroundColor White
+
+Test-Endpoint `
+    -Name         'Travel: valid create -> 201' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/travel" `
+    -Headers      @($jsonHeader, $authHeader) `
+    -Body         '{"title":"New Zealand","location":"Auckland","visitDate":"2026-01-15","lat":-36.86,"lng":174.76,"publish":false}' `
+    -ExpectStatus 201 `
+    -RequiresAuth $true
+
+Test-Endpoint `
+    -Name         'Travel: missing title -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/travel" `
+    -Headers      @($jsonHeader, $authHeader) `
+    -Body         '{"location":"Auckland"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'title' `
+    -RequiresAuth $true
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Auth: email send (POST /api/auth/email/send) ---" -ForegroundColor White
+
+Test-Endpoint `
+    -Name         'Auth email: invalid email -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/auth/email/send" `
+    -Headers      @($jsonHeader) `
+    -Body         '{"email":"notvalid"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'email'
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Auth: setup (POST /api/auth/setup) ---" -ForegroundColor White
+
+Test-Endpoint `
+    -Name         'Auth setup: missing username -> 400' `
+    -Method       'POST' `
+    -Url          "$BaseUrl/api/auth/setup" `
+    -Headers      @($jsonHeader) `
+    -Body         '{"email":"andy.r.keys@outlook.com"}' `
+    -ExpectStatus 400 `
+    -ExpectBody   'username'
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Error handler ---" -ForegroundColor White
+
+$unknownStatus = curl.exe -s -o NUL -w '%{http_code}' "$BaseUrl/api/doesnotexist"
+if ([int]$unknownStatus -eq 404) {
+    Write-Host "  [PASS] Unknown route -> 404" -ForegroundColor Green
+    $pass++
+    $results += [PSCustomObject]@{ Result = 'PASS'; Name = 'Unknown route -> 404'; Detail = '404' }
+} else {
+    Write-Host "  [FAIL] Unknown route -> expected 404, got $unknownStatus" -ForegroundColor Red
+    $fail++
+    $results += [PSCustomObject]@{ Result = 'FAIL'; Name = 'Unknown route -> 404'; Detail = "Got $unknownStatus" }
 }
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  PASSED : $pass" -ForegroundColor Green
+if ($skip -gt 0) {
+    Write-Host "  SKIPPED: $skip" -ForegroundColor DarkYellow
+}
+if ($fail -gt 0) {
+    Write-Host "  FAILED : $fail" -ForegroundColor Red
+} else {
+    Write-Host "  FAILED : $fail" -ForegroundColor Green
+}
+Write-Host "══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  Full log: $logFile" -ForegroundColor DarkGray
+Write-Host ""
+
+Stop-Transcript | Out-Null
+
+if ($fail -gt 0) { exit 1 } else { exit 0 }
