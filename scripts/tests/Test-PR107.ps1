@@ -263,6 +263,14 @@ if ($Token) {
 Write-Host ""
 Write-Host "--- #101 CV management ---" -ForegroundColor White
 
+# Ensure clean state before testing empty-CV behaviour.
+# A cv.pdf left on disk from a previous run would cause the 404 assertion to
+# incorrectly receive 200. Silently delete first — no-op if nothing is there.
+if ($Token) {
+    Write-Host "  [INFO] Cleaning up any pre-existing CV..." -ForegroundColor DarkGray
+    curl.exe -s -o NUL -X DELETE -H "Authorization: Bearer $Token" "$BaseUrl/api/cv" | Out-Null
+}
+
 Test-Endpoint `
     -Name         'CV: GET /api/cv/exists -> 200 with exists field' `
     -Method       'GET' `
@@ -465,6 +473,7 @@ Write-Host "  [ ] New blog post — date defaults to today" -ForegroundColor Dar
 Write-Host "  [ ] Upload a PDF — status badge changes to '✓ CV uploaded'" -ForegroundColor DarkGray
 Write-Host "  [ ] Upload PDF with personal info — warnings modal appears; cancel removes file" -ForegroundColor DarkGray
 Write-Host "  [ ] Delete CV — status badge reverts to '✕ No CV uploaded'" -ForegroundColor DarkGray
+Write-Host "  [ ] CV download button on index.html: hidden when no CV, visible after upload, hidden after delete (reactive — no reload needed)" -ForegroundColor DarkGray
 Write-Host ""
 
 Stop-Transcript | Out-Null
