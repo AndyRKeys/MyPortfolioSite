@@ -96,7 +96,7 @@ function setHeight(div, height) {
     div.style.height = height + "px";
 }
 
-// ── Shared timeline builder ───────────────────────────────────────────────────
+// ── Shared timeline builder ────────────────────────────────────────────────────
 // Used by both travel (script.js) and blog (blog.js via window.buildTimelineItem).
 // opts: { dateStr, title, location, notes, mediaUrl, mediaType, linkHref }
 //
@@ -142,7 +142,7 @@ function buildTimelineItem(opts) {
 // Expose for blog.js (loaded separately on blog.html)
 window.buildTimelineItem = buildTimelineItem;
 
-// ── Travel memories ───────────────────────────────────────────────────────────
+// ── Travel memories ────────────────────────────────────────────────────────────
 
 function formatVisitDate(dateStr) {
     if (!dateStr) return null;
@@ -185,7 +185,7 @@ function buildPublicTravelCard(travel) {
     return card;
 }
 
-// ── Travel map (Leaflet) ──────────────────────────────────────────────────────
+// ── Travel map (Leaflet) ───────────────────────────────────────────────────────
 
 var travelMap = null;
 
@@ -250,43 +250,50 @@ function initTravelMap(memories) {
     }
 }
 
+function applyTravelView(view) {
+    var mapEl = $('#travel-map');
+    var grid  = $('#travel-grid');
+    var timeline = $('#travel-timeline');
+
+    if (view === 'all') {
+        mapEl.removeClass('hidden');
+        grid.removeClass('hidden');
+        timeline.removeClass('hidden');
+    } else if (view === 'both') {
+        mapEl.removeClass('hidden');
+        grid.removeClass('hidden');
+        timeline.addClass('hidden');
+    } else if (view === 'map') {
+        mapEl.removeClass('hidden');
+        grid.addClass('hidden');
+        timeline.addClass('hidden');
+    } else if (view === 'cards') {
+        mapEl.addClass('hidden');
+        grid.removeClass('hidden');
+        timeline.addClass('hidden');
+    } else if (view === 'timeline') {
+        mapEl.addClass('hidden');
+        grid.addClass('hidden');
+        timeline.removeClass('hidden');
+    }
+
+    if (travelMap && (view === 'all' || view === 'map' || view === 'both')) {
+        setTimeout(function () { travelMap.invalidateSize(); }, 50);
+    }
+}
+
 function initViewToggle() {
-    // Cards and timeline must both be populated before initViewToggle wires the buttons.
-    $('.view-toggle-btn').on('click', function () {
+    // Scoped to .travel-view-toggle to avoid colliding with .blog-view-toggle
+    // when both script.js and blog.js are loaded on blog.html.
+    // Cards, timeline and map must all be populated before this is called.
+    var activeView = $('.travel-view-toggle .view-toggle-btn.active').data('view') || 'all';
+    applyTravelView(activeView);
+
+    $('.travel-view-toggle .view-toggle-btn').on('click', function () {
         var view = $(this).data('view');
-        $('.view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
+        $('.travel-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
         $(this).addClass('active').attr('aria-selected', 'true');
-
-        var mapEl = $('#travel-map');
-        var grid = $('#travel-grid');
-        var timeline = $('#travel-timeline');
-
-        if (view === 'all') {
-            mapEl.removeClass('hidden');
-            grid.removeClass('hidden');
-            timeline.removeClass('hidden');
-        } else if (view === 'map') {
-            mapEl.removeClass('hidden');
-            grid.addClass('hidden');
-            timeline.addClass('hidden');
-        } else if (view === 'cards') {
-            mapEl.addClass('hidden');
-            grid.removeClass('hidden');
-            timeline.addClass('hidden');
-        } else if (view === 'timeline') {
-            mapEl.addClass('hidden');
-            grid.addClass('hidden');
-            timeline.removeClass('hidden');
-        } else {
-            // 'both' legacy fallback
-            mapEl.removeClass('hidden');
-            grid.removeClass('hidden');
-            timeline.addClass('hidden');
-        }
-
-        if (travelMap && (view === 'all' || view === 'map' || view === 'both')) {
-            setTimeout(function () { travelMap.invalidateSize(); }, 50);
-        }
+        applyTravelView(view);
     });
 }
 
@@ -330,7 +337,7 @@ function loadPublicTravelPosts() {
                 }));
             });
 
-            // Cards and timeline must both be populated before initViewToggle wires the buttons.
+            // Cards, timeline and map must all be populated before initViewToggle wires the buttons.
             initTravelMap(memories);
             initViewToggle();
         })
@@ -341,7 +348,7 @@ function loadPublicTravelPosts() {
         });
 }
 
-// ── GitHub activity widget ────────────────────────────────────────────────────
+// ── GitHub activity widget ─────────────────────────────────────────────────────
 
 function buildRepoCard(repo) {
     var card = $('<a class="github-repo-card" target="_blank" rel="noopener noreferrer"></a>');
@@ -394,7 +401,7 @@ function loadGithubWidget() {
         });
 }
 
-// ── Contact form ──────────────────────────────────────────────────────────────
+// ── Contact form ───────────────────────────────────────────────────────────────
 
 function initContactForm() {
     var form = document.getElementById('contact-form');
@@ -442,7 +449,7 @@ function initContactForm() {
     });
 }
 
-// ── Visit counter ─────────────────────────────────────────────────────────────
+// ── Visit counter ──────────────────────────────────────────────────────────────
 
 function recordVisit(page) {
     if (isAdminSession()) return;
@@ -462,7 +469,7 @@ function recordVisit(page) {
         .catch(function() {});
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
 
 $(document).ready(function() {
     loadPublicTravelPosts();

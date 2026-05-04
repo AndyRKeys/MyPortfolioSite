@@ -30,21 +30,31 @@ function buildPostCard(post) {
     return card;
 }
 
-// ── Blog view toggle ──────────────────────────────────────────────────────────
+// ── Blog view toggle ───────────────────────────────────────────────────────────
+
+function applyBlogView(view) {
+    if (view === 'timeline') {
+        $('#posts-list').addClass('hidden');
+        $('#blog-timeline').removeClass('hidden');
+    } else {
+        $('#posts-list').removeClass('hidden');
+        $('#blog-timeline').addClass('hidden');
+    }
+}
 
 function initBlogViewToggle() {
+    // Read the active button from the DOM so the default view in the HTML
+    // is the single source of truth (cards is active by default).
+    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'cards';
+    applyBlogView(activeView);
+
+    // Scoped to .blog-view-toggle to avoid colliding with .travel-view-toggle
+    // when both script.js and blog.js are loaded on blog.html.
     $('.blog-view-toggle .view-toggle-btn').on('click', function () {
         var view = $(this).data('view');
         $('.blog-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
         $(this).addClass('active').attr('aria-selected', 'true');
-
-        if (view === 'timeline') {
-            $('#posts-list').addClass('hidden');
-            $('#blog-timeline').removeClass('hidden');
-        } else {
-            $('#posts-list').removeClass('hidden');
-            $('#blog-timeline').addClass('hidden');
-        }
+        applyBlogView(view);
     });
 }
 
@@ -82,6 +92,7 @@ function loadPosts() {
                 }));
             });
 
+            // Wire toggle — cards and timeline must both be populated first.
             initBlogViewToggle();
         })
         .catch(function () {
