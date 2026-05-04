@@ -364,17 +364,6 @@ function initContactForm() {
 
 // ── Visit counter ─────────────────────────────────────────────────────────────
 
-function isAdminSession() {
-    var token = localStorage.getItem('adminToken');
-    if (!token) return false;
-    try {
-        var payload = JSON.parse(atob(token.split('.')[1]));
-        return payload.exp * 1000 > Date.now();
-    } catch (e) {
-        return false;
-    }
-}
-
 function recordVisit(page) {
     if (isAdminSession()) return;
 
