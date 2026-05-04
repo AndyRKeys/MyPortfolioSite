@@ -331,6 +331,31 @@ function hasValidGps(lat, lng) {
     return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 }
 
+// Reverse geocode lat/lng to a human-readable location string using Nominatim.
+// Only populates the Location field if it is currently empty.
+async function reverseGeocodeToLocation(lat, lng) {
+    if ($('#travel-location').val().trim()) return; // don't overwrite manual input
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.address) return;
+
+        // Build a compact "City, Country" style string from available address parts
+        const a = data.address;
+        const city = a.city || a.town || a.village || a.hamlet || a.county || a.state_district || a.state || '';
+        const country = a.country || '';
+        const locationStr = [city, country].filter(Boolean).join(', ');
+
+        if (locationStr) {
+            $('#travel-location').val(locationStr);
+        }
+    } catch {
+        // Reverse geocode failure is non-fatal — silently ignore
+    }
+}
+
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
 async function tryAutofillGpsFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
@@ -355,6 +380,7 @@ async function tryAutofillGpsFromFile(file) {
             $('#travel-lng').val(gps.longitude.toFixed(6));
             setTravelMessage('GPS auto-filled from photo EXIF.');
             updateGeoconfirmMap(gps.latitude, gps.longitude);
+            reverseGeocodeToLocation(gps.latitude, gps.longitude);
         } else {
             setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
         }
