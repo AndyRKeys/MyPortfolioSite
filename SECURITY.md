@@ -91,9 +91,10 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 ## Rate Limiting
 
 The contact form (`POST /api/contact`) is rate-limited using the `rate_limits` table:
-- Window: 15 minutes
-- Limit: 5 requests per IP per window
 - DB-backed (survives process restarts)
+- Window and limit thresholds are in code comments (not public for spam prevention)
+
+See `backend/routes/contact.js` for implementation details.
 
 Other routes have no rate limiting. This is a known trade-off for a low-traffic personal site.
 
