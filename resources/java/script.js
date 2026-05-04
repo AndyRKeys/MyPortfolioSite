@@ -463,13 +463,19 @@ function loadPublicTravelPosts() {
             });
             var timelineEl = $('#travel-timeline');
             sorted.forEach(function(travel) {
+                // Use first image from media array if available, fall back to legacy media_url
+                var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+                var firstMedia = allMedia ? allMedia[0] : null;
+                var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
+                var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+
                 timelineEl.append(buildTimelineItem({
                     dateStr:   formatVisitDate(travel.visit_date),
                     title:     travel.title,
                     location:  travel.location,
                     notes:     travel.notes,
-                    mediaUrl:  travel.media_url || travel.mediaUrl,
-                    mediaType: travel.media_type || travel.mediaType,
+                    mediaUrl:  mediaUrl,
+                    mediaType: mediaType,
                 }));
             });
 
