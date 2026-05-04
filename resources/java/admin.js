@@ -325,25 +325,32 @@ function hideGeoconfirmMap() {
 
 // ── EXIF GPS autofill ─────────────────────────────────────────────────────────
 
+// Returns true only if coords are finite numbers and not the null-island 0,0
+// that DJI and some cameras emit when GPS is unavailable.
+function hasValidGps(lat, lng) {
+    return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
 async function tryAutofillGpsFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
     try {
-        // exifr.parse with explicit GPS tags is more reliable across camera/phone formats
-        // than exifr.gps() alone which can miss some makernote-only GPS data.
         let gps = null;
         try {
             const tags = await exifr.parse(file, { gps: true });
-            if (tags && Number.isFinite(tags.latitude) && Number.isFinite(tags.longitude)) {
+            if (tags && hasValidGps(tags.latitude, tags.longitude)) {
                 gps = { latitude: tags.latitude, longitude: tags.longitude };
             }
         } catch { /* fall through to exifr.gps() */ }
 
         if (!gps) {
-            gps = await exifr.gps(file);
+            const raw = await exifr.gps(file);
+            if (raw && hasValidGps(raw.latitude, raw.longitude)) {
+                gps = raw;
+            }
         }
 
-        if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
+        if (gps) {
             $('#travel-lat').val(gps.latitude.toFixed(6));
             $('#travel-lng').val(gps.longitude.toFixed(6));
             setTravelMessage('GPS auto-filled from photo EXIF.');
