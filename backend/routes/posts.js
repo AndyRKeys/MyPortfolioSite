@@ -1,21 +1,12 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { slugify } from '../utils/slugify.js';
 
 const router = Router();
 
-function slugify(title) {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .slice(0, 100);
-}
-
 async function tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt = 0, maxAttempts = 100) {
-  const baseSlug = slugify(title) || 'post';
+  const baseSlug = slugify(title);
   const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
 
   try {
@@ -139,7 +130,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     let { slug, published_at } = existing.rows[0];
     if (existing.rows[0].title !== title.trim()) {
-      const base = slugify(title) || 'post';
+      const base = slugify(title);
       let attempt = 0;
       let newSlug = base;
       while (attempt < 100) {

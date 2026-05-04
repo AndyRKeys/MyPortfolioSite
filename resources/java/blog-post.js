@@ -1,4 +1,9 @@
-var API_BASE = '/api';
+// API_BASE: prefer the value set by config.js (window.API_BASE), fall back to /api.
+// config.js uses ES module export so it can't set a global directly in non-module
+// scripts. The shim below means blog-post.js works whether or not config.js has
+// been loaded first, and the value can be overridden by a window.API_BASE assignment
+// in a <script> tag above this file if needed.
+var API_BASE = (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : '/api';
 
 function sanitizeHtml(html) {
     var temp = document.createElement('div');
