@@ -1,184 +1,217 @@
-# Coding Style Guide
+# Code Style Guide
 
-The canonical reference for code style on this project. All contributors (human and AI) must follow these conventions.
-
-> This guide is referenced from [AI.md](./AI.md). When in doubt, check here first.
+Coding conventions for the MyPortfolioSite project. All contributors (human and AI) must follow these rules.
 
 ---
 
-## Table of Contents
+## General Principles
 
-1. [Alignment & Whitespace](#alignment--whitespace)
-2. [Naming Conventions](#naming-conventions)
-3. [JavaScript](#javascript)
-4. [CSS](#css)
-5. [HTML](#html)
-6. [Express / Backend](#express--backend)
-7. [Comments](#comments)
-8. [Testing](#testing)
-9. [Git & Commits](#git--commits)
-10. [Security](#security)
+- **DRY (Don't Repeat Yourself):** Extract repeated logic to shared utilities or functions.
+- **Single Responsibility:** Each function, module, and file has one clear purpose.
+- **Readability over cleverness:** Write code that a future reader can understand without running it.
+- **No dead code:** Delete removed code completely — no commented-out blocks left behind.
 
 ---
 
 ## Alignment & Whitespace
 
-Use blank lines and vertical alignment to make related code line up — this makes diffs easier to read and patterns easier to spot at a glance.
+Deliberate vertical alignment improves scannability of related values. Apply it consistently within a logical block.
 
-### Object/array alignment
+### Object Properties
 
-When assigning multiple related properties, align the values:
-
-```javascript
-// ✅ Values aligned
-const config = {
-  host     : process.env.DB_HOST,
-  port     : process.env.DB_PORT,
-  database : process.env.DB_NAME,
-  user     : process.env.DB_USER,
-  password : process.env.DB_PASSWORD,
-};
-
-// ❌ No alignment
-const config = {
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-};
-```
-
-### Variable declarations
+Align values when two or more related properties share a key–value pattern:
 
 ```javascript
-// ✅ Aligned
-const firstName = 'Andy';
-const lastName  = 'Keys';
-const email     = 'andy@example.com';
+// ✅ Aligned — easy to scan differences between entries
+const routes = [
+  { path: '/',        component: Home    },
+  { path: '/about',   component: About   },
+  { path: '/contact', component: Contact },
+];
 
-// ❌ Not aligned
-const firstName = 'Andy';
-const lastName = 'Keys';
-const email = 'andy@example.com';
+// ❌ Unaligned — harder to spot the value column
+const routes = [
+  { path: '/', component: Home },
+  { path: '/about', component: About },
+  { path: '/contact', component: Contact },
+];
 ```
 
-### Blank lines between logical sections
+### Multi-value CSS
 
-Use a single blank line to separate logically distinct blocks within a function. Use two blank lines between top-level declarations.
+Align colons and values in logically grouped CSS declarations:
+
+```css
+/* ✅ Aligned */
+.card {
+  padding:    var(--space-4);
+  background: var(--color-surface);
+  border:     1px solid oklch(from var(--color-text) l c h / 0.12);
+}
+
+/* ❌ Unaligned */
+.card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid oklch(from var(--color-text) l c h / 0.12);
+}
+```
+
+### When NOT to align
+
+- Single-property blocks (no alignment benefit)
+- Long mixed-length values that would require excessive padding
+- Auto-formatted files managed by a linter (let the tool decide)
 
 ---
 
 ## Naming Conventions
 
-| Context | Convention | Example |
-|---|---|---|
-| JS variables & functions | `camelCase` | `getUserById`, `postData` |
-| JS classes & constructors | `PascalCase` | `UserSession`, `ApiError` |
-| CSS classes & IDs | `kebab-case` | `.travel-card`, `#main-nav` |
-| HTML files | `kebab-case` | `travel-post.html`, `blog.html` |
-| JS/utility files | `kebab-case` | `error-handler.js`, `validate.js` |
-| Database tables | `snake_case` | `travel_posts`, `blog_posts` |
-| Database columns | `snake_case` | `created_at`, `body_markdown` |
-| Constants / env vars | `SCREAMING_SNAKE_CASE` | `JWT_SECRET`, `MAX_RETRIES` |
-| Test files | Mirror source path, `.test.js` suffix | `tests/routes/posts.test.js` |
+| Context      | Convention       | Example                        |
+|--------------|------------------|--------------------------------|
+| JS variables | camelCase        | `postSlug`, `visitDate`        |
+| JS functions | camelCase        | `formatRelativeDate()`         |
+| JS classes   | PascalCase       | `PostController`               |
+| CSS classes  | kebab-case       | `.blog-card`, `.nav-link`      |
+| CSS variables| kebab-case       | `--color-primary`, `--space-4` |
+| Files        | kebab-case       | `blog-post.js`, `travel.css`   |
+| DB columns   | snake_case       | `post_date`, `body_markdown`   |
+| DB tables    | snake_case       | `blog_posts`, `travel_posts`   |
+| Constants    | SCREAMING_SNAKE  | `MAX_RETRIES`, `API_BASE`      |
+| Env vars     | SCREAMING_SNAKE  | `JWT_SECRET`, `DATABASE_URL`   |
+| Test files   | Mirror source path, `.test.js` suffix | `tests/routes/posts.test.js` |
 
 ---
 
 ## JavaScript
 
-### Variable declarations
+### Variable Declarations
 
-- Use `const` by default; `let` when reassignment is needed
-- Never use `var` in new code (only in legacy jQuery files for compatibility)
-- Declare variables at the top of their scope
+```javascript
+// ES modules (modern files) — use const/let
+const slug = post.slug;
+let retries = 0;
+
+// Legacy jQuery files — use var
+var $modal = $('#modal');
+```
 
 ### Functions
 
-- Prefer named functions for top-level declarations — aids stack traces
-- Arrow functions are fine for callbacks and short inline expressions
-- Avoid deeply nested callbacks — use `async/await`
+Prefer named function declarations for top-level utilities; arrow functions for callbacks:
 
 ```javascript
-// ✅ Named async function
-async function createPost(data) {
-  const result = await db.query(INSERT_POST, [data.title, data.slug]);
-  return result.rows[0];
+// ✅ Named declaration — clear in stack traces and easier to find
+export function formatRelativeDate(dateStr) {
+  // ...
 }
 
-// ✅ Arrow for callback
-router.get('/posts', async (req, res, next) => {
-  try {
-    const posts = await getPosts();
-    res.json(posts);
-  } catch (err) {
-    next(err);
-  }
-});
+// ✅ Arrow for callbacks
+posts.map(post => formatRelativeDate(post.post_date));
 ```
 
-### Early returns
+### Conditionals
 
-Prefer early returns over deeply nested `if/else`:
+Avoid deep nesting — return early:
 
 ```javascript
 // ✅ Early return
 function getSlug(post) {
   if (!post) return null;
   if (!post.slug) return null;
-  return post.slug.toLowerCase();
+  return post.slug;
 }
 
 // ❌ Nested
 function getSlug(post) {
   if (post) {
     if (post.slug) {
-      return post.slug.toLowerCase();
+      return post.slug;
     }
   }
   return null;
 }
 ```
 
-### Import order
+### Imports
 
-1. Node built-ins (`path`, `fs`, `url`)
-2. Third-party packages (`express`, `pg`, `jsonwebtoken`)
-3. Internal modules (`../middleware/validate.js`, `../db/pool.js`)
+Group imports: external libraries first, then internal modules, separated by a blank line:
 
-Separate each group with a blank line.
+```javascript
+import express from 'express';
+import { z }   from 'zod';
+
+import { validate }     from '../middleware/validate.js';
+import { escapeHtml }   from './utils/html.js';
+import { formatDate }   from './utils/date.js';
+```
 
 ---
 
 ## CSS
 
-- Use CSS custom properties (variables) for all colours, spacing, and font sizes
-- Use `kebab-case` for all class names and IDs
-- Alpha-blended borders: `border: 1px solid oklch(from var(--color-text) l c h / 0.12)` — not solid grey
-- Property order within a rule: layout → box model → visual → typography → interaction
+All CSS uses the project's design token system. See `AI.md` → Architecture Notes for token structure.
+
+### Tokens
+
+Never hardcode pixel values, hex colours, or arbitrary numbers. Always reference a token:
 
 ```css
-/* ✅ Property order */
+/* ✅ Token-based */
 .card {
+  padding:       var(--space-4);
+  border-radius: var(--radius-md);
+  background:    var(--color-surface);
+  box-shadow:    var(--shadow-sm);
+}
+
+/* ❌ Hardcoded */
+.card {
+  padding: 16px;
+  border-radius: 8px;
+  background: #f9f8f5;
+}
+```
+
+### Borders
+
+Use alpha-blended borders, not solid greys:
+
+```css
+/* ✅ Adapts to light/dark mode */
+border: 1px solid oklch(from var(--color-text) l c h / 0.12);
+
+/* ❌ Hard grey — breaks in dark mode */
+border: 1px solid #ddd;
+```
+
+### Organisation
+
+Order properties: layout → box model → visual → typography → interaction:
+
+```css
+.element {
   /* Layout */
-  display      : flex;
-  flex-direction: column;
-  gap          : var(--space-4);
+  display:        flex;
+  align-items:    center;
+  gap:            var(--space-2);
 
   /* Box model */
-  padding      : var(--space-6);
-  border-radius: var(--radius-lg);
+  padding:        var(--space-3) var(--space-4);
+  border:         1px solid oklch(from var(--color-text) l c h / 0.12);
+  border-radius:  var(--radius-md);
 
   /* Visual */
-  background   : var(--color-surface);
-  border       : 1px solid oklch(from var(--color-text) l c h / 0.12);
-  box-shadow   : var(--shadow-sm);
+  background:     var(--color-surface);
+  box-shadow:     var(--shadow-sm);
 
   /* Typography */
-  font-size    : var(--text-base);
-  color        : var(--color-text);
+  font-size:      var(--text-sm);
+  color:          var(--color-text);
 
   /* Interaction */
-  transition   : box-shadow var(--transition-interactive);
-  cursor       : pointer;
+  cursor:         pointer;
+  transition:     background var(--transition-interactive);
 }
 ```
 
@@ -186,50 +219,140 @@ Separate each group with a blank line.
 
 ## HTML
 
-- Use semantic elements: `<article>`, `<section>`, `<header>`, `<nav>`, `<main>`, `<footer>`, `<button>`
-- Every `<img>` must have `alt`, `width`, `height`, and `loading="lazy"`
-- Every `<input>` must have an associated `<label>`
-- Attribute order: `id` → `class` → `type` → `name` → `href`/`src` → `aria-*` → `data-*`
+### Semantic Elements
+
+Always prefer semantic HTML over generic `<div>` elements:
+
+```html
+<!-- ✅ Semantic -->
+<article class="blog-card">
+  <header>
+    <h2>Post Title</h2>
+    <time datetime="2026-05-04">4 May 2026</time>
+  </header>
+  <p>Excerpt...</p>
+</article>
+
+<!-- ❌ Generic -->
+<div class="blog-card">
+  <div class="title">Post Title</div>
+  <div class="date">4 May 2026</div>
+  <div>Excerpt...</div>
+</div>
+```
+
+### Forms
+
+Every input must have an associated label. Use `<fieldset>` and `<legend>` for groups:
+
+```html
+<label for="contact-email">Email address</label>
+<input type="email" id="contact-email" name="email" required autocomplete="email">
+```
+
+### Attributes
+
+Boolean attributes do not need values. Attribute order: structural → semantic → accessibility → event:
+
+```html
+<button type="submit" class="btn btn-primary" aria-label="Submit contact form">Send</button>
+```
 
 ---
 
-## Express / Backend
+## Node.js / Express
 
-- One resource per route file — `routes/posts.js` handles posts only
-- Always pass errors to `next(err)` — never `res.status(500).send()` inline
-- Validate at the boundary using the `validate` middleware before any DB calls
-- Use parameterized queries — never string concatenation for SQL
+### Route Files
+
+One resource per route file. Validate at the boundary with `validate()` middleware before the handler:
 
 ```javascript
-// ✅ Correct error handling pattern
-router.post('/', validate(postSchema), async (req, res, next) => {
+router.post('/', validate(CreatePostSchema), async (req, res, next) => {
   try {
-    const post = await db.query(INSERT_POST, [req.body.title]);
-    res.status(201).json(post.rows[0]);
+    const post = await createPost(req.body);
+    res.status(201).json(post);
   } catch (err) {
     next(err);
   }
 });
 ```
 
+### Error Handling
+
+Always pass errors to `next(err)` — never build inline error responses in route handlers. The central error handler in `backend/middleware/errorHandler.js` formats and sends all error responses.
+
+### Database Queries
+
+Always use parameterised queries. Never concatenate user input into SQL:
+
+```javascript
+// ✅ Parameterised
+const result = await pool.query('SELECT * FROM blog_posts WHERE id = $1', [id]);
+
+// ❌ Concatenated — SQL injection risk
+const result = await pool.query(`SELECT * FROM blog_posts WHERE id = '${id}'`);
+```
+
 ---
 
 ## Comments
 
-Keep comments **concise and rare**. Add them only when:
-- The logic is unusual or non-obvious
-- Explaining a workaround for a specific bug
-- Documenting a hidden constraint or invariant
+Comments communicate **intent and structure** — not a running narration of what the code does.
 
-Do NOT comment obvious operations or restate what the code does.
+Logical flow does not need to be described in comments. If a sequence of steps is hard to follow without explanation, that is a signal to extract a well-named function, not to add prose. Well-named functions, early returns, and clear variable names are the primary tools for communicating flow.
+
+### Block summary comments
+
+Add a short summary comment above each distinct logical block within a function or file. This is the **primary use of comments** — acting as section headers that let a reader scan the shape of the code before reading the detail.
 
 ```javascript
-// ✅ Good — explains why, not what
-var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
-// Slice to date-only before parsing to avoid UTC offset shifting the day
+async function createPost(data) {
+    // Validate slug uniqueness
+    const existing = await pool.query(
+        'SELECT id FROM blog_posts WHERE slug = $1', [data.slug]
+    );
+    if (existing.rows.length) throw Object.assign(new Error('Slug already exists'), { status: 409 });
 
-// ❌ Bad — obvious
-const name = user.name; // Get the user's name
+    // Build insert
+    const { title, body_markdown, post_date, excerpt, slug } = data;
+    const result = await pool.query(
+        `INSERT INTO blog_posts (title, body_markdown, post_date, excerpt, slug)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [title, body_markdown, post_date, excerpt, slug]
+    );
+
+    // Return created row
+    return result.rows[0];
+}
+```
+
+Keep block summaries short — one line, imperative phrasing (`Build query`, `Validate input`, `Render card`). Do not restate the function name.
+
+### Non-obvious logic
+
+Add an inline comment when the *why* is not clear from the code itself:
+
+```javascript
+// ✅ Explains why — not obvious from the code
+var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
+// Force local midnight to avoid timezone offset shifting the display date
+
+// ✅ Documents a workaround
+req.body = result.data; // Zod coerces types — use result.data, not req.body directly
+```
+
+### Never comment
+
+- What a line does when the code already says it clearly
+- The current task or ticket number (put that in the PR description)
+- Obvious operations
+
+```javascript
+// ❌ Redundant — the code says this
+var name = user.name; // Get the user's name
+
+// ❌ Task note — belongs in the PR, not the code
+// TODO: fix this later
 ```
 
 ---
@@ -239,14 +362,6 @@ const name = user.name; // Get the user's name
 > ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.**
 
 See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide. Key conventions:
-
-### Running tests
-
-```powershell
-.\scripts\dev-local.ps1 up
-.\scripts\dev-local.ps1 test           # run suite
-.\scripts\dev-local.ps1 test:coverage  # with coverage
-```
 
 ### File structure
 
@@ -260,9 +375,10 @@ backend/tests/
   routes/posts.test.js
 ```
 
+File naming: `<source-filename>.test.js` in a mirrored path.
+
 ### Naming
 
-- File: `<source-filename>.test.js` in a mirrored path
 - `describe` block: matches the route or module name (`'POST /posts'`, `'validate middleware'`)
 - `it` block: plain English description of behaviour (`'returns 400 when title is missing'`)
 
@@ -272,6 +388,14 @@ backend/tests/
 - Mock `nodemailer` the same way for routes that send email
 - Never use a live database or live network in unit/integration tests
 - Use `vi.fn().mockResolvedValue({ rows: [] })` as the default pg query stub; override per-test when needed
+
+### Running tests
+
+```powershell
+.\scripts\dev-local.ps1 up             # ensure dev environment is running
+.\scripts\dev-local.ps1 test           # run full suite
+.\scripts\dev-local.ps1 test:coverage  # run with coverage report
+```
 
 ### PR smoke test scripts
 
@@ -285,32 +409,21 @@ Every PR that touches backend code must include a `scripts/Test-PRN.ps1` (where 
 
 ## Git & Commits
 
-Follow conventional commits with issue scope:
+Follow the imperative style documented in `AI.md` → Commit Conventions:
 
 ```
-type(#N): short imperative summary (50 chars max)
-
-Optional body explaining the why.
-
-Co-Authored-By: Perplexity Sonar <noreply@perplexity.ai>
+feat(#78): add travel post detail page
+fix(#81): use /api as API_BASE in blog-post.js
+refactor: extract formatDate to shared utils
 ```
 
-**Types:** `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
-
-```
-✅ feat(#92): add image upload to travel posts
-✅ fix(#88): correct UTC offset in date formatter
-✅ docs: update TESTING.md with Docker workflow
-❌ fixed stuff
-❌ WIP
-```
+One logical change per commit. Do not bundle unrelated changes.
 
 ---
 
 ## Security
 
-- Always escape user input with `escapeHtml()` before inserting into the DOM
-- Always use parameterized queries — never concatenate user input into SQL
-- Validate at system boundaries only (incoming HTTP requests) — do not re-validate internal calls
-- Never log or commit `.env`, tokens, passwords, or API keys
-- Run `npm audit` before merging any dependency changes
+- **XSS:** Always escape user-generated content with `escapeHtml()` before setting `innerHTML`.
+- **SQL injection:** Always use parameterised queries — never string concatenation.
+- **Input validation:** Validate at system entry points using Zod schemas in `backend/middleware/validate.js`.
+- **Sensitive data:** Never log or commit `.env` files, tokens, API keys, or passwords.
