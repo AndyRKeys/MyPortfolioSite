@@ -41,7 +41,8 @@
             <h2>Travel Memories</h2>
 
             <div class="travel-view-toggle" role="tablist">
-                <button type="button" class="view-toggle-btn active" data-view="both" role="tab" aria-selected="true">Map + cards</button>
+                <button type="button" class="view-toggle-btn active" data-view="all" role="tab" aria-selected="true">Map + cards + timeline</button>
+                <button type="button" class="view-toggle-btn" data-view="both" role="tab" aria-selected="false">Map + cards</button>
                 <button type="button" class="view-toggle-btn" data-view="map" role="tab" aria-selected="false">Map only</button>
                 <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards only</button>
                 <button type="button" class="view-toggle-btn" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
@@ -53,7 +54,7 @@
                 <!-- populated from API by script.js -->
             </div>
 
-            <div id="travel-timeline" class="timeline hidden">
+            <div id="travel-timeline" class="timeline">
                 <!-- populated from API by script.js -->
             </div>
 
@@ -66,7 +67,7 @@
     <footer>
         <section class="sec-cont" id="contact">
             <div class="footer-bottom">
-                <p>© 2026 Andrew Keys. All Rights Reserved.</p>
+                <p>&copy; 2026 Andrew Keys. All Rights Reserved.</p>
             </div>
         </section>
     </footer>
