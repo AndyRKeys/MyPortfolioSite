@@ -7,7 +7,7 @@
     Verifies:
       - #93  Travel edit: GET /api/travel/admin/:id returns visit_date as full ISO timestamp
              (admin.js slices to YYYY-MM-DD before setting the date input)
-      - #95  Blog edit: GET /api/posts/:id returns post_date and body_markdown reliably
+      - #95  Blog edit: GET /api/posts/admin/:id returns post_date and body_markdown reliably
       - #101 CV endpoints: exists, upload, download, delete
       - Regression: contact validation, posts create/validate, travel create/validate,
         unknown route 404
@@ -150,11 +150,10 @@ if ($SkipVitest) {
     }
 }
 
-# ── #93 / #95: date fields on edit
+# ── #93: Travel date field
 Write-Host ""
 Write-Host "--- #93 Travel edit: visit_date present in admin response ---" -ForegroundColor White
-# Create a travel post and immediately fetch it back; verify visit_date is in the response
-# so admin.js can slice it to YYYY-MM-DD. Full UI verification is manual (see checklist).
+
 Test-Endpoint `
     -Name         'Travel: create draft for date-field test -> 201' `
     -Method       'POST' `
@@ -164,7 +163,6 @@ Test-Endpoint `
     -ExpectStatus 201 `
     -RequiresAuth $true
 
-# Fetch the most recent travel post and check visit_date is present
 if ($Token) {
     $listRaw = curl.exe -s -H "Authorization: Bearer $Token" "$BaseUrl/api/travel/all"
     try {
@@ -173,12 +171,20 @@ if ($Token) {
         if ($testPost) {
             $detailRaw = curl.exe -s -H "Authorization: Bearer $Token" "$BaseUrl/api/travel/admin/$($testPost.id)"
             $detail = $detailRaw | ConvertFrom-Json
-            if ($detail.visit_date) {
+            if ($null -ne $detail.visit_date) {
                 Write-Host "  [PASS] Travel admin detail: visit_date present ('$($detail.visit_date)')" -ForegroundColor Green
                 $pass++
-                $results += [PSCustomObject]@{ Result = 'PASS'; Name = 'Travel admin: visit_date in response'; Detail = $detail.visit_date }
-                # Verify it starts with YYYY-MM-DD pattern (10 chars)
-                $sliced = $detail.visit_date.ToString().Substring(0, [Math]::Min(10, $detail.visit_date.ToString().Length))
+                $results += [PSCustomObject]@{ Result = 'PASS'; Name = 'Travel admin: visit_date in response'; Detail = "$($detail.visit_date)" }
+
+                # Cast to string first — ConvertFrom-Json auto-converts ISO dates to [DateTime]
+                # which .ToString() renders in locale format (MM/DD/YYYY). We need the raw ISO string.
+                $dateStr = [string]$detail.visit_date
+                # ISO date strings start with YYYY-; [DateTime].ToString() starts with MM/
+                # Re-format [DateTime] objects to ISO if ConvertFrom-Json ate the original string
+                if ($detail.visit_date -is [datetime]) {
+                    $dateStr = $detail.visit_date.ToString('yyyy-MM-dd')
+                }
+                $sliced = $dateStr.Substring(0, [Math]::Min(10, $dateStr.Length))
                 if ($sliced -match '^\d{4}-\d{2}-\d{2}$') {
                     Write-Host "  [PASS] Travel admin: sliced date '$sliced' is valid YYYY-MM-DD" -ForegroundColor Green
                     $pass++
@@ -206,6 +212,7 @@ if ($Token) {
     $skip += 2
 }
 
+# ── #95: Blog date + body fields
 Write-Host ""
 Write-Host "--- #95 Blog edit: post_date and body_markdown present in response ---" -ForegroundColor White
 
@@ -224,10 +231,12 @@ if ($Token) {
         $list = $listRaw | ConvertFrom-Json
         $testPost = $list | Where-Object { $_.title -eq 'Date Field Test Post' } | Select-Object -First 1
         if ($testPost) {
-            $detailRaw = curl.exe -s -H "Authorization: Bearer $Token" "$BaseUrl/api/posts/$($testPost.id)"
+            # Use /api/posts/admin/:id — the public /api/posts/:slug endpoint strips
+            # draft-only fields and requires a slug, not an id.
+            $detailRaw = curl.exe -s -H "Authorization: Bearer $Token" "$BaseUrl/api/posts/admin/$($testPost.id)"
             $detail = $detailRaw | ConvertFrom-Json
             foreach ($field in @('post_date', 'body_markdown')) {
-                if ($detail.$field) {
+                if ($null -ne $detail.$field -and $detail.$field -ne '') {
                     Write-Host "  [PASS] Blog admin detail: '$field' present" -ForegroundColor Green
                     $pass++
                     $results += [PSCustomObject]@{ Result = 'PASS'; Name = "Blog admin: $field in response"; Detail = 'present' }
@@ -254,7 +263,6 @@ if ($Token) {
 Write-Host ""
 Write-Host "--- #101 CV management ---" -ForegroundColor White
 
-# Public: check CV exists (expect false when no CV uploaded)
 Test-Endpoint `
     -Name         'CV: GET /api/cv/exists -> 200 with exists field' `
     -Method       'GET' `
@@ -262,18 +270,14 @@ Test-Endpoint `
     -ExpectStatus 200 `
     -ExpectBody   'exists'
 
-# Public: GET /api/cv -> 404 when no CV present
 Test-Endpoint `
     -Name         'CV: GET /api/cv -> 404 when no CV uploaded' `
     -Method       'GET' `
     -Url          "$BaseUrl/api/cv" `
     -ExpectStatus 404
 
-# Auth: upload a minimal valid PDF
-# Uses a tiny hand-crafted PDF that passes pdf-parse without warnings
 if ($Token) {
     $tempPdf = Join-Path $env:TEMP 'test-cv.pdf'
-    # Minimal valid PDF bytes (no personal info — just enough for pdf-parse to read)
     $pdfContent = "%PDF-1.4`n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj`nxref`n0 4`n0000000000 65535 f`n0000000009 00000 n`n0000000058 00000 n`n0000000115 00000 n`ntrailer<</Size 4/Root 1 0 R>>`nstartxref`n190`n%%EOF"
     [System.IO.File]::WriteAllText($tempPdf, $pdfContent)
 
@@ -296,7 +300,6 @@ if ($Token) {
         $results += [PSCustomObject]@{ Result = 'FAIL'; Name = 'CV: upload -> 200'; Detail = "Got $uploadStatus" }
     }
 
-    # After upload: exists should return true
     Test-Endpoint `
         -Name         'CV: GET /api/cv/exists -> exists true after upload' `
         -Method       'GET' `
@@ -304,14 +307,12 @@ if ($Token) {
         -ExpectStatus 200 `
         -ExpectBody   'true'
 
-    # After upload: GET /api/cv should stream the file (200)
     Test-Endpoint `
         -Name         'CV: GET /api/cv -> 200 after upload' `
         -Method       'GET' `
         -Url          "$BaseUrl/api/cv" `
         -ExpectStatus 200
 
-    # Auth: upload without a file -> 400
     Test-Endpoint `
         -Name         'CV: POST /api/cv without file -> 400' `
         -Method       'POST' `
@@ -320,7 +321,6 @@ if ($Token) {
         -ExpectStatus 400 `
         -RequiresAuth $true
 
-    # Auth: delete CV
     Test-Endpoint `
         -Name         'CV: DELETE /api/cv -> 200' `
         -Method       'DELETE' `
@@ -329,7 +329,6 @@ if ($Token) {
         -ExpectStatus 200 `
         -RequiresAuth $true
 
-    # After delete: exists should return false
     Test-Endpoint `
         -Name         'CV: GET /api/cv/exists -> exists false after delete' `
         -Method       'GET' `
@@ -337,7 +336,6 @@ if ($Token) {
         -ExpectStatus 200 `
         -ExpectBody   'false'
 
-    # After delete: GET /api/cv -> 404
     Test-Endpoint `
         -Name         'CV: GET /api/cv -> 404 after delete' `
         -Method       'GET' `
@@ -350,21 +348,19 @@ if ($Token) {
     $skip += 5
 }
 
-# Auth required: unauthenticated upload -> 401
 Test-Endpoint `
     -Name         'CV: POST /api/cv unauthenticated -> 401' `
     -Method       'POST' `
     -Url          "$BaseUrl/api/cv" `
     -ExpectStatus 401
 
-# Auth required: unauthenticated delete -> 401
 Test-Endpoint `
     -Name         'CV: DELETE /api/cv unauthenticated -> 401' `
     -Method       'DELETE' `
     -Url          "$BaseUrl/api/cv" `
     -ExpectStatus 401
 
-# ── Regression: contact validation
+# ── Regression: contact
 Write-Host ""
 Write-Host "--- Regression: contact form ---" -ForegroundColor White
 
