@@ -41,9 +41,11 @@
             <h2>Travel Memories</h2>
 
             <div class="travel-view-toggle" role="tablist">
-                <button type="button" class="view-toggle-btn active" data-view="both" role="tab" aria-selected="true">Map + cards</button>
+                <button type="button" class="view-toggle-btn active" data-view="map-timeline" role="tab" aria-selected="true">Map + timeline</button>
+                <button type="button" class="view-toggle-btn" data-view="both" role="tab" aria-selected="false">Map + cards</button>
                 <button type="button" class="view-toggle-btn" data-view="map" role="tab" aria-selected="false">Map only</button>
                 <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards only</button>
+                <button type="button" class="view-toggle-btn" data-view="timeline" role="tab" aria-selected="false">Timeline only</button>
             </div>
 
             <div id="travel-map" class="travel-map" aria-label="Map of travel memories"></div>
@@ -51,6 +53,11 @@
             <div class="travel-grid" id="travel-grid">
                 <!-- populated from API by script.js -->
             </div>
+
+            <div id="travel-timeline" class="timeline">
+                <!-- populated from API by script.js -->
+            </div>
+
             <div id="travel-empty" class="travel-empty hidden">
                 <p>No travel memories yet — check back soon.</p>
             </div>
@@ -60,7 +67,7 @@
     <footer>
         <section class="sec-cont" id="contact">
             <div class="footer-bottom">
-                <p>© 2026 Andrew Keys. All Rights Reserved.</p>
+                <p>&copy; 2026 Andrew Keys. All Rights Reserved.</p>
             </div>
         </section>
     </footer>
