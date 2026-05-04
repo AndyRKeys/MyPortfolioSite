@@ -10,12 +10,19 @@ import {
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { sendMagicLink } from '../utils/email.js';
+import {
+  validate,
+  SetupSchema,
+  EmailSendSchema,
+  PasskeyRegisterFinishSchema,
+  PasskeyLoginFinishSchema,
+} from '../middleware/validate.js';
 
 const router = Router();
 
-const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'AK Portfolio';
-const RP_ID = process.env.WEBAUTHN_RP_ID || 'localhost';
-const ORIGIN = process.env.WEBAUTHN_ORIGIN || 'http://localhost:5500';
+const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
+const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
+const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
 const JWT_EXPIRY = '24h';
 
 function signJWT(user) {
@@ -28,7 +35,6 @@ function signJWT(user) {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-// Check if any admin user exists (drives setup.html redirect logic)
 router.get('/setup/status', async (req, res) => {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
@@ -39,13 +45,9 @@ router.get('/setup/status', async (req, res) => {
   }
 });
 
-// Create the first admin user — locked once any user exists
-router.post('/setup', async (req, res) => {
+router.post('/setup', validate(SetupSchema), async (req, res) => {
   try {
     const { email, username } = req.body;
-    if (!email || !username) {
-      return res.status(400).json({ error: 'Email and username required' });
-    }
 
     const count = await pool.query('SELECT COUNT(*) FROM users');
     if (parseInt(count.rows[0].count) > 0) {
@@ -97,19 +99,19 @@ router.post('/passkey/register/start', authenticate, async (req, res) => {
     );
 
     const options = await generateRegistrationOptions({
-      rpName: RP_NAME,
-      rpID: RP_ID,
-      userID: Buffer.from(userId),
-      userName: user.email,
+      rpName:    RP_NAME,
+      rpID:      RP_ID,
+      userID:    Buffer.from(userId),
+      userName:  user.email,
       userDisplayName: user.username,
       attestationType: 'none',
       excludeCredentials: existingPasskeys.rows.map(pk => ({
-        id: pk.credential_id,
-        type: 'public-key',
+        id:         pk.credential_id,
+        type:       'public-key',
         transports: pk.transports,
       })),
       authenticatorSelection: {
-        residentKey: 'preferred',
+        residentKey:      'preferred',
         userVerification: 'preferred',
       },
     });
@@ -128,12 +130,9 @@ router.post('/passkey/register/start', authenticate, async (req, res) => {
   }
 });
 
-router.post('/passkey/register/finish', authenticate, async (req, res) => {
+router.post('/passkey/register/finish', authenticate, validate(PasskeyRegisterFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey, passkeyName } = req.body;
-    if (!response || !sessionKey) {
-      return res.status(400).json({ error: 'Missing response or sessionKey' });
-    }
 
     const challengeRow = await pool.query(
       `SELECT * FROM webauthn_challenges
@@ -148,8 +147,8 @@ router.post('/passkey/register/finish', authenticate, async (req, res) => {
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: challengeRow.rows[0].challenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin:    ORIGIN,
+      expectedRPID:      RP_ID,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
@@ -198,8 +197,8 @@ router.post('/passkey/login/start', async (req, res) => {
           [userResult.rows[0].id]
         );
         allowCredentials = passkeys.rows.map(pk => ({
-          id: pk.credential_id,
-          type: 'public-key',
+          id:         pk.credential_id,
+          type:       'public-key',
           transports: pk.transports,
         }));
       }
@@ -225,12 +224,9 @@ router.post('/passkey/login/start', async (req, res) => {
   }
 });
 
-router.post('/passkey/login/finish', async (req, res) => {
+router.post('/passkey/login/finish', validate(PasskeyLoginFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey } = req.body;
-    if (!response || !sessionKey) {
-      return res.status(400).json({ error: 'Missing response or sessionKey' });
-    }
 
     const challengeRow = await pool.query(
       'SELECT * FROM webauthn_challenges WHERE session_key = $1 AND expires_at > NOW()',
@@ -241,7 +237,6 @@ router.post('/passkey/login/finish', async (req, res) => {
     }
     await pool.query('DELETE FROM webauthn_challenges WHERE session_key = $1', [sessionKey]);
 
-    // Normalise the credential ID so it matches what we stored at registration
     const credentialId = Buffer.from(response.id, 'base64url').toString('base64url');
 
     const passkeyRow = await pool.query(
@@ -258,14 +253,14 @@ router.post('/passkey/login/finish', async (req, res) => {
 
     const verification = await verifyAuthenticationResponse({
       response,
-      expectedChallenge: challengeRow.rows[0].challenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedChallenge:  challengeRow.rows[0].challenge,
+      expectedOrigin:     ORIGIN,
+      expectedRPID:       RP_ID,
       authenticator: {
-        credentialID: Buffer.from(passkey.credential_id, 'base64url'),
+        credentialID:        Buffer.from(passkey.credential_id, 'base64url'),
         credentialPublicKey: Buffer.from(passkey.public_key, 'base64url'),
-        counter: passkey.counter,
-        transports: passkey.transports,
+        counter:             passkey.counter,
+        transports:          passkey.transports,
       },
     });
 
@@ -288,10 +283,9 @@ router.post('/passkey/login/finish', async (req, res) => {
 
 // ── Email magic link ──────────────────────────────────────────────────────────
 
-router.post('/email/send', async (req, res) => {
+router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
 
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
       email.toLowerCase().trim(),
@@ -309,8 +303,8 @@ router.post('/email/send', async (req, res) => {
       });
     }
 
-    // Always respond the same way to prevent email enumeration
-    res.json({ message: 'If that email is registered, a login link has been sent.' });
+    // Deliberate anti-enumeration: always same response regardless of whether email exists
+    res.json({ sent: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to send email' });

@@ -83,6 +83,38 @@ html {
     --color-timeline-marker-current: #38bdf8;
 }
 
+/* System preference fallback — applies dark tokens for users who have never
+   toggled manually and whose OS is set to dark mode. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --color-bg: #0f0f0f;
+        --color-surface: #1e1e1e;
+        --color-surface-alt: #252525;
+        --color-header-bg: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+        --color-nav-bg: #1a1a1a;
+        --color-nav-text: #e0e0e0;
+        --color-text: #e8e8e8;
+        --color-text-secondary: #b0b0b0;
+        --color-text-muted: #888;
+        --color-border: #333;
+        --color-border-strong: #666;
+        --color-tag-bg: #2a2a2a;
+        --color-tag-text: #ccc;
+        --color-shadow: rgba(0, 0, 0, 0.3);
+        --color-shadow-hover: rgba(0, 0, 0, 0.5);
+        --color-accent: #38bdf8;
+        --color-accent-hover: #7dd3fc;
+        --color-footer-bg: #0a0a0a;
+        --color-footer-text: #e0e0e0;
+        --color-footer-muted: #777;
+        --color-success: #2ecc71;
+        --color-error: #e74c3c;
+        --color-timeline-line: #333;
+        --color-timeline-marker: #666;
+        --color-timeline-marker-current: #38bdf8;
+    }
+}
+
 body {
     font-family: 'Inter', system-ui, sans-serif;
     /* cap side margins so mid-tablet content isn't over-indented */
@@ -92,7 +124,10 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-header {
+/* ── Site-level page header only — scoped to direct child of body so the
+   dark gradient does NOT bleed into .post-article-header on detail pages
+   (fixes #91). Was bare `header { ... }` which matched all header elements. */
+body > header {
     background: var(--color-header-bg);
     color: white;
     padding: 45px 20px;
@@ -537,6 +572,7 @@ footer a:hover {
 .travel-content h3 {
     margin: 0 0 0.35rem 0;
     font-size: 1.1rem;
+    color: var(--color-text);
 }
 
 /* Meta block: location on first line, date on second */
@@ -1187,54 +1223,55 @@ footer {
     body {
         margin: 0;
     }
-    
-    header {
+
+    /* Scoped to match the tightened desktop rule — body > header only */
+    body > header {
         padding: 30px 15px;
     }
-    
+
     h1 {
         font-size: 24px;
     }
-    
+
     h2 {
         font-size: 18px;
     }
-    
+
     section {
         padding: 30px 15px;
     }
-    
+
     section h2 {
         font-size: 22px;
     }
-    
+
     .about-inner {
         grid-template-columns: 1fr;
     }
-    
+
     .about-text {
         text-align: center;
     }
-    
+
     .projects-grid,
     .skills-container {
         grid-template-columns: 1fr;
     }
-    
+
     .contact-wrapper {
         grid-template-columns: 1fr;
     }
-    
+
     .box {
         width: auto;
         margin: auto;
     }
-    
+
     .hs,
     .hs-wrap {
         height: 600px;
     }
-    
+
     .paddle {
         top: auto;
         width: 10px;
@@ -1243,11 +1280,11 @@ footer {
         z-index: 1;
         background-color: #f7f7f780;
     }
-    
+
     .paddle p {
         display: none;
     }
-    
+
     .travel-uploader {
         display: none;
     }
@@ -1660,9 +1697,15 @@ footer {
     padding: 1.5rem 1.75rem;
     box-shadow: 0 2px 12px var(--color-shadow);
     text-decoration: none;
-    color: inherit;
+    /* Explicit colour token prevents UA :visited purple overriding in light mode (fixes #87) */
+    color: var(--color-text);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     border-left: 3px solid var(--color-border-strong);
+}
+
+/* Prevent browser :visited colour bleeding onto card title text */
+.post-card:visited {
+    color: var(--color-text);
 }
 
 .post-card:hover {
@@ -1726,7 +1769,7 @@ footer {
 }
 
 .post-article-header {
-    margin-bottom: 0;
+    margin-bottom: 0.25rem;
 }
 
 /* Scoped to the reader page only — must NOT bleed onto the admin #post-title input */
@@ -2335,4 +2378,103 @@ footer {
         font-size: 16px; /* prevent iOS zoom */
         padding: 0.75rem 0.4rem;
     }
+}
+
+/* ── Issue #78: clickable cards & detail page styles ────────────────────────── */
+
+/* Travel card now an <a> — strip default link styling, use token colour to
+   prevent UA :visited purple overriding in light mode (fixes #87) */
+a.travel-card {
+    display: block;
+    color: var(--color-text);
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+a.travel-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--color-shadow);
+}
+
+/* Prevent browser :visited colour bleeding onto card content */
+a.travel-card:visited {
+    color: var(--color-text);
+}
+
+/* Timeline item link wrapping <h3> (used by both blog and travel) —
+   explicit token colour prevents UA :visited purple in light mode (fixes #87) */
+.timeline-content a {
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+/* Prevent browser :visited colour overriding the heading colour in light mode */
+.timeline-content a:visited {
+    color: var(--color-text);
+}
+
+.timeline-content a:hover h3 {
+    color: var(--color-accent);
+}
+
+.timeline-item .media-thumb-wrap {
+    transition: opacity 0.15s ease;
+}
+
+.timeline-item .media-thumb-wrap:hover {
+    opacity: 0.85;
+}
+
+/* ── Post detail pages (blog + travel) ───────────────────────────────────────── */
+
+.post-meta {
+    color: var(--color-text-muted);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.95rem;
+    margin: 0.25rem 0 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.post-meta .travel-location::before {
+    content: "📍 ";
+}
+
+.post-meta .travel-date::before,
+.post-meta .blog-date::before {
+    content: "📅 ";
+}
+
+.post-media-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin: 1.25rem 0;
+}
+
+.gallery-thumb {
+    cursor: pointer;
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    background: #eaeaea;
+    transition: transform 0.15s ease;
+}
+
+.gallery-thumb:hover {
+    transform: scale(1.02);
+}
+
+.gallery-thumb img,
+.gallery-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.travel-post-map {
+    border: 1px solid var(--color-border);
 }

@@ -1,8 +1,8 @@
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
 import exifr from 'https://esm.sh/exifr@7.1.3';
-import { API } from './config.js';
+import { API_BASE } from './config.js';
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────
+// ── Auth helpers ──────────────────────────────────────────────────────────────────────────────
 
 function getToken() {
     return localStorage.getItem('adminToken');
@@ -24,7 +24,7 @@ function requireAuth() {
 }
 
 function authFetch(path, opts = {}) {
-    return fetch(`${API}${path}`, {
+    return fetch(`${API_BASE}${path}`, {
         ...opts,
         headers: {
             'Content-Type': 'application/json',
@@ -36,7 +36,7 @@ function authFetch(path, opts = {}) {
 
 // For multipart uploads — lets the browser set the correct Content-Type boundary
 function authFetchMultipart(path, formData) {
-    return fetch(`${API}${path}`, {
+    return fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${getToken()}` },
         body: formData,
@@ -54,7 +54,7 @@ function todayIso() {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-// ── Passkey management ────────────────────────────────────────────────────────
+// ── Passkey management ──────────────────────────────────────────────────────────────────────
 
 async function loadPasskeys() {
     const container = document.getElementById('passkey-list');
@@ -126,7 +126,7 @@ function setPasskeyMessage(msg, isError = false) {
     el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
 }
 
-// ── Travel memories ───────────────────────────────────────────────────────────
+// ── Travel memories ─────────────────────────────────────────────────────────────────────────
 
 let pendingFiles = [];         // File objects queued for upload
 let existingMedia = [];        // {id, url, type} from post_media (on edit)
@@ -148,7 +148,7 @@ function renderMediaList() {
 
     allItems.forEach(item => {
         const row = $('<div class="media-list-row"></div>');
-        const icon = item.type && item.type.startsWith('video') ? '🎬' : '🖼';
+        const icon = item.type && item.type.startsWith('video') ? '🎦' : '🖼';
         const label = item.kind === 'existing'
             ? `${icon} ${item.url.split('/').pop()}`
             : `${icon} ${item.name} (pending)`;
@@ -307,7 +307,7 @@ function setTravelMessage(msg, isError = false, isHint = false) {
     el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
 }
 
-// ── Geocode confirmation map ───────────────────────────────────────────────────
+// ── Geocode confirmation map ────────────────────────────────────────────────────────────────────────
 
 function updateGeoconfirmMap(lat, lng) {
     if (!window.L) return;
@@ -346,7 +346,7 @@ function hideGeoconfirmMap() {
     }
 }
 
-// ── EXIF GPS autofill ─────────────────────────────────────────────────────────
+// ── EXIF GPS autofill ──────────────────────────────────────────────────────────────────────────────
 
 // Returns true only if coords are finite numbers and not the null-island 0,0
 // that DJI and some cameras emit when GPS is unavailable.
@@ -595,7 +595,7 @@ function initTravelForm() {
     $('#travel-clear').on('click', clearTravelForm);
 }
 
-// ── Blog posts ────────────────────────────────────────────────────────────────
+// ── Blog posts ────────────────────────────────────────────────────────────────────────────
 
 const POST_TEMPLATE = `_Short tagline or subtitle._
 
@@ -620,7 +620,7 @@ function example() { return 'hello'; }
 
 ## Wrap-up
 
-End with a takeaway, a question, or a link to what's next.
+End with a takeaway, a question, or a link to what’s next.
 `;
 
 function setPostMessage(msg, isError = false) {
@@ -772,7 +772,7 @@ function initPostForm() {
     });
 }
 
-// ── Private notes ─────────────────────────────────────────────────────────────
+// ── Private notes ───────────────────────────────────────────────────────────────────────────
 
 function initPrivateNotes() {
     const notes = localStorage.getItem('privateProjectNotes');
@@ -795,7 +795,7 @@ function setLogout() {
     });
 }
 
-// ── Site stats ────────────────────────────────────────────────────────────────
+// ── Site stats ──────────────────────────────────────────────────────────────────────────────
 
 async function loadStats() {
     const list = document.getElementById('stats-list');
@@ -821,7 +821,7 @@ async function loadStats() {
     }
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
+// ── Bootstrap ──────────────────────────────────────────────────────────────────────────────
 
 requireAuth();
 setLogout();
