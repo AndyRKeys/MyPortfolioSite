@@ -130,9 +130,18 @@ function buildTimelineItem(opts) {
     }
 
     if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         var img = $('<img class="timeline-thumb" alt="">').attr('src', opts.mediaUrl);
         img.on('error', function () { $(this).remove(); });
-        content.append(img);
+        mediaWrap.append(img);
+
+        // Show "+N more" badge if multiple media items exist
+        if (opts.mediaCount && opts.mediaCount > 1) {
+            var extraCount = opts.mediaCount - 1;
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+        }
+
+        content.append(mediaWrap);
     }
 
     item.append(content);
@@ -213,16 +222,115 @@ function formatVisitDate(dateStr) {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function buildPublicTravelCard(travel) {
-    return buildPostCard('travel', {
-        id:        travel.id,
-        title:     travel.title,
-        location:  travel.location,
-        date:      formatVisitDate(travel.visit_date),
-        notes:     travel.notes,
-        mediaUrl:  travel.media_url || travel.mediaUrl,
-        mediaType: travel.media_type || travel.mediaType,
+// ── Gallery lightbox ─────────────────────────────────────────────────────────
+
+var lightboxItems = [];
+var lightboxIndex = 0;
+
+function openLightbox(items, startIndex, title) {
+    lightboxItems = items;
+    lightboxIndex = startIndex || 0;
+    $('#travel-lightbox .lightbox-title').text(title || '');
+    renderLightboxItem();
+    $('#travel-lightbox').removeClass('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+    $('#travel-lightbox').addClass('hidden');
+    document.body.style.overflow = '';
+    // Stop any playing video
+    $('#travel-lightbox video').each(function () { this.pause(); });
+}
+
+function renderLightboxItem() {
+    var item = lightboxItems[lightboxIndex];
+    var mediaEl;
+    if (item.type && item.type.indexOf('video') === 0) {
+        mediaEl = $('<video controls playsinline></video>').attr('src', item.url);
+    } else {
+        mediaEl = $('<img alt="Gallery image">').attr('src', item.url);
+    }
+    $('#travel-lightbox .lightbox-media').empty().append(mediaEl);
+    $('#travel-lightbox .lightbox-counter').text((lightboxIndex + 1) + ' / ' + lightboxItems.length);
+    $('#travel-lightbox .lightbox-prev').toggleClass('hidden', lightboxIndex === 0);
+    $('#travel-lightbox .lightbox-next').toggleClass('hidden', lightboxIndex === lightboxItems.length - 1);
+}
+
+function initLightbox() {
+    $('#travel-lightbox .lightbox-close').on('click', closeLightbox);
+    $('#travel-lightbox').on('click', function (e) {
+        if ($(e.target).is('#travel-lightbox')) closeLightbox();
     });
+    $('#travel-lightbox .lightbox-prev').on('click', function () {
+        if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
+    });
+    $('#travel-lightbox .lightbox-next').on('click', function () {
+        if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
+    });
+    $(document).on('keydown', function (e) {
+        if ($('#travel-lightbox').hasClass('hidden')) return;
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft' && lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
+        if (e.key === 'ArrowRight' && lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
+    });
+}
+
+// ── Travel cards ─────────────────────────────────────────────────────────────
+
+function buildPublicTravelCard(travel) {
+    var card = $('<article class="travel-card box draft-card"></article>');
+    card.attr('data-memory-id', travel.id);
+    var media = $('<div class="media"></div>');
+
+    // Prefer post_media array; fall back to legacy media_url field
+    var allMedia = Array.isArray(travel.media) && travel.media.length
+        ? travel.media
+        : (travel.media_url ? [{ url: travel.media_url, type: travel.media_type }] : null);
+    var firstMedia = allMedia ? allMedia[0] : null;
+    var mediaUrl = firstMedia ? firstMedia.url : null;
+    var mediaType = firstMedia ? firstMedia.type : null;
+    var extraCount = allMedia ? allMedia.length - 1 : 0;
+
+    var placeholder = './resources/img/placeholder-transparent.png';
+    if (mediaUrl) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
+        if (mediaType && mediaType.indexOf('video') === 0) {
+            mediaWrap.append('<video controls src="' + mediaUrl + '"></video>');
+        } else {
+            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            mediaWrap.append(img);
+        }
+        if (extraCount > 0) {
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+            card.addClass('has-gallery');
+        }
+        media.append(mediaWrap);
+    } else {
+        media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
+    }
+
+    // Click on card media opens lightbox when multiple items exist
+    if (allMedia && allMedia.length > 1) {
+        media.on('click', function () {
+            openLightbox(allMedia, 0, travel.title);
+        });
+    }
+
+    var content = $('<div class="travel-content"></div>');
+    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
+    var formattedDate = formatVisitDate(travel.visit_date);
+    var locationText = travel.location || 'Location not set';
+    var locationPrefix = travel.location_estimated ? '~ ' : '';
+    var metaHtml = '<span class="travel-location">' + locationPrefix + locationText + '</span>';
+    if (formattedDate) {
+        metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
+    }
+    content.append('<p class="meta">' + metaHtml + '</p>');
+    content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
+    card.append(media).append(content);
+    return card;
 }
 
 // ── Travel map (Leaflet) ───────────────────────────────────────────────────────
@@ -364,14 +472,32 @@ function loadPublicTravelPosts() {
             });
             var timelineEl = $('#travel-timeline');
             sorted.forEach(function(travel) {
-                timelineEl.append(buildTimelineItem({
+                // Use first image from media array if available, fall back to legacy media_url
+                var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+                var firstMedia = allMedia ? allMedia[0] : null;
+                var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
+                var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+
+                var item = buildTimelineItem({
                     dateStr:   formatVisitDate(travel.visit_date),
                     title:     travel.title,
                     location:  travel.location,
                     notes:     travel.notes,
-                    mediaUrl:  travel.media_url || travel.mediaUrl,
-                    mediaType: travel.media_type || travel.mediaType,
-                }));
+                    mediaUrl:  mediaUrl,
+                    mediaType: mediaType,
+                    mediaCount: allMedia ? allMedia.length : 0,
+                });
+
+                // Wire up lightbox for timeline image if media array exists
+                if (allMedia && allMedia.length > 0) {
+                    item.find('.timeline-thumb').css('cursor', 'pointer').on('click', function(e) {
+                        e.preventDefault();
+                        var mediaItems = allMedia.map(function(m) { return { url: m.url, type: m.type }; });
+                        openLightbox(mediaItems, 0, travel.title);
+                    });
+                }
+
+                timelineEl.append(item);
             });
 
             // All containers must be populated before initViewToggle wires the buttons.
@@ -513,4 +639,5 @@ $(document).ready(function() {
     loadGithubWidget();
     initContactForm();
     recordVisit('home');
+    if (document.getElementById('travel-lightbox')) initLightbox();
 });

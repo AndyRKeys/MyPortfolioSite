@@ -481,6 +481,59 @@ footer a:hover {
     display: block;
 }
 
+.media-thumb-wrap {
+    position: relative;
+    display: block;
+}
+
+.media-extra-badge {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.media-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.media-list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.media-list-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+}
+
+.media-remove-btn {
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
 .travel-content h3 {
     margin: 0 0 0.35rem 0;
     font-size: 1.1rem;
@@ -860,6 +913,127 @@ footer {
     padding: 3rem 1rem;
     color: var(--color-text-muted);
     font-style: italic;
+}
+
+/* ── Travel gallery lightbox (#30) ─────────────────────────────────────────── */
+
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.lightbox.hidden {
+    display: none;
+}
+
+.lightbox-media {
+    max-width: min(90vw, 900px);
+    max-height: 75vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-media img,
+.lightbox-media video {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.lightbox-caption {
+    margin-top: 0.75rem;
+    color: #ddd;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.lightbox-counter {
+    color: #aaa;
+    font-size: 0.82rem;
+}
+
+.lightbox-close,
+.lightbox-prev,
+.lightbox-next {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: #fff;
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover,
+.lightbox-prev:hover,
+.lightbox-next:hover {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.lightbox-close {
+    top: 1rem;
+    right: 1rem;
+    font-size: 1.4rem;
+}
+
+.lightbox-prev {
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox-next {
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox-prev.hidden,
+.lightbox-next.hidden {
+    display: none;
+}
+
+/* Make cards with multiple media look clickable */
+.travel-card.has-gallery {
+    cursor: pointer;
+}
+
+.travel-card.has-gallery .media-thumb-wrap::after {
+    content: 'View gallery';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0);
+    color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background 0.2s, color 0.2s;
+    border-radius: 10px 10px 0 0;
+}
+
+.travel-card.has-gallery:hover .media-thumb-wrap::after {
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
 }
 
 /* AI Dev section */
