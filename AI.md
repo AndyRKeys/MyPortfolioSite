@@ -49,25 +49,25 @@ If the issue doesn't exist yet, create it on GitHub with:
 
 ### 2. Planning
 Before writing code:
-- Read the issue and any linked context
-- Examine existing code patterns and architecture
-- Comment a plan on the issue before starting work
-- Ask for clarification if requirements are ambiguous
+1. Read the issue and any linked context
+2. Examine existing code patterns and architecture
+3. Comment a plan on the issue before starting work
+4. Ask for clarification if requirements are ambiguous
 
 ### 3. Implementation
-- Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
-- Commit regularly with clear messages
-- Keep changes focused — one issue per branch
-- Push commits as you go (don't wait until done)
+1. Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
+2. Commit regularly with clear messages
+3. Keep changes focused — one issue per branch
+4. Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
 Once implementation is complete:
-- Raise a PR from the branch → `dev`
-- Link the issue number (`Closes #N`)
-- Include a clear summary of what changed and why
-- Wait for review, testing, and approval before merging
+1. Raise a PR from the branch → `dev`
+2. Link the issue number (`Closes #N`)
+3. Include a clear summary of what changed and why
+4. Wait for review, testing, and approval before merging
 
-**You** will review, test locally, and merge when ready. The AI does not merge PRs.
+The AI does not merge PRs — you will review, test locally, and merge when ready.
 
 ### 5. Release to Production
 
@@ -88,15 +88,14 @@ The AI will:
 5. Archive or clean up any planning docs whose work is now fully shipped (see [Doc Lifecycle](#doc-lifecycle) below)
 
 You will:
-- Review the release summary
-- Test any critical paths on `release/YYYY-MM-DD` if needed
-- Approve and merge the PR to `main` (the AI does not merge)
-- The deployment script will pull from `main` and go live
+1. Review the release summary
+2. Test any critical paths on `release/YYYY-MM-DD` if needed
+3. Approve and merge the PR to `main` (the AI does not merge)
+4. The deployment script will pull from `main` and go live
 
 ### 6. Hotfixes (Emergency Production Fixes)
 
 If a critical bug is discovered on production:
-
 1. Instruct the AI to create a hotfix: `Create hotfix/issue-N-short-description for the production bug`
 2. The AI will branch from `main`, fix, commit, and raise a PR → `main`
 3. You review and approve the hotfix PR
