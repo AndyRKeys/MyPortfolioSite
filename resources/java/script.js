@@ -258,14 +258,14 @@ function renderLightboxItem() {
 }
 
 function initLightbox() {
-    $('#travel-lightbox .lightbox-close').on('click', closeLightbox);
-    $('#travel-lightbox').on('click', function (e) {
+    $(document).on('click', '#travel-lightbox .lightbox-close', closeLightbox);
+    $(document).on('click', '#travel-lightbox', function (e) {
         if ($(e.target).is('#travel-lightbox')) closeLightbox();
     });
-    $('#travel-lightbox .lightbox-prev').on('click', function () {
+    $(document).on('click', '#travel-lightbox .lightbox-prev', function () {
         if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
     });
-    $('#travel-lightbox .lightbox-next').on('click', function () {
+    $(document).on('click', '#travel-lightbox .lightbox-next', function () {
         if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
     });
     $(document).on('keydown', function (e) {

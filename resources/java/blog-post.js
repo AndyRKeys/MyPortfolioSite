@@ -1,4 +1,4 @@
-var API_BASE = '';
+var API_BASE = API_BASE || '/api';
 
 function sanitizeHtml(html) {
     var temp = document.createElement('div');
