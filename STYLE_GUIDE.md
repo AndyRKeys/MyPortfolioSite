@@ -296,24 +296,62 @@ const result = await pool.query(`SELECT * FROM blog_posts WHERE id = '${id}'`);
 
 ## Comments
 
-Add a comment **only** when:
+Comments communicate **intent and structure** — not a running narration of what the code does.
 
-- The logic is non-obvious or counterintuitive
-- Explaining a workaround for a specific browser bug or library quirk
-- Documenting a hidden constraint or invariant
+Logical flow does not need to be described in comments. If a sequence of steps is hard to follow without explanation, that is a signal to extract a well-named function, not to add prose. Well-named functions, early returns, and clear variable names are the primary tools for communicating flow.
 
-**Never comment:**
+### Block summary comments
 
-- What the code does (use clear names instead)
-- The current task (put that in the PR description)
+Add a short summary comment above each distinct logical block within a function or file. This is the **primary use of comments** — acting as section headers that let a reader scan the shape of the code before reading the detail.
+
+```javascript
+async function createPost(data) {
+    // Validate slug uniqueness
+    const existing = await pool.query(
+        'SELECT id FROM blog_posts WHERE slug = $1', [data.slug]
+    );
+    if (existing.rows.length) throw Object.assign(new Error('Slug already exists'), { status: 409 });
+
+    // Build insert
+    const { title, body_markdown, post_date, excerpt, slug } = data;
+    const result = await pool.query(
+        `INSERT INTO blog_posts (title, body_markdown, post_date, excerpt, slug)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [title, body_markdown, post_date, excerpt, slug]
+    );
+
+    // Return created row
+    return result.rows[0];
+}
+```
+
+Keep block summaries short — one line, imperative phrasing (`Build query`, `Validate input`, `Render card`). Do not restate the function name.
+
+### Non-obvious logic
+
+Add an inline comment when the *why* is not clear from the code itself:
+
+```javascript
+// ✅ Explains why — not obvious from the code
+var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
+// Force local midnight to avoid timezone offset shifting the display date
+
+// ✅ Documents a workaround
+req.body = result.data; // Zod coerces types — use result.data, not req.body directly
+```
+
+### Never comment
+
+- What a line does when the code already says it clearly
+- The current task or ticket number (put that in the PR description)
 - Obvious operations
 
 ```javascript
-// ✅ Explains the why — not obvious from code alone
-var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
-
-// ❌ Describes the what — the code already says this
+// ❌ Redundant — the code says this
 var name = user.name; // Get the user's name
+
+// ❌ Task note — belongs in the PR, not the code
+// TODO: fix this later
 ```
 
 ---
