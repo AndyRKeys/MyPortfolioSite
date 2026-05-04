@@ -45,4 +45,7 @@ function loadPosts() {
 
 $(document).ready(function () {
     loadPosts();
+    if (!isAdminSession()) {
+        fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
+    }
 });
