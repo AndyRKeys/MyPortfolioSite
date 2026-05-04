@@ -537,6 +537,7 @@ footer a:hover {
 .travel-content h3 {
     margin: 0 0 0.35rem 0;
     font-size: 1.1rem;
+    color: var(--color-text);
 }
 
 /* Meta block: location on first line, date on second */
@@ -1660,9 +1661,15 @@ footer {
     padding: 1.5rem 1.75rem;
     box-shadow: 0 2px 12px var(--color-shadow);
     text-decoration: none;
-    color: inherit;
+    /* Explicit colour token prevents UA :visited purple overriding in light mode (fixes #87) */
+    color: var(--color-text);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     border-left: 3px solid var(--color-border-strong);
+}
+
+/* Prevent browser :visited colour bleeding onto card title text */
+.post-card:visited {
+    color: var(--color-text);
 }
 
 .post-card:hover {
@@ -2339,10 +2346,11 @@ footer {
 
 /* ── Issue #78: clickable cards & detail page styles ────────────────────────── */
 
-/* Travel card now an <a> — strip default link styling */
+/* Travel card now an <a> — strip default link styling, use token colour to
+   prevent UA :visited purple overriding in light mode (fixes #87) */
 a.travel-card {
     display: block;
-    color: inherit;
+    color: var(--color-text);
     text-decoration: none;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -2352,14 +2360,21 @@ a.travel-card:hover {
     box-shadow: 0 6px 20px var(--color-shadow);
 }
 
+/* Prevent browser :visited colour bleeding onto card content */
 a.travel-card:visited {
-    color: inherit;
+    color: var(--color-text);
 }
 
-/* Timeline item link wrapping <h3> (used by both blog and travel) */
+/* Timeline item link wrapping <h3> (used by both blog and travel) —
+   explicit token colour prevents UA :visited purple in light mode (fixes #87) */
 .timeline-content a {
-    color: inherit;
+    color: var(--color-text);
     text-decoration: none;
+}
+
+/* Prevent browser :visited colour overriding the heading colour in light mode */
+.timeline-content a:visited {
+    color: var(--color-text);
 }
 
 .timeline-content a:hover h3 {
