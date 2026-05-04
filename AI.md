@@ -17,13 +17,18 @@ feature/* or fix/* (per GitHub issue)
 **Branch naming:**
 - `feature/issue-N-short-description` — for new features
 - `fix/issue-N-short-description` — for bug fixes
+- `release/YYYY-MM-DD` — for production releases (with optional `-N` suffix for same-day releases)
+- `hotfix/issue-N-short-description` — for emergency production fixes
 - One branch per GitHub issue only
 
 **Critical guardrails:**
 
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
-- **Pull requests** go `feature|fix/* → dev` for integration testing, then `dev → main` for production.
+- **Pull requests** go `feature|fix/* → dev` for integration testing and review.
+- **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
+- **Hotfixes** branch from `main`, not `dev`, for emergency production fixes.
 - **Never force-push** to shared branches (`dev`, `main`). Only force-push to your own feature branch if absolutely necessary.
+- **Only you merge to `main`** — approve all PRs to main. AI creates branches and PRs, you approve merges.
 
 ## Expected AI Workflow
 
@@ -56,22 +61,44 @@ Once implementation is complete:
 
 **You** will review, test locally, and merge when ready. The AI does not merge PRs.
 
-### 5. Release
-When you are ready to release, instruct the AI to:
-1. Create a `release/YYYY-MM-DD` branch from `dev`
-   - If releasing more than once on the same day: `release/YYYY-MM-DD-2`, `release/YYYY-MM-DD-3`, etc.
-2. Raise a PR from `release/YYYY-MM-DD` → `main` summarising:
-   - All features added
-   - All bugs fixed
-   - Any breaking changes or deployment notes
+### 5. Release to Production
 
-**You** approve all merges to `main`. The AI never merges to main.
+When you are ready to release to production, instruct the AI with:
+```
+Create a release branch for today and raise a PR to main
+```
+
+The AI will:
+1. Create a `release/YYYY-MM-DD` branch from `dev` (or `release/YYYY-MM-DD-2`, etc. if already released today)
+2. Fetch all commits since the last release
+3. Raise a PR from `release/YYYY-MM-DD` → `main` with a summary:
+   - All features added (with issue numbers)
+   - All bugs fixed (with issue numbers)
+   - Any breaking changes or deployment notes
+   - Links to all related PRs merged since last release
+
+**You** will:
+- Review the release summary
+- Test any critical paths on `release/YYYY-MM-DD` if needed
+- Approve and merge the PR to `main` (the AI does not merge)
+- The deployment script will pull from `main` and go live
+
+### 6. Hotfixes (Emergency Production Fixes)
+
+If a critical bug is discovered on production:
+
+1. Instruct the AI to create a hotfix: `Create hotfix/issue-N-short-description for the production bug`
+2. The AI will branch from `main`, fix, commit, and raise a PR → `main`
+3. You review and approve the hotfix PR
+4. After merging to `main`, instruct: `Merge hotfix into dev to keep branches in sync`
+5. The AI will merge `main` back to `dev`
 
 ### Branching diagram
 
 ```
 main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/issue-N-*
-                                                   ←── fix/issue-N-*
+ ↑                                              ←── fix/issue-N-*
+ └── hotfix/issue-N-* ────────────────────────(emergency fixes only)
 ```
 
 ## Commit Conventions
