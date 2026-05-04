@@ -43,25 +43,120 @@ docker compose exec backend npm run test:coverage
 
 ## Capturing Test Output
 
-Test output is verbose and scrolls quickly. Use `Tee-Object` to write output to a timestamped file **and** keep it visible in the terminal simultaneously:
+Test output is verbose and scrolls quickly. There are two patterns depending on context:
+
+### Ad-hoc commands — use `Tee-Object`
+
+Pipe any command through `Tee-Object` to write output to a timestamped file **and** keep it visible in the terminal simultaneously:
 
 ```powershell
 bash scripts/dev-local.sh test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 ```
 
-The `test-results\` folder is gitignored — create it once if it doesn't exist:
+### PR validation scripts — use `Start-Transcript` (built in)
+
+All `scripts/Test-PR*.ps1` scripts use `Start-Transcript` internally, so output is captured automatically — no extra flags needed:
+
+```powershell
+# Output goes to console AND test-results\PR104-<timestamp>.txt automatically
+.\scripts\Test-PR104.ps1 -Token "eyJ..."
+```
+
+The log file path is printed in the script header and footer so you always know where to find it.
+
+### Setup (one-time)
+
+Create the `test-results\` folder if it doesn't exist. It is gitignored so logs never get committed:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path test-results
 ```
 
-This is especially useful when running the full PR validation script, which produces long output across multiple test suites:
+---
+
+## PR Validation Script Template
+
+When creating a `Test-PR<N>.ps1` script for a new PR, use this as the starting point. The key requirement is that **every PR test script must include `Start-Transcript` / `Stop-Transcript`** so output is always captured to `test-results\` without the caller having to remember anything.
 
 ```powershell
-.\scripts\Test-PR104.ps1 | Tee-Object -FilePath "test-results\PR104-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+#Requires -Version 5.1
+param(
+    [string]$Token      = '',
+    [string]$BaseUrl    = 'http://localhost',
+    [switch]$SkipVitest
+)
+
+# Output capture — console AND timestamped file
+$resultsDir = Join-Path $PSScriptRoot '..' 'test-results'
+if (-not (Test-Path $resultsDir)) {
+    New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+}
+$timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$logFile   = Join-Path $resultsDir "PR<N>-$timestamp.txt"
+Start-Transcript -Path $logFile -Append | Out-Null
+
+$pass = 0; $fail = 0; $skip = 0; $results = @()
+
+function Test-Endpoint {
+    param(
+        [string]$Name,
+        [string]$Method,
+        [string]$Url,
+        [string]$Body       = '',
+        [string[]]$Headers  = @(),
+        [int]$ExpectStatus,
+        [string]$ExpectBody = '',
+        [bool]$RequiresAuth = $false
+    )
+    if ($RequiresAuth -and -not $Token) {
+        Write-Host "  [SKIP] $Name (no token provided)" -ForegroundColor DarkYellow
+        $script:skip++
+        $script:results += [PSCustomObject]@{ Result = 'SKIP'; Name = $Name; Detail = 'No token' }
+        return
+    }
+    $curlArgs = @('-s', '-o', 'tmp_body.txt', '-w', '%{http_code}', '-X', $Method)
+    foreach ($h in $Headers) { $curlArgs += @('-H', $h) }
+    if ($Body) { $curlArgs += @('-d', $Body) }
+    $curlArgs += $Url
+    $statusCode = curl.exe @curlArgs
+    $bodyText   = if (Test-Path tmp_body.txt) { Get-Content tmp_body.txt -Raw } else { '' }
+    if (Test-Path tmp_body.txt) { Remove-Item tmp_body.txt -Force }
+    $passed = ([int]$statusCode -eq $ExpectStatus) -and ((-not $ExpectBody) -or ($bodyText -like "*$ExpectBody*"))
+    if ($passed) {
+        Write-Host "  [PASS] $Name" -ForegroundColor Green
+        $script:pass++
+        $script:results += [PSCustomObject]@{ Result = 'PASS'; Name = $Name; Detail = "$statusCode" }
+    } else {
+        $detail = "Expected $ExpectStatus got $statusCode"
+        if ($bodyText -notlike "*$ExpectBody*") { $detail += " | body: $($bodyText.Trim())" }
+        Write-Host "  [FAIL] $Name — $detail" -ForegroundColor Red
+        $script:fail++
+        $script:results += [PSCustomObject]@{ Result = 'FAIL'; Name = $Name; Detail = $detail }
+    }
+}
+
+Write-Host ""
+Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host "  PR #<N> Test Run — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
+Write-Host "  Log file : $logFile"
+Write-Host "═" * 54 -ForegroundColor Cyan
+
+# --- add Test-Endpoint calls here ---
+
+Write-Host ""
+Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host "  PASSED : $pass" -ForegroundColor Green
+if ($skip -gt 0) { Write-Host "  SKIPPED: $skip" -ForegroundColor DarkYellow }
+Write-Host "  FAILED : $fail" -ForegroundColor $(if ($fail -gt 0) { 'Red' } else { 'Green' })
+Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host "  Full log: $logFile" -ForegroundColor DarkGray
+Write-Host ""
+
+Stop-Transcript | Out-Null
+if ($fail -gt 0) { exit 1 } else { exit 0 }
 ```
 
-The terminal still shows live output; the file is there for scrolling back through failures or sharing with reviewers.
+Name the script `scripts/Test-PR<N>.ps1` where `<N>` is the PR number, and replace the two `<N>` placeholders in the template.
 
 ---
 
