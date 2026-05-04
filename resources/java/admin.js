@@ -129,7 +129,9 @@ function setPasskeyMessage(msg, isError = false) {
 // ── Travel memories ───────────────────────────────────────────────────────────
 
 let currentFile = null;
-let editingTravelMedia = null; // preserved existing media when editing
+let editingTravelMedia = null;
+let geoconfirmMap = null;
+let geoconfirmMarker = null;
 
 function showPreview(travel) {
     const previewMedia = $('.preview-media');
@@ -161,6 +163,7 @@ function clearTravelForm() {
     currentFile = null;
     editingTravelMedia = null;
     setTravelMessage('');
+    hideGeoconfirmMap();
 }
 
 function buildSavedMemoryRow(memory) {
@@ -227,6 +230,11 @@ async function loadTravelForEdit(memory) {
             $('#travel-preview').addClass('hidden');
         }
 
+        // Show confirmation map if coords already exist on this memory
+        if (full.lat != null && full.lng != null) {
+            updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
+        }
+
         $('#travel-cancel-btn').removeClass('hidden');
         setTravelMessage('Editing: ' + full.title);
         document.getElementById('travel-title').scrollIntoView({ behavior: 'smooth' });
@@ -276,16 +284,70 @@ function setTravelMessage(msg, isError = false, isHint = false) {
     el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
 }
 
+// ── Geocode confirmation map ───────────────────────────────────────────────────
+
+function updateGeoconfirmMap(lat, lng) {
+    if (!window.L) return;
+    const mapEl = document.getElementById('geoconfirm-map');
+    if (!mapEl) return;
+
+    mapEl.classList.remove('hidden');
+
+    if (!geoconfirmMap) {
+        geoconfirmMap = L.map('geoconfirm-map', { scrollWheelZoom: false, zoomControl: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(geoconfirmMap);
+    }
+
+    const latlng = [lat, lng];
+    geoconfirmMap.setView(latlng, 10);
+
+    if (geoconfirmMarker) {
+        geoconfirmMarker.setLatLng(latlng);
+    } else {
+        geoconfirmMarker = L.marker(latlng).addTo(geoconfirmMap);
+    }
+
+    // Leaflet needs a size nudge after becoming visible
+    setTimeout(() => geoconfirmMap.invalidateSize(), 50);
+}
+
+function hideGeoconfirmMap() {
+    const mapEl = document.getElementById('geoconfirm-map');
+    if (mapEl) mapEl.classList.add('hidden');
+    if (geoconfirmMarker && geoconfirmMap) {
+        geoconfirmMap.removeLayer(geoconfirmMarker);
+        geoconfirmMarker = null;
+    }
+}
+
+// ── EXIF GPS autofill ─────────────────────────────────────────────────────────
+
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
 async function tryAutofillGpsFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
-    if ($('#travel-lat').val() || $('#travel-lng').val()) return;
     try {
-        const gps = await exifr.gps(file);
+        // exifr.parse with explicit GPS tags is more reliable across camera/phone formats
+        // than exifr.gps() alone which can miss some makernote-only GPS data.
+        let gps = null;
+        try {
+            const tags = await exifr.parse(file, { gps: true });
+            if (tags && Number.isFinite(tags.latitude) && Number.isFinite(tags.longitude)) {
+                gps = { latitude: tags.latitude, longitude: tags.longitude };
+            }
+        } catch { /* fall through to exifr.gps() */ }
+
+        if (!gps) {
+            gps = await exifr.gps(file);
+        }
+
         if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
             $('#travel-lat').val(gps.latitude.toFixed(6));
             $('#travel-lng').val(gps.longitude.toFixed(6));
             setTravelMessage('GPS auto-filled from photo EXIF.');
+            updateGeoconfirmMap(gps.latitude, gps.longitude);
         } else {
             setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
         }
@@ -312,10 +374,13 @@ async function geocodeLocation() {
             setTravelMessage('Location not found — try a more specific name.', true);
             return;
         }
-        const { lat, lon } = results[0];
-        $('#travel-lat').val(parseFloat(lat).toFixed(6));
-        $('#travel-lng').val(parseFloat(lon).toFixed(6));
-        setTravelMessage('Coordinates filled from location name.');
+        const { lat, lon, display_name } = results[0];
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lon);
+        $('#travel-lat').val(parsedLat.toFixed(6));
+        $('#travel-lng').val(parsedLng.toFixed(6));
+        setTravelMessage(`Coordinates set — confirm pin location on the map below (matched: ${display_name.split(',').slice(0, 3).join(',')}).`, false, true);
+        updateGeoconfirmMap(parsedLat, parsedLng);
     } catch {
         setTravelMessage('Geocode failed — check your connection and try again.', true);
     } finally {
@@ -325,7 +390,6 @@ async function geocodeLocation() {
 }
 
 // Try to read DateTimeOriginal from image EXIF and populate the date input.
-// Only fills if the current value is today's default (i.e. not deliberately set).
 async function tryAutofillDateFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
     const currentVal = $('#travel-date').val();
@@ -347,6 +411,17 @@ async function tryAutofillDateFromFile(file) {
 function initTravelForm() {
     $('#geocode-btn').on('click', function () {
         geocodeLocation();
+    });
+
+    // Update confirmation map when coords are changed manually
+    $('#travel-lat, #travel-lng').on('change input', function () {
+        const lat = parseFloat($('#travel-lat').val());
+        const lng = parseFloat($('#travel-lng').val());
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            updateGeoconfirmMap(lat, lng);
+        } else {
+            hideGeoconfirmMap();
+        }
     });
 
     $('#travel-file').on('change', function (event) {
@@ -518,7 +593,6 @@ async function loadAdminPosts() {
 function loadPostForEdit(post) {
     $('#post-edit-id').val(post.id);
     $('#post-title').val(post.title);
-    // Fetch full body via admin route so drafts (published_at IS NULL) are included
     authFetch(`/posts/admin/${post.id}`).then(async r => {
         if (r.ok) {
             const full = await r.json();
