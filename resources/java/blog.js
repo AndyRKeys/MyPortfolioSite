@@ -43,13 +43,12 @@ function applyBlogView(view) {
 }
 
 function initBlogViewToggle() {
-    // Read the active button from the DOM so the default view in the HTML
-    // is the single source of truth (cards is active by default).
-    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'cards';
-    applyBlogView(activeView);
-
     // Scoped to .blog-view-toggle to avoid colliding with .travel-view-toggle
     // when both script.js and blog.js are loaded on blog.html.
+    // Cards and timeline must both be populated before this is called.
+    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
+    applyBlogView(activeView);
+
     $('.blog-view-toggle .view-toggle-btn').on('click', function () {
         var view = $(this).data('view');
         $('.blog-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
@@ -59,6 +58,11 @@ function initBlogViewToggle() {
 }
 
 function loadPosts() {
+    // Enforce the active view immediately so containers are correctly
+    // hidden/shown from the very start of the load — before any data arrives.
+    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
+    applyBlogView(activeView);
+
     fetch(API_BASE + '/posts')
         .then(function (res) { return res.json(); })
         .then(function (posts) {
@@ -92,7 +96,7 @@ function loadPosts() {
                 }));
             });
 
-            // Wire toggle — cards and timeline must both be populated first.
+            // Wire toggle buttons — cards and timeline must both be populated first.
             initBlogViewToggle();
         })
         .catch(function () {
