@@ -2,6 +2,15 @@
 
 Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
 
+## Markdown List Conventions
+
+Use this rule consistently throughout this file and in all docs written by the AI:
+
+- **Numbered lists** — for ordered sequences where the steps must happen in a specific order (e.g. a deployment procedure, a hotfix process)
+- **Bullet lists** — for unordered collections of rules, properties, options, or items where sequence does not matter
+
+---
+
 ## Branching Strategy
 
 This project follows a three-tier branching model:
@@ -22,7 +31,6 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
-
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
 - **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
@@ -36,7 +44,7 @@ feature/* or fix/* (per GitHub issue)
 If the issue doesn't exist yet, create it on GitHub with:
 - Clear title and description
 - Steps to reproduce (for bugs)
-- Expected vs actual behavior
+- Expected vs actual behaviour
 - Any relevant context (related PRs, design docs, etc.)
 
 ### 2. Planning
@@ -79,7 +87,7 @@ The AI will:
 4. Append an entry to `docs/RELEASE_NOTES.md` (see [Doc Lifecycle](#doc-lifecycle) below)
 5. Archive or clean up any planning docs whose work is now fully shipped (see [Doc Lifecycle](#doc-lifecycle) below)
 
-**You** will:
+You will:
 - Review the release summary
 - Test any critical paths on `release/YYYY-MM-DD` if needed
 - Approve and merge the PR to `main` (the AI does not merge)
@@ -202,13 +210,12 @@ Key points summarised here:
 ### Comments
 
 Keep comments **concise and rare**. Add them only when:
-
 - The logic is unusual or non-obvious
 - Explaining a workaround for a specific bug
 - Documenting a hidden constraint or invariant
 - The code does something surprising
 
-**Do NOT comment:**
+Do NOT comment:
 - What the code does (use clear variable names instead)
 - The current task (that belongs in PR descriptions)
 - Obvious operations
@@ -284,10 +291,12 @@ var name = user.name; // Get the user's name
 
 For urgent production bugs that can't wait for the normal release cycle:
 
-- Branch from `main` as `hotfix/issue-N-short-description`
-- Fix, commit, and raise a PR → `main` with a hotfix summary
-- After merging to `main`, also merge back to `dev` to keep branches in sync
-- Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
+1. Branch from `main` as `hotfix/issue-N-short-description`
+2. Fix, commit, and raise a PR → `main` with a hotfix summary
+3. After merging to `main`, merge back to `dev` to keep branches in sync
+4. Append a hotfix entry to `docs/RELEASE_NOTES.md`
+
+Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
 
 ## Context for AI Models
 
