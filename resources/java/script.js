@@ -130,9 +130,18 @@ function buildTimelineItem(opts) {
     }
 
     if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         var img = $('<img class="timeline-thumb" alt="">').attr('src', opts.mediaUrl);
         img.on('error', function () { $(this).remove(); });
-        content.append(img);
+        mediaWrap.append(img);
+
+        // Show "+N more" badge if multiple media items exist
+        if (opts.mediaCount && opts.mediaCount > 1) {
+            var extraCount = opts.mediaCount - 1;
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+        }
+
+        content.append(mediaWrap);
     }
 
     item.append(content);
@@ -476,6 +485,7 @@ function loadPublicTravelPosts() {
                     notes:     travel.notes,
                     mediaUrl:  mediaUrl,
                     mediaType: mediaType,
+                    mediaCount: allMedia ? allMedia.length : 0,
                 });
 
                 // Wire up lightbox for timeline image if media array exists
