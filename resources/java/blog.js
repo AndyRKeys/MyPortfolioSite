@@ -43,6 +43,18 @@ function loadPosts() {
         });
 }
 
+function isAdminSession() {
+    var token = localStorage.getItem('adminToken');
+    if (!token) return false;
+    try {
+        var payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp * 1000 > Date.now();
+    } catch (e) { return false; }
+}
+
 $(document).ready(function () {
     loadPosts();
+    if (!isAdminSession()) {
+        fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
+    }
 });
