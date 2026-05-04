@@ -22,9 +22,11 @@ function formatPostDate(post) {
     return new Date(rawDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-function buildPostCard(post) {
-    // Delegate to the shared buildPostCard helper in script.js (window.buildPostCard)
-    // so blog and travel cards share the same structure and cannot drift apart.
+// Renamed from buildPostCard to avoid shadowing window.buildPostCard (defined in
+// script.js) which would cause infinite recursion — every global function is a
+// property of window, so a local buildPostCard() calling window.buildPostCard()
+// was calling itself.
+function buildBlogPostCard(post) {
     return window.buildPostCard('blog', {
         slug:    post.slug,
         title:   post.title,
@@ -80,7 +82,7 @@ function loadPosts() {
             }
 
             // Cards view
-            posts.forEach(function (post) { list.append(buildPostCard(post)); });
+            posts.forEach(function (post) { list.append(buildBlogPostCard(post)); });
 
             // Timeline view — sorted descending by post_date / published_at
             var sorted = posts.slice().sort(function (a, b) {
@@ -102,7 +104,8 @@ function loadPosts() {
             // Wire toggle buttons — cards and timeline must both be populated first.
             initBlogViewToggle();
         })
-        .catch(function () {
+        .catch(function (err) {
+            console.error('loadPosts failed:', err);
             $('#posts-list').html('<p class="hint" style="color:var(--color-error)">Could not load posts.</p>');
         });
 }
