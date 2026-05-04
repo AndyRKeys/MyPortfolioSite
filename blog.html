@@ -47,15 +47,8 @@
                 <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards</button>
             </div>
 
-            <!-- hidden until cards view is selected -->
-            <div id="posts-list" class="posts-list hidden">
-                <!-- populated from API by blog.js -->
-            </div>
-
-            <div id="blog-timeline" class="timeline">
-                <!-- populated from API by blog.js -->
-            </div>
-
+            <div id="posts-list" class="posts-list hidden"></div>
+            <div id="blog-timeline" class="timeline"></div>
             <div id="posts-empty" class="posts-empty hidden">
                 <p>No posts yet &mdash; check back soon.</p>
             </div>
@@ -73,10 +66,8 @@
     <script src="./resources/java/dev-env.js"></script>
     <script src="./resources/java/darkmode.js"></script>
     <script src="./resources/java/nav.js"></script>
+    <!-- jQuery must load before modules so $ is available as a global -->
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
-    <script src="./resources/java/auth-utils.js"></script>
-    <!-- script.js must load before blog.js to expose window.buildTimelineItem -->
-    <script src="./resources/java/script.js"></script>
-    <script src="./resources/java/blog.js"></script>
+    <script type="module" src="./resources/java/blog.js"></script>
 </body>
 </html>
