@@ -258,21 +258,35 @@ function renderLightboxItem() {
 }
 
 function initLightbox() {
-    $('#travel-lightbox .lightbox-close').on('click', closeLightbox);
-    $('#travel-lightbox').on('click', function (e) {
-        if ($(e.target).is('#travel-lightbox')) closeLightbox();
+    $(document).on('click', '.lightbox-close', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
     });
-    $('#travel-lightbox .lightbox-prev').on('click', function () {
+    $(document).on('click', '#travel-lightbox', function (e) {
+        if ($(e.target).attr('id') === 'travel-lightbox') {
+            closeLightbox();
+        }
+    });
+    $(document).on('click', '.lightbox-prev', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
     });
-    $('#travel-lightbox .lightbox-next').on('click', function () {
+    $(document).on('click', '.lightbox-next', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
     });
     $(document).on('keydown', function (e) {
-        if ($('#travel-lightbox').hasClass('hidden')) return;
-        if (e.key === 'Escape') closeLightbox();
-        if (e.key === 'ArrowLeft' && lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
-        if (e.key === 'ArrowRight' && lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
+        var lightbox = document.getElementById('travel-lightbox');
+        if (!lightbox || lightbox.classList.contains('hidden')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeLightbox();
+        }
+        if (e.key === 'ArrowLeft' && lightboxIndex > 0) { e.preventDefault(); lightboxIndex--; renderLightboxItem(); }
+        if (e.key === 'ArrowRight' && lightboxIndex < lightboxItems.length - 1) { e.preventDefault(); lightboxIndex++; renderLightboxItem(); }
     });
 }
 
