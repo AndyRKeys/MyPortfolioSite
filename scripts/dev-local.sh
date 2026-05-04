@@ -3,11 +3,13 @@
 # Mirrors prod-deploy.sh behaviour for the Docker dev environment.
 #
 # Commands:
-#   up     — build & start all containers; auto-applies schema.sql if changed
-#   down   — stop containers (DB volume is preserved)
-#   reset  — full teardown including DB volume, then rebuild (clean slate)
-#   logs   — tail backend container logs
-#   db     — open a psql shell into the dev DB
+#   up             — build & start all containers; auto-applies schema.sql if changed
+#   down           — stop containers (DB volume is preserved)
+#   reset          — full teardown including DB volume, then rebuild (clean slate)
+#   logs           — tail backend container logs
+#   db             — open a psql shell into the dev DB
+#   test           — run the automated test suite inside the backend container
+#   test:coverage  — run tests with coverage report inside the backend container
 #
 # Run from the repo root: bash scripts/dev-local.sh <command>
 set -e
@@ -80,14 +82,30 @@ case "$1" in
       -d "${DB_NAME:-portfolio_dev}"
     ;;
 
+  test)
+    echo "=== Installing devDependencies inside backend container ==="
+    docker compose exec backend npm install --silent
+    echo "=== Running test suite ==="
+    docker compose exec backend npm test
+    ;;
+
+  test:coverage)
+    echo "=== Installing devDependencies inside backend container ==="
+    docker compose exec backend npm install --silent
+    echo "=== Running tests with coverage ==="
+    docker compose exec backend npm run test:coverage
+    ;;
+
   *)
-    echo "Usage: bash scripts/dev-local.sh [up|down|reset|logs|db]"
+    echo "Usage: bash scripts/dev-local.sh [up|down|reset|logs|db|test|test:coverage]"
     echo ""
-    echo "  up     Build & start all containers; auto-migrates schema if changed"
-    echo "  down   Stop containers (DB volume preserved)"
-    echo "  reset  Full teardown + rebuild — wipes local DB data"
-    echo "  logs   Tail backend container logs"
-    echo "  db     Open a psql shell into the dev DB"
+    echo "  up             Build & start all containers; auto-migrates schema if changed"
+    echo "  down           Stop containers (DB volume preserved)"
+    echo "  reset          Full teardown + rebuild — wipes local DB data"
+    echo "  logs           Tail backend container logs"
+    echo "  db             Open a psql shell into the dev DB"
+    echo "  test           Run automated test suite inside the backend container"
+    echo "  test:coverage  Run tests with coverage report inside the backend container"
     exit 1
     ;;
 
