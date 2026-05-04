@@ -409,7 +409,7 @@ async function tryAutofillGpsFromFile(file) {
         $('#travel-lng').val(gps.longitude.toFixed(6));
         setTravelMessage('GPS auto-filled from photo EXIF.');
         updateGeoconfirmMap(gps.latitude, gps.longitude);
-        reverseGeocodeToLocation(gps.latitude, gps.longitude);
+        await reverseGeocodeToLocation(gps.latitude, gps.longitude);
     } else {
         setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
     }
@@ -429,7 +429,7 @@ async function tryAutofillGpsFromFileList(files) {
             $('#travel-lng').val(gps.longitude.toFixed(6));
             setTravelMessage(`GPS auto-filled from ${file.name}.`);
             updateGeoconfirmMap(gps.latitude, gps.longitude);
-            reverseGeocodeToLocation(gps.latitude, gps.longitude);
+            await reverseGeocodeToLocation(gps.latitude, gps.longitude);
             return; // Stop after finding the first valid one
         }
     }
