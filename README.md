@@ -39,31 +39,48 @@ In production `config.js` exports `API = ''` so `/auth/*` calls are same-origin 
 ## Local Development
 
 ### Prerequisites
-- Node.js 20+ **OR** Docker Desktop (for containerized dev)
-- PostgreSQL (not needed if using Docker)
+- Docker Desktop (recommended)
 - A passkey-capable browser (Chrome, Safari, Edge)
+- Node.js 20+ only needed if running without Docker
 
-### Quick Start with Docker (Recommended)
+### Quick Start (Docker — Recommended)
 
-```bash
+```powershell
 # 1. Clone
 git clone https://github.com/AndyRKeys/MyPortfolioSite.git
 cd MyPortfolioSite
 
-# 2. Copy Docker env
+# 2. Copy env
 cp docker/.env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
-docker-compose up
+.\scripts\dev-local.ps1 up
 
 # 4. Open in browser
-# Frontend: http://localhost (served by Nginx)
-# or directly: http://localhost:3000 with Live Server
+# http://localhost
 ```
 
-Services start in ~30s. PostgreSQL schema auto-initializes. Backend auto-reloads on code changes via volume mount.
+Services start in ~30s. PostgreSQL schema auto-initializes on first run. Backend source is volume-mounted so file changes are reflected without rebuilding.
 
 Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
+
+### dev-local.ps1 Reference
+
+```powershell
+.\scripts\dev-local.ps1 up             # Build & start all containers
+.\scripts\dev-local.ps1 down           # Stop containers (DB volume preserved)
+.\scripts\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
+.\scripts\dev-local.ps1 logs           # Tail backend container logs
+.\scripts\dev-local.ps1 db             # Open a psql shell into the dev DB
+.\scripts\dev-local.ps1 test           # Run automated test suite in container
+.\scripts\dev-local.ps1 test:coverage  # Run tests with coverage report
+```
+
+**Troubleshooting:**
+- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
+- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
+- **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
+- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email
 
 ### Setup (Manual without Docker)
 
@@ -89,37 +106,18 @@ npm run dev
 
 Serve the frontend with VS Code Live Server and open **http://localhost:3000** (not 127.0.0.1 — WebAuthn requires `localhost` or HTTPS).
 
-Visit `http://localhost:3000/setup.html` to create the admin account and register your first passkey.
+---
 
-### Docker Reference
+## Testing
 
-**Useful commands:**
-```bash
-# Start services in background
-docker-compose up -d
+> ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine.
 
-# View logs
-docker-compose logs -f backend
-docker-compose logs -f postgres
-
-# Stop services
-docker-compose down
-
-# Rebuild backend image (after dependencies change)
-docker-compose build --no-cache backend
-
-# Access PostgreSQL shell
-docker-compose exec postgres psql -U postgres -d portfolio_dev
-
-# Fresh start (delete data)
-docker-compose down -v && docker-compose up
+```powershell
+.\scripts\dev-local.ps1 up
+.\scripts\dev-local.ps1 test
 ```
 
-**Troubleshooting:**
-- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
-- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy (check `docker-compose logs postgres`)
-- **Schema not initialized**: Manually run `docker-compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
-- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email
+See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide: test structure, what is/isn't covered, how to add new tests, and CI notes.
 
 ---
 
@@ -225,6 +223,9 @@ ssh <pi-hostname> "sudo certbot renew"
 
 | Script | Purpose |
 |--------|---------|
+| `scripts/dev-local.ps1` | Windows wrapper for all local dev commands (up/down/reset/logs/db/test) |
+| `scripts/dev-local.sh` | Bash equivalent for Linux/Mac/WSL |
+| `scripts/Test-PRN.ps1` | Per-PR smoke test script — run after `dev-local.ps1 up` |
 | `scripts/pi-setup.sh` | Full server setup from scratch (Node, PostgreSQL, Nginx, PM2) |
 | `scripts/fix-apache.ps1` | Disable Apache, enable Nginx |
 | `scripts/setup-ssl.ps1` | Install certbot and obtain Let's Encrypt cert |

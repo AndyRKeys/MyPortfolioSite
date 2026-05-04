@@ -97,6 +97,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - Edge cases to check (e.g. empty state, error handling, mobile view)
 - Regression checks for related features that could have been affected
 - Any manual setup needed before testing (e.g. seed data, env vars)
+- A reference to `scripts/Test-PRN.ps1` if one exists for the PR
 
 ### 5. Release to Production
 
@@ -295,10 +296,37 @@ var name = user.name; // Get the user's name
 
 ## Testing Before Merge
 
-- Test locally in Docker or manual dev setup
-- Verify the golden path and edge cases
+> ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.** The canonical test environment is the backend container.
+
+**See [docs/TESTING.md](./docs/TESTING.md) for the full testing guide**, including test structure, what is/isn't tested, a template for new test files, and CI notes.
+
+### Running the test suite
+
+```powershell
+# 1. Ensure the dev environment is running
+.\scripts\dev-local.ps1 up
+
+# 2. Run the full test suite inside the backend container
+.\scripts\dev-local.ps1 test
+
+# 3. Run with coverage report
+.\scripts\dev-local.ps1 test:coverage
+```
+
+### PR smoke test scripts
+
+Every PR that touches backend code **must** include a `scripts/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
+
+- The PR description **must** reference the script in its Testing Checklist section
+- The script runs `docker compose exec` directly — it does not require bash or WSL
+- Run it after `dev-local.ps1 up` with: `.\scripts\Test-PRN.ps1`
+
+### What to verify
+
+- Run `.\scripts\Test-PRN.ps1` — all checks must pass
+- Verify the golden path and edge cases manually for UI changes
 - Check for regressions in related features
-- Type checking and linting provide code correctness, **not feature correctness** — test the UI
+- Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
 - When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
 
 ## Database
@@ -336,6 +364,7 @@ When working with this project:
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
 - **Deployment:** Smart deploy script detects changes and restarts only what's needed
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
+- **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 
 See README.md for full details, scripts, and local dev setup.
 
@@ -343,9 +372,10 @@ See README.md for full details, scripts, and local dev setup.
 
 1. Check README.md for architecture and deployment info
 2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
-3. Check DATABASE.md before adding or changing any routes, migrations, or queries
-4. Check SECURITY.md before touching auth, sessions, or input handling
-5. Review recent commits to match code style
-6. Ask: "Is this change isolated, testable, and reversible?"
-7. If a task is too large, break it into smaller PRs
-8. Test locally before proposing changes (use Docker Compose or manual setup)
+3. Check docs/TESTING.md before adding or modifying tests
+4. Check DATABASE.md before adding or changing any routes, migrations, or queries
+5. Check SECURITY.md before touching auth, sessions, or input handling
+6. Review recent commits to match code style
+7. Ask: "Is this change isolated, testable, and reversible?"
+8. If a task is too large, break it into smaller PRs
+9. Test inside the Docker container before proposing changes — use `.\scripts\dev-local.ps1 test`
