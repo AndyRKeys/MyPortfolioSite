@@ -1,0 +1,9 @@
+# Dependencies and lock files
+node_modules/
+package-lock.json
+
+# Vendor / minified JS
+resources/java/jquery-3.5.1.min.js
+
+# Uploaded media
+uploads/

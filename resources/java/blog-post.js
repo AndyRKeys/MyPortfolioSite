@@ -22,13 +22,18 @@ function loadPost() {
             document.getElementById('post-header-title').textContent = post.title;
             document.getElementById('post-title').textContent = post.title;
 
-            var date = post.published_at
-                ? new Date(post.published_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
+            var rawDate = post.post_date ? String(post.post_date).slice(0, 10) + 'T00:00:00' : post.published_at;
+            var dateObj = rawDate ? new Date(rawDate) : null;
+            document.getElementById('post-date').textContent = (dateObj && !isNaN(dateObj))
+                ? dateObj.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
                 : '';
-            document.getElementById('post-date').textContent = date;
 
-            var html = marked.parse(post.body_markdown || '');
-            document.getElementById('post-markdown').innerHTML = html;
+            var md = post.body_markdown || '';
+            // Handle both sync and async versions of marked
+            var result = marked.parse(md);
+            Promise.resolve(result).then(function (html) {
+                document.getElementById('post-markdown').innerHTML = html;
+            });
 
             document.getElementById('post-loading').classList.add('hidden');
             document.getElementById('post-body').classList.remove('hidden');

@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS email_tokens (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Temporary challenge storage for WebAuthn registration and authentication
 CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_key TEXT UNIQUE NOT NULL,
@@ -39,31 +38,78 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS travel_memories (
+-- Unified posts table — covers both blog posts and travel memories.
+-- post_type: 'blog' | 'travel'
+-- post_date: display/visit date (travel uses this as visit date, blog as display date)
+-- location, media_url, media_type, lat, lng, location_estimated: travel-specific (optional for blog)
+-- published_at NULL = draft for both types
+CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_type VARCHAR(20) NOT NULL DEFAULT 'blog',
   title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) UNIQUE NOT NULL,
+  body_markdown TEXT NOT NULL DEFAULT '',
+  post_date DATE,
   location VARCHAR(255),
-  notes TEXT,
   media_url TEXT,
   media_type VARCHAR(100),
   lat DECIMAL(9,6),
   lng DECIMAL(9,6),
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Migration: add lat/lng to existing deployments
-ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6);
-ALTER TABLE travel_memories ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6);
-
-CREATE TABLE IF NOT EXISTS posts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title VARCHAR(255) NOT NULL,
-  slug VARCHAR(255) UNIQUE NOT NULL,
-  body_markdown TEXT NOT NULL DEFAULT '',
+  location_estimated BOOLEAN DEFAULT FALSE,
   published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrations: add unified fields to existing posts tables
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS post_type VARCHAR(20) NOT NULL DEFAULT 'blog';
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS post_date DATE;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(255);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(100);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location_estimated BOOLEAN DEFAULT FALSE;
+
+-- Migrate travel_memories into posts (idempotent: only runs if table still exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'travel_memories'
+  ) THEN
+    INSERT INTO posts (
+      post_type, title, slug, body_markdown, post_date, published_at,
+      location, media_url, media_type, lat, lng, created_at, updated_at
+    )
+    SELECT
+      'travel',
+      title,
+      lower(
+        regexp_replace(
+          regexp_replace(
+            regexp_replace(trim(title), '[^a-zA-Z0-9\s-]', '', 'g'),
+            '\s+', '-', 'g'
+          ),
+          '-+', '-', 'g'
+        )
+      ) || '-' || substr(id::text, 1, 8),
+      COALESCE(notes, ''),
+      visit_date,
+      created_at,
+      location,
+      media_url,
+      media_type,
+      lat,
+      lng,
+      created_at,
+      created_at
+    FROM travel_memories
+    ON CONFLICT (slug) DO NOTHING;
+
+    DROP TABLE travel_memories;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS page_visits (
   page VARCHAR(100) PRIMARY KEY,

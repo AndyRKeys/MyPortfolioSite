@@ -1,4 +1,5 @@
-var API_BASE = '';
+// API base — /api in production (Nginx proxy strips prefix), empty string in dev
+var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? '' : '/api';
 
 function escapeHtml(str) {
     return String(str)
@@ -14,7 +15,8 @@ function truncate(str, len) {
 function buildPostCard(post) {
     var card = $('<a class="post-card"></a>');
     card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(post.slug));
-    var date = post.published_at ? new Date(post.published_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+    var rawDate = post.post_date ? post.post_date + 'T00:00:00' : post.published_at;
+    var date = rawDate ? new Date(rawDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
     card.append('<h3 class="post-card-title">' + escapeHtml(post.title) + '</h3>');
     card.append('<p class="post-card-date">' + escapeHtml(date) + '</p>');
     if (post.excerpt) {
@@ -41,6 +43,18 @@ function loadPosts() {
         });
 }
 
+function isAdminSession() {
+    var token = localStorage.getItem('adminToken');
+    if (!token) return false;
+    try {
+        var payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp * 1000 > Date.now();
+    } catch (e) { return false; }
+}
+
 $(document).ready(function () {
     loadPosts();
+    if (!isAdminSession()) {
+        fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
+    }
 });

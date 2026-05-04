@@ -228,11 +228,37 @@ li a:hover {
     width: 100%;
     max-width: 720px;
     margin: 0 auto 1.5rem;
-    padding: 1.25rem;
+    padding: 1.5rem 1.75rem;
     background: var(--color-surface);
     box-shadow: 0 2px 14px var(--color-shadow);
     border-radius: 12px;
     text-align: left;
+}
+
+.admin-card-title {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 1.2rem;
+}
+
+.admin-card-title::after { display: none; }
+
+.saved-list-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 1.5rem 0 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.admin-message {
+    min-height: 1.25em;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
 }
 
 .login-section .admin-card {
@@ -413,10 +439,22 @@ footer a:hover {
     font-size: 1.1rem;
 }
 
+/* Meta block: location on first line, date on second */
 .travel-content .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
     margin: 0 0 0.75rem 0;
-    color: var(--color-text-secondary);
     font-size: 0.95rem;
+}
+
+.travel-content .meta .travel-location {
+    color: var(--color-text-secondary);
+}
+
+.travel-content .meta .travel-date {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .travel-uploader {
@@ -437,10 +475,7 @@ footer a:hover {
     gap: 0.75rem;
 }
 
-.travel-uploader label {
-    display: block;
-    font-weight: 600;
-}
+/* Removed: .travel-uploader label — travel form now uses .admin-card label styles */
 
 .travel-uploader input[type="text"],
 .travel-uploader textarea,
@@ -923,7 +958,7 @@ footer {
     }
 }
 
-/* ── Dark mode toggle button ────────────────────────────────────────────────── */
+/* ── Dark mode toggle button ──────────────────────────────────────────────── */
 
 #dark-mode-toggle {
     background: transparent;
@@ -945,7 +980,7 @@ footer {
     background: transparent;
 }
 
-/* ── Career Timeline (Issue #9) ─────────────────────────────────────────────── */
+/* ── Career Timeline (Issue #9) ─────────────────────────────────────────── */
 
 .timeline {
     max-width: 800px;
@@ -1060,7 +1095,7 @@ footer {
     }
 }
 
-/* ── GitHub activity widget (Issue #5) ──────────────────────────────────────── */
+/* ── GitHub activity widget (Issue #5) ─────────────────────────────────────── */
 
 .github-repos-grid {
     display: grid;
@@ -1230,7 +1265,7 @@ footer {
     color: var(--color-error);
 }
 
-/* ── Admin saved memories list ──────────────────────────────────────────────── */
+/* ── Admin saved memories list ────────────────────────────────────────────── */
 
 .saved-memories {
     margin-top: 1.5rem;
@@ -1284,7 +1319,7 @@ footer {
     flex-shrink: 0;
 }
 
-/* ── Blog (Issue #7) ────────────────────────────────────────────────────────── */
+/* ── Blog (Issue #7) ──────────────────────────────────────────────────────── */
 
 .posts-list {
     max-width: 800px;
@@ -1339,6 +1374,23 @@ footer {
     font-style: italic;
 }
 
+.post-back-bar {
+    max-width: 720px;
+    margin: 0 auto 0.75rem;
+    padding: 0 0.25rem;
+}
+
+.post-back-link {
+    color: var(--color-accent);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.post-back-link:hover {
+    text-decoration: underline;
+}
+
 .post-article {
     max-width: 720px;
     margin: 0 auto;
@@ -1349,6 +1401,34 @@ footer {
     box-shadow: 0 2px 12px var(--color-shadow);
 }
 
+.post-article-header {
+    margin-bottom: 0;
+}
+
+/* Scoped to the reader page only — must NOT bleed onto the admin #post-title input */
+.post-article #post-title {
+    text-align: left;
+    font-size: 2rem;
+    margin: 0 0 0.5rem;
+    color: var(--color-text);
+}
+
+.post-article #post-title::after { display: none; }
+
+.post-date {
+    color: var(--color-text-muted);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.9rem;
+    margin: 0 0 0.25rem;
+}
+
+.post-divider {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 1.5rem 0;
+}
+
+/* Legacy — keep in case of cached pages */
 .post-meta-bar {
     display: flex;
     justify-content: space-between;
@@ -1356,31 +1436,6 @@ footer {
     margin-bottom: 1rem;
     font-size: 0.9rem;
 }
-
-.post-back-link {
-    color: var(--color-accent);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.post-back-link:hover {
-    text-decoration: underline;
-}
-
-.post-date {
-    color: var(--color-text-muted);
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-}
-
-#post-title {
-    text-align: left !important;
-    font-size: 2rem;
-    margin: 0.5rem 0 1.5rem;
-    padding-bottom: 0.75rem;
-    color: var(--color-text);
-}
-
-#post-title::after { display: none; }
 
 .post-markdown {
     color: var(--color-text);
@@ -1503,7 +1558,7 @@ footer {
 
 .btn-small:hover { opacity: 0.85; }
 
-/* ── Travel map (Issue #8) ──────────────────────────────────────────────────── */
+/* ── Travel map (Issue #8) ───────────────────────────────────────────────────── */
 
 .travel-view-toggle {
     display: flex;
@@ -1600,7 +1655,7 @@ footer {
     font-size: 0.9rem;
 }
 
-/* ── Button variants ────────────────────────────────────────────────────────── */
+/* ── Button variants ─────────────────────────────────────────────────────────── */
 
 .btn-primary {
     background: var(--color-accent);
@@ -1663,16 +1718,26 @@ footer {
 
 /* ── Admin card form inputs ─────────────────────────────────────────────────── */
 
+/* Forms inside admin cards use a grid for consistent field spacing */
+#travel-form,
+#post-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
 .admin-card label {
     display: block;
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--color-text);
-    margin-bottom: 0.75rem;
+    /* No margin-bottom — gap on the parent grid handles spacing */
+    margin-bottom: 0;
 }
 
 .admin-card input[type="text"],
 .admin-card input[type="email"],
+.admin-card input[type="number"],
+.admin-card input[type="date"],
 .admin-card textarea,
 .admin-card input[type="file"] {
     width: 100%;
@@ -1690,9 +1755,21 @@ footer {
 
 .admin-card input[type="text"]:focus,
 .admin-card input[type="email"]:focus,
-.admin-card textarea:focus {
+.admin-card input[type="number"]:focus,
+.admin-card input[type="date"]:focus {
     outline: none;
     border-color: var(--color-accent);
+}
+
+/* Suppress WebKit's native calendar icon so the field looks clean */
+.admin-card input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
+    filter: invert(var(--calendar-icon-invert, 0));
+    cursor: pointer;
+}
+
+[data-theme="dark"] .admin-card input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
 }
 
 /* ── Login divider ──────────────────────────────────────────────────────────── */
@@ -1716,7 +1793,7 @@ footer {
     padding: 0 0.75rem;
 }
 
-/* ── Mobile-first post editor (Issue #7) ───────────────────────────────────── */
+/* ── Mobile-first post editor (Issue #7) ─────────────────────────────────────── */
 
 #post-form textarea#post-body {
     min-height: 240px;
@@ -1736,6 +1813,7 @@ footer {
     .admin-card input[type="text"],
     .admin-card input[type="email"],
     .admin-card input[type="number"],
+    .admin-card input[type="date"],
     .admin-card input[type="password"],
     .admin-card textarea {
         font-size: 16px;
@@ -1775,5 +1853,145 @@ footer {
         min-height: 38px;
         padding: 0.5rem;
         font-size: 0.9rem;
+    }
+}
+
+/* ── Issue #34: Styled file input ─────────────────────────────────────────── */
+
+.file-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.file-input-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.file-input-btn {
+    padding: 0.55rem 1.1rem;
+    font-size: 0.9rem;
+    height: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.file-input-label {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px;
+}
+
+/* ── Issue #39: Custom coordinate stepper ─────────────────────────────────── */
+
+/* Hide native browser up/down spinner arrows on number inputs */
+.coord-stepper input[type="number"]::-webkit-outer-spin-button,
+.coord-stepper input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.coord-stepper input[type="number"] {
+    -moz-appearance: textfield; /* Firefox */
+    appearance: textfield;
+}
+
+/* Wrapper: [−] [input] [+] in a single row */
+.coord-stepper {
+    display: flex;
+    align-items: stretch;
+    margin-top: 0.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+}
+
+.coord-stepper:focus-within {
+    border-color: var(--color-accent);
+}
+
+/* Override the generic .admin-card input styles for number inputs inside steppers */
+.coord-stepper input[type="number"] {
+    flex: 1;
+    min-width: 0;
+    padding: 0.65rem 0.6rem;
+    margin-top: 0;        /* cancel the label-child offset */
+    border: none;         /* border is on the wrapper */
+    border-radius: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.coord-stepper input[type="number"]:focus {
+    outline: none;
+    border-color: transparent; /* focus ring is on the wrapper */
+}
+
+/* Step buttons */
+.coord-step-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: auto;
+    min-height: 38px;
+    padding: 0;
+    background: var(--color-surface-alt);
+    border: none;
+    border-radius: 0;
+    color: var(--color-text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.coord-step-btn:hover {
+    background: var(--color-border);
+    color: var(--color-text);
+}
+
+.coord-step-btn:active {
+    background: var(--color-border-strong);
+    color: var(--color-surface);
+}
+
+/* Dividers between btn and input */
+.coord-step-btn:first-child {
+    border-right: 1px solid var(--color-border);
+}
+
+.coord-step-btn:last-child {
+    border-left: 1px solid var(--color-border);
+}
+
+/* Mobile: taller tap targets */
+@media (max-width: 768px) {
+    .coord-step-btn {
+        width: 44px;
+        min-height: 44px;
+    }
+
+    .coord-stepper input[type="number"] {
+        font-size: 16px; /* prevent iOS zoom */
+        padding: 0.75rem 0.4rem;
     }
 }
