@@ -293,7 +293,9 @@ function initLightbox() {
 // ── Travel cards ─────────────────────────────────────────────────────────────
 
 function buildPublicTravelCard(travel) {
-    var card = $('<article class="travel-card box draft-card"></article>');
+    // Issue #78: wrap card content in a link to navigate to detail page
+    var card = $('<a class="travel-card box draft-card"></a>');
+    card.attr('href', 'travel-post.html?id=' + encodeURIComponent(travel.id));
     card.attr('data-memory-id', travel.id);
     var media = $('<div class="media"></div>');
 
@@ -310,7 +312,7 @@ function buildPublicTravelCard(travel) {
     if (mediaUrl) {
         var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         if (mediaType && mediaType.indexOf('video') === 0) {
-            mediaWrap.append('<video controls src="' + mediaUrl + '"></video>');
+            mediaWrap.append('<video src="' + mediaUrl + '" muted></video>');
         } else {
             var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
             img.on('error', function () { $(this).attr('src', placeholder); });
@@ -325,24 +327,17 @@ function buildPublicTravelCard(travel) {
         media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
     }
 
-    // Click on card media opens lightbox when multiple items exist
-    if (allMedia && allMedia.length > 1) {
-        media.on('click', function () {
-            openLightbox(allMedia, 0, travel.title);
-        });
-    }
-
     var content = $('<div class="travel-content"></div>');
-    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
+    content.append('<h3>' + escHtml(travel.title || 'Untitled memory') + '</h3>');
     var formattedDate = formatVisitDate(travel.visit_date);
     var locationText = travel.location || 'Location not set';
     var locationPrefix = travel.location_estimated ? '~ ' : '';
-    var metaHtml = '<span class="travel-location">' + locationPrefix + locationText + '</span>';
+    var metaHtml = '<span class="travel-location">' + escHtml(locationPrefix + locationText) + '</span>';
     if (formattedDate) {
         metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
     }
     content.append('<p class="meta">' + metaHtml + '</p>');
-    content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
+    content.append('<p>' + escHtml(travel.notes || 'No notes yet.') + '</p>');
     card.append(media).append(content);
     return card;
 }
@@ -500,16 +495,14 @@ function loadPublicTravelPosts() {
                     mediaUrl:  mediaUrl,
                     mediaType: mediaType,
                     mediaCount: allMedia ? allMedia.length : 0,
+                    // Issue #78: timeline entry navigates to detail page
+                    linkHref:  'travel-post.html?id=' + encodeURIComponent(travel.id),
                 });
 
-                // Wire up lightbox for timeline image if media array exists
-                if (allMedia && allMedia.length > 0) {
-                    item.find('.timeline-thumb').css('cursor', 'pointer').on('click', function(e) {
-                        e.preventDefault();
-                        var mediaItems = allMedia.map(function(m) { return { url: m.url, type: m.type }; });
-                        openLightbox(mediaItems, 0, travel.title);
-                    });
-                }
+                // Issue #78: clicking image also navigates to detail page
+                item.find('.media-thumb-wrap').css('cursor', 'pointer').on('click', function() {
+                    window.location.href = 'travel-post.html?id=' + encodeURIComponent(travel.id);
+                });
 
                 timelineEl.append(item);
             });
