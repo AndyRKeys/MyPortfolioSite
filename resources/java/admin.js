@@ -128,39 +128,67 @@ function setPasskeyMessage(msg, isError = false) {
 
 // ── Travel memories ───────────────────────────────────────────────────────────
 
-let currentFile = null;
-let editingTravelMedia = null; // preserved existing media when editing
+let pendingFiles = [];         // File objects queued for upload
+let existingMedia = [];        // {id, url, type} from post_media (on edit)
+let removedMediaIds = [];      // post_media ids to delete on save
+let geoconfirmMap = null;      // Leaflet map for coordinate confirmation
+let geoconfirmMarker = null;   // Leaflet marker on confirmation map
 
-function showPreview(travel) {
-    const previewMedia = $('.preview-media');
-    const previewText = $('.preview-text');
-    previewMedia.empty();
-    previewText.empty();
-    if (travel.mediaUrl) {
-        previewMedia.append(
-            travel.mediaType && travel.mediaType.startsWith('video')
-                ? `<video controls src="${travel.mediaUrl}"></video>`
-                : `<img src="${travel.mediaUrl}" alt="Preview image">`
-        );
-    }
-    previewText.append('<p><strong>' + escapeHtml(travel.title || 'Untitled memory') + '</strong></p>');
-    previewText.append('<p>' + escapeHtml(travel.location || 'No location provided') + '</p>');
-    previewText.append('<p>' + escapeHtml(travel.notes || 'No notes yet.') + '</p>');
-    $('#travel-preview').removeClass('hidden');
+function renderMediaList() {
+    const list = $('#travel-media-list');
+    list.empty();
+
+    const allItems = [
+        ...existingMedia.map(m => ({ kind: 'existing', ...m })),
+        ...pendingFiles.map((f, i) => ({ kind: 'pending', index: i, name: f.name, type: f.type })),
+    ];
+
+    if (!allItems.length) { list.addClass('hidden'); return; }
+    list.removeClass('hidden');
+
+    allItems.forEach(item => {
+        const row = $('<div class="media-list-row"></div>');
+        const icon = item.type && item.type.startsWith('video') ? '🎬' : '🖼';
+        const label = item.kind === 'existing'
+            ? `${icon} ${item.url.split('/').pop()}`
+            : `${icon} ${item.name} (pending)`;
+        row.append('<span class="media-list-label">' + escapeHtml(label) + '</span>');
+        const removeBtn = $('<button type="button" class="btn-small media-remove-btn">Remove</button>');
+        if (item.kind === 'existing') {
+            removeBtn.on('click', () => {
+                removedMediaIds.push(item.id);
+                existingMedia = existingMedia.filter(m => m.id !== item.id);
+                renderMediaList();
+            });
+        } else {
+            removeBtn.on('click', () => {
+                pendingFiles.splice(item.index, 1);
+                renderMediaList();
+                if (!pendingFiles.length && !existingMedia.length) {
+                    $('.file-input-label').text('No files chosen');
+                }
+            });
+        }
+        row.append(removeBtn);
+        list.append(row);
+    });
 }
 
 function clearTravelForm() {
     $('#travel-edit-id').val('');
     $('#travel-form')[0].reset();
     $('#travel-cancel-btn').addClass('hidden');
-    $('.file-input-label').text('No file chosen');
+    $('.file-input-label').text('No files chosen');
     $('#travel-date').val(todayIso());
     $('#travel-preview').addClass('hidden');
     $('.preview-media').empty();
     $('.preview-text').empty();
-    currentFile = null;
-    editingTravelMedia = null;
+    pendingFiles = [];
+    existingMedia = [];
+    removedMediaIds = [];
+    renderMediaList();
     setTravelMessage('');
+    hideGeoconfirmMap();
 }
 
 function buildSavedMemoryRow(memory) {
@@ -217,16 +245,20 @@ async function loadTravelForEdit(memory) {
         $('#travel-lat').val(full.lat != null ? full.lat : '');
         $('#travel-lng').val(full.lng != null ? full.lng : '');
 
-        editingTravelMedia = full.media_url ? { url: full.media_url, type: full.media_type } : null;
-        currentFile = null;
-        $('.file-input-label').text('No file chosen');
+        pendingFiles = [];
+        removedMediaIds = [];
+        existingMedia = Array.isArray(full.media) && full.media.length
+            ? full.media.map(m => ({ id: m.id, url: m.url, type: m.type }))
+            : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
+        $('.file-input-label').text('No files chosen');
+        renderMediaList();
 
-        if (full.media_url) {
-            showPreview({ title: full.title, location: full.location, notes: full.notes, mediaUrl: full.media_url, mediaType: full.media_type });
-        } else {
-            $('#travel-preview').addClass('hidden');
+        // Show confirmation map if coords already exist on this memory
+        if (full.lat != null && full.lng != null) {
+            updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
         }
 
+        $('#travel-preview').addClass('hidden');
         $('#travel-cancel-btn').removeClass('hidden');
         setTravelMessage('Editing: ' + full.title);
         document.getElementById('travel-title').scrollIntoView({ behavior: 'smooth' });
@@ -244,11 +276,10 @@ async function toggleTravelPublish(memory) {
                 location: memory.location || '',
                 notes: memory.notes || '',
                 visitDate: memory.visit_date || null,
-                mediaUrl: memory.media_url || null,
-                mediaType: memory.media_type || null,
                 lat: memory.lat,
                 lng: memory.lng,
                 publish: !memory.published_at,
+                // mediaItems undefined → backend leaves existing post_media untouched
             }),
         });
         if (!res.ok) throw new Error();
@@ -269,31 +300,180 @@ async function deleteTravelMemory(id) {
     }
 }
 
-function setTravelMessage(msg, isError = false) {
+function setTravelMessage(msg, isError = false, isHint = false) {
     const el = document.getElementById('travel-message');
     if (!el) return;
     el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
+    el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
+}
+
+// ── Geocode confirmation map ───────────────────────────────────────────────────
+
+function updateGeoconfirmMap(lat, lng) {
+    if (!window.L) return;
+    const mapEl = document.getElementById('geoconfirm-map');
+    if (!mapEl) return;
+
+    mapEl.classList.remove('hidden');
+
+    if (!geoconfirmMap) {
+        geoconfirmMap = L.map('geoconfirm-map', { scrollWheelZoom: false, zoomControl: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(geoconfirmMap);
+    }
+
+    const latlng = [lat, lng];
+    geoconfirmMap.setView(latlng, 10);
+
+    if (geoconfirmMarker) {
+        geoconfirmMarker.setLatLng(latlng);
+    } else {
+        geoconfirmMarker = L.marker(latlng).addTo(geoconfirmMap);
+    }
+
+    // Leaflet needs a size nudge after becoming visible
+    setTimeout(() => geoconfirmMap.invalidateSize(), 50);
+}
+
+function hideGeoconfirmMap() {
+    const mapEl = document.getElementById('geoconfirm-map');
+    if (mapEl) mapEl.classList.add('hidden');
+    if (geoconfirmMarker && geoconfirmMap) {
+        geoconfirmMap.removeLayer(geoconfirmMarker);
+        geoconfirmMarker = null;
+    }
+}
+
+// ── EXIF GPS autofill ─────────────────────────────────────────────────────────
+
+// Returns true only if coords are finite numbers and not the null-island 0,0
+// that DJI and some cameras emit when GPS is unavailable.
+function hasValidGps(lat, lng) {
+    return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
+// Reverse geocode lat/lng to a human-readable location string using Nominatim.
+// Only populates the Location field if it is currently empty.
+async function reverseGeocodeToLocation(lat, lng) {
+    if ($('#travel-location').val().trim()) return; // don't overwrite manual input
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.address) return;
+
+        // Build a compact "City, Country" style string from available address parts
+        const a = data.address;
+        const city = a.city || a.town || a.village || a.hamlet || a.county || a.state_district || a.state || '';
+        const country = a.country || '';
+        const locationStr = [city, country].filter(Boolean).join(', ');
+
+        if (locationStr) {
+            $('#travel-location').val(locationStr);
+        }
+    } catch {
+        // Reverse geocode failure is non-fatal — silently ignore
+    }
+}
+
+// Extract GPS from a single file without setting the form.
+async function extractGpsFromFile(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return null;
+    try {
+        let gps = null;
+        try {
+            const tags = await exifr.parse(file, { gps: true });
+            if (tags && hasValidGps(tags.latitude, tags.longitude)) {
+                gps = { latitude: tags.latitude, longitude: tags.longitude };
+            }
+        } catch { /* fall through to exifr.gps() */ }
+
+        if (!gps) {
+            const raw = await exifr.gps(file);
+            if (raw && hasValidGps(raw.latitude, raw.longitude)) {
+                gps = raw;
+            }
+        }
+        return gps;
+    } catch {
+        return null;
+    }
 }
 
 // Try to read GPS coords from image EXIF and populate the lat/lng inputs.
 async function tryAutofillGpsFromFile(file) {
-    if (!file || !file.type || !file.type.startsWith('image/')) return;
-    if ($('#travel-lat').val() || $('#travel-lng').val()) return;
-    try {
-        const gps = await exifr.gps(file);
-        if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
+    const gps = await extractGpsFromFile(file);
+    if (gps) {
+        $('#travel-lat').val(gps.latitude.toFixed(6));
+        $('#travel-lng').val(gps.longitude.toFixed(6));
+        setTravelMessage('GPS auto-filled from photo EXIF.');
+        updateGeoconfirmMap(gps.latitude, gps.longitude);
+        await reverseGeocodeToLocation(gps.latitude, gps.longitude);
+    } else {
+        setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
+    }
+}
+
+// Loop through sorted files to find the first one with valid GPS coords.
+async function tryAutofillGpsFromFileList(files) {
+    // Sort by filename for consistent results across different selection orders
+    const sortedImages = files
+        .filter(f => f.type && f.type.startsWith('image/'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const file of sortedImages) {
+        const gps = await extractGpsFromFile(file);
+        if (gps) {
             $('#travel-lat').val(gps.latitude.toFixed(6));
             $('#travel-lng').val(gps.longitude.toFixed(6));
-            setTravelMessage('Location auto-filled from photo EXIF.');
+            setTravelMessage(`GPS auto-filled from ${file.name}.`);
+            updateGeoconfirmMap(gps.latitude, gps.longitude);
+            await reverseGeocodeToLocation(gps.latitude, gps.longitude);
+            return; // Stop after finding the first valid one
         }
+    }
+
+    // None of the images had valid GPS
+    setTravelMessage('No GPS data in any photo — enter coordinates manually or use Geocode.', false, true);
+}
+
+async function geocodeLocation() {
+    const q = $('#travel-location').val().trim();
+    if (!q) {
+        setTravelMessage('Enter a location name first.', true);
+        return;
+    }
+    const btn = document.getElementById('geocode-btn');
+    btn.disabled = true;
+    btn.textContent = 'Looking up…';
+    setTravelMessage('');
+    try {
+        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const results = await res.json();
+        if (!results.length) {
+            setTravelMessage('Location not found — try a more specific name.', true);
+            return;
+        }
+        const { lat, lon, display_name } = results[0];
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lon);
+        $('#travel-lat').val(parsedLat.toFixed(6));
+        $('#travel-lng').val(parsedLng.toFixed(6));
+        setTravelMessage(`Coordinates set — confirm pin location on the map below (matched: ${display_name.split(',').slice(0, 3).join(',')}).`, false, true);
+        updateGeoconfirmMap(parsedLat, parsedLng);
     } catch {
-        // EXIF parsing failed — not a problem, just continue
+        setTravelMessage('Geocode failed — check your connection and try again.', true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Geocode';
     }
 }
 
 // Try to read DateTimeOriginal from image EXIF and populate the date input.
-// Only fills if the current value is today's default (i.e. not deliberately set).
 async function tryAutofillDateFromFile(file) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
     const currentVal = $('#travel-date').val();
@@ -313,25 +493,41 @@ async function tryAutofillDateFromFile(file) {
 }
 
 function initTravelForm() {
+    $('#geocode-btn').on('click', function () {
+        geocodeLocation();
+    });
+
+    // Update confirmation map when coords are changed manually
+    $('#travel-lat, #travel-lng').on('change input', function () {
+        const lat = parseFloat($('#travel-lat').val());
+        const lng = parseFloat($('#travel-lng').val());
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            updateGeoconfirmMap(lat, lng);
+        } else {
+            hideGeoconfirmMap();
+        }
+    });
+
     $('#travel-file').on('change', function (event) {
-        const file = event.target.files && event.target.files[0];
-        if (!file) { currentFile = null; return; }
-        currentFile = file;
+        const files = Array.from(event.target.files || []);
+        if (!files.length) return;
 
-        tryAutofillGpsFromFile(file);
-        tryAutofillDateFromFile(file);
+        // EXIF auto-fill: loop through sorted images to find first with valid GPS
+        tryAutofillGpsFromFileList(files);
 
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            showPreview({
-                title: $('#travel-title').val(),
-                location: $('#travel-location').val(),
-                notes: $('#travel-notes').val(),
-                mediaUrl: e.target.result,
-                mediaType: file.type,
-            });
-        };
-        reader.readAsDataURL(file);
+        // Date auto-fill from first image by filename (for consistency)
+        const sortedImages = files
+            .filter(f => f.type && f.type.startsWith('image/'))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        if (sortedImages.length) {
+            tryAutofillDateFromFile(sortedImages[0]);
+        }
+
+        pendingFiles = pendingFiles.concat(files);
+        $('.file-input-label').text(pendingFiles.length + ' file' + (pendingFiles.length !== 1 ? 's' : '') + ' selected');
+        // Reset the input so the same file can be re-added if removed
+        event.target.value = '';
+        renderMediaList();
     });
 
     $('#travel-form').on('submit', async function (event) {
@@ -350,19 +546,23 @@ function initTravelForm() {
         }
 
         try {
-            let mediaUrl = editingTravelMedia ? editingTravelMedia.url : null;
-            let mediaType = editingTravelMedia ? editingTravelMedia.type : null;
-
-            if (currentFile) {
-                setTravelMessage('Uploading file…');
+            // Upload all pending files
+            const uploadedItems = [];
+            for (let i = 0; i < pendingFiles.length; i++) {
+                setTravelMessage(`Uploading file ${i + 1} of ${pendingFiles.length}…`);
                 const fd = new FormData();
-                fd.append('file', currentFile);
+                fd.append('file', pendingFiles[i]);
                 const upRes = await authFetchMultipart('/upload', fd);
                 const upData = await upRes.json();
                 if (!upRes.ok) throw new Error(upData.error || 'Upload failed');
-                mediaUrl = upData.url;
-                mediaType = upData.type;
+                uploadedItems.push({ url: upData.url, type: upData.type });
             }
+
+            // Combine: remaining existing media first, then newly uploaded
+            const mediaItems = [
+                ...existingMedia.filter(m => m.id !== null).map(m => ({ url: m.url, type: m.type })),
+                ...uploadedItems,
+            ];
 
             const editId = $('#travel-edit-id').val();
             const travel = {
@@ -370,8 +570,7 @@ function initTravelForm() {
                 location: $('#travel-location').val().trim(),
                 notes: $('#travel-notes').val().trim(),
                 visitDate: $('#travel-date').val() || null,
-                mediaUrl,
-                mediaType,
+                mediaItems,
                 lat: $('#travel-lat').val(),
                 lng: $('#travel-lng').val(),
                 publish,
@@ -482,7 +681,6 @@ async function loadAdminPosts() {
 function loadPostForEdit(post) {
     $('#post-edit-id').val(post.id);
     $('#post-title').val(post.title);
-    // Fetch full body via admin route so drafts (published_at IS NULL) are included
     authFetch(`/posts/admin/${post.id}`).then(async r => {
         if (r.ok) {
             const full = await r.json();
@@ -597,6 +795,32 @@ function setLogout() {
     });
 }
 
+// ── Site stats ────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+    const list = document.getElementById('stats-list');
+    if (!list) return;
+    try {
+        const res = await authFetch('/stats/visits');
+        if (!res.ok) throw new Error();
+        const rows = await res.json();
+        if (!rows.length) {
+            list.innerHTML = '<p class="hint">No visits recorded yet.</p>';
+            return;
+        }
+        list.innerHTML = rows.map(function (r) {
+            var last = r.last_visited_at
+                ? new Date(r.last_visited_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '—';
+            return '<div class="stat-row"><span class="stat-page">' + escapeHtml(r.page) + '</span>'
+                + '<span class="stat-count">' + Number(r.count).toLocaleString() + '</span>'
+                + '<span class="stat-last">last: ' + last + '</span></div>';
+        }).join('');
+    } catch {
+        list.innerHTML = '<p class="hint" style="color:var(--color-error)">Failed to load stats.</p>';
+    }
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 requireAuth();
@@ -607,4 +831,5 @@ initPostForm();
 loadTravelMemories();
 loadAdminPosts();
 loadPasskeys();
+loadStats();
 document.getElementById('add-passkey-btn').addEventListener('click', addPasskey);
