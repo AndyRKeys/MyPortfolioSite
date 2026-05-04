@@ -110,3 +110,9 @@ BEGIN
     DROP TABLE travel_memories;
   END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS page_visits (
+  page VARCHAR(100) PRIMARY KEY,
+  count BIGINT NOT NULL DEFAULT 0,
+  last_visited_at TIMESTAMPTZ DEFAULT NOW()
+);
