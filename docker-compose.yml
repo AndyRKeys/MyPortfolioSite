@@ -59,7 +59,8 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./scripts/nginx-portfolio.conf.template:/etc/nginx/templates/default.conf.template
+      # Local dev template — plain HTTP only, no SSL (prod SSL lives in nginx-portfolio.conf.template)
+      - ./scripts/nginx-local.conf.template:/etc/nginx/templates/default.conf.template
       - .:/usr/share/nginx/html:ro
       - ./uploads:/usr/share/nginx/html/uploads:ro
     environment:
