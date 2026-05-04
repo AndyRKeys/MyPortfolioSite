@@ -348,6 +348,7 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
 - When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
+- **See [docs/TESTING.md](./docs/TESTING.md)** for the full testing guide, including how to capture verbose test output to a file while keeping live terminal feedback
 
 ## Database
 
