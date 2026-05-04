@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@simplewebauthn/server": "^7.4.0",
@@ -22,6 +25,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "@vitest/coverage-v8": "^2.0.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.0.0",
+    "vitest": "^2.0.0"
   }
 }
