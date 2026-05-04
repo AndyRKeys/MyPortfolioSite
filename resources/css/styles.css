@@ -32,6 +32,18 @@
     --color-timeline-line: #ddd;
     --color-timeline-marker: #333;
     --color-timeline-marker-current: #0ea5e9;
+    /* Spacing tokens */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    /* Type tokens */
+    --text-sm: 0.875rem;
+    --text-xs: 0.8rem;
+    /* Radius tokens */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
 }
 
 [data-theme="dark"] {
@@ -1081,6 +1093,29 @@ footer {
     text-decoration: underline;
 }
 
+/* Timeline location pin — uses project tokens instead of raw values */
+.timeline-location {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+}
+
+/* Timeline thumbnail — max-height is a content constraint, radius/spacing use tokens */
+.timeline-thumb {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-top: var(--space-3);
+}
+
+/* Travel timeline container */
+#travel-timeline {
+    width: 100%;
+    padding-top: var(--space-4);
+}
+
 @media (max-width: 768px) {
     .timeline::before {
         left: 14px;
@@ -1327,6 +1362,12 @@ footer {
     display: grid;
     gap: 1.25rem;
     text-align: left;
+}
+
+/* Specificity fix: .posts-list { display: grid } beats .hidden { display: none }
+   because it appears later in the file. Double-class selector restores correct behaviour. */
+.posts-list.hidden {
+    display: none;
 }
 
 .post-card {
