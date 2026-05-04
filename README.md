@@ -54,7 +54,7 @@ cd MyPortfolioSite
 cp docker/.env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
-.\scripts\dev-local.ps1 up
+. scripts\dev\dev-local.ps1 up
 
 # 4. Open in browser
 # http://localhost
@@ -67,20 +67,20 @@ Visit `http://localhost/setup.html` to create the admin account and register you
 ### dev-local.ps1 Reference
 
 ```powershell
-.\scripts\dev-local.ps1 up             # Build & start all containers
-.\scripts\dev-local.ps1 down           # Stop containers (DB volume preserved)
-.\scripts\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
-.\scripts\dev-local.ps1 logs           # Tail backend container logs
-.\scripts\dev-local.ps1 db             # Open a psql shell into the dev DB
-.\scripts\dev-local.ps1 test           # Run automated test suite in container
-.\scripts\dev-local.ps1 test:coverage  # Run tests with coverage report
+. scripts\dev\dev-local.ps1 up             # Build & start all containers
+. scripts\dev\dev-local.ps1 down           # Stop containers (DB volume preserved)
+. scripts\dev\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
+. scripts\dev\dev-local.ps1 logs           # Tail backend container logs
+. scripts\dev\dev-local.ps1 db             # Open a psql shell into the dev DB
+. scripts\dev\dev-local.ps1 test           # Run automated test suite in container
+. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report
 ```
 
 **Troubleshooting:**
 - **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
 - **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
 - **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
-- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email
+- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email; the contact handler will return 500 in dev but validation tests will still pass
 
 ### Setup (Manual without Docker)
 
@@ -113,11 +113,17 @@ Serve the frontend with VS Code Live Server and open **http://localhost:3000** (
 > ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine.
 
 ```powershell
-.\scripts\dev-local.ps1 up
-.\scripts\dev-local.ps1 test
+. scripts\dev\dev-local.ps1 up
+. scripts\dev\dev-local.ps1 test
 ```
 
-See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide: test structure, what is/isn't covered, how to add new tests, and CI notes.
+For per-PR smoke tests, run the relevant script from `scripts/tests/`:
+
+```powershell
+.\scripts\tests\Test-PR104.ps1
+```
+
+No `-Token` flag needed — the script auto-generates a JWT from the container. See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide.
 
 ---
 
@@ -175,15 +181,15 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ### Deploy latest changes (from Windows)
 
 ```powershell
-.\scripts\deploy.ps1
+.\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the Pi and runs `scripts/deploy.sh`, which:
+This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
 3. Runs `npm install` only if `backend/package.json` changed
-4. Re-runs `backend/db/schema.sql` only if it changed (idempotent migrations)
-5. Re-renders and reloads Nginx only if `scripts/nginx-portfolio.conf.template` changed (`nginx -t` is run before reload — a syntax error aborts the deploy)
+4. Re-runs `backend/db/schema.sql` only if it changed or DB is empty (idempotent)
+5. Re-renders and reloads Nginx only if `scripts/deploy/nginx-portfolio.conf.template` changed
 6. Restarts PM2 only if backend files changed
 7. Reports PM2 status
 
@@ -195,7 +201,7 @@ This SSHs into the Pi and runs `scripts/deploy.sh`, which:
 | Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
 | `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
 | `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
-| `scripts/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
+| `scripts/deploy/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
 | `.env` | Edit on server manually + `pm2 restart` |
 
 ### Useful server commands
@@ -221,17 +227,28 @@ ssh <pi-hostname> "sudo certbot renew"
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/dev-local.ps1` | Windows wrapper for all local dev commands (up/down/reset/logs/db/test) |
-| `scripts/dev-local.sh` | Bash equivalent for Linux/Mac/WSL |
-| `scripts/Test-PRN.ps1` | Per-PR smoke test script — run after `dev-local.ps1 up` |
-| `scripts/pi-setup.sh` | Full server setup from scratch (Node, PostgreSQL, Nginx, PM2) |
-| `scripts/fix-apache.ps1` | Disable Apache, enable Nginx |
-| `scripts/setup-ssl.ps1` | Install certbot and obtain Let's Encrypt cert |
-| `scripts/setup-nginx-ssl.ps1` | Configure Nginx for HTTPS + update backend `.env` |
-| `scripts/deploy.sh` | Smart deploy — runs on server, detects what changed |
-| `scripts/deploy.ps1` | Trigger deploy from Windows via SSH |
+```
+scripts/
+├── dev/
+│   ├── dev-local.ps1       Windows wrapper for all local dev commands
+│   ├── dev-local.sh        Bash equivalent (Linux/Mac/WSL)
+│   ├── debug-network.sh    Network diagnostics helper
+│   └── watch-logs.sh       Tail multiple log streams
+├── deploy/
+│   ├── prod-deploy.sh      Smart deploy — runs on Pi, detects what changed
+│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
+│   ├── pi-setup.sh         Full server setup from scratch
+│   ├── install-monitor.sh  Install monitoring tooling
+│   ├── monitor.sh          Runtime monitoring script
+│   ├── fix-apache.ps1      Disable Apache, enable Nginx
+│   ├── setup-ssl.ps1       Install certbot and obtain SSL cert
+│   ├── setup-nginx-ssl.ps1 Configure Nginx for HTTPS
+│   ├── nginx-local.conf.template
+│   └── nginx-portfolio.conf.template
+└── tests/
+    ├── Test-PR96.ps1       Smoke tests for PR #96
+    └── Test-PR104.ps1      Smoke tests for PR #104
+```
 
 ---
 
