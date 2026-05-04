@@ -1,4 +1,7 @@
-var API_BASE = API_BASE || '/api';
+var API_BASE = (function() {
+    var isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDev ? 'http://' + window.location.hostname + ':8080' : '/api';
+})();
 
 function sanitizeHtml(html) {
     var temp = document.createElement('div');
