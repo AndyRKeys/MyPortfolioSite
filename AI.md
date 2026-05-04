@@ -76,6 +76,8 @@ The AI will:
    - All bugs fixed (with issue numbers)
    - Any breaking changes or deployment notes
    - Links to all related PRs merged since last release
+4. Append an entry to `docs/RELEASE_NOTES.md` (see [Doc Lifecycle](#doc-lifecycle) below)
+5. Archive or clean up any planning docs whose work is now fully shipped (see [Doc Lifecycle](#doc-lifecycle) below)
 
 **You** will:
 - Review the release summary
@@ -92,6 +94,7 @@ If a critical bug is discovered on production:
 3. You review and approve the hotfix PR
 4. After merging to `main`, instruct: `Merge hotfix into dev to keep branches in sync`
 5. The AI will merge `main` back to `dev`
+6. A hotfix entry is appended to `docs/RELEASE_NOTES.md`
 
 ### Branching diagram
 
@@ -100,6 +103,56 @@ main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/
  ↑                                              ←── fix/issue-N-*
  └── hotfix/issue-N-* ────────────────────────(emergency fixes only)
 ```
+
+## Doc Lifecycle
+
+Planning documents in `docs/` have a lifecycle — they should be kept tidy as work progresses.
+
+### Planning docs
+
+| State | What to do |
+|-------|------------|
+| Work in progress | Leave the plan doc in place |
+| Partially complete | Add a `> ⚠️ Partially actioned — see issue #N` note at the top |
+| Fully shipped in a release | Move to `docs/archive/` with no other changes |
+| Superseded / abandoned | Move to `docs/archive/` and add a note explaining why |
+
+- **Never delete** planning docs — they are useful historical context
+- **Never edit** the content of an archived doc — only add a header note if needed
+- `docs/archive/` is a flat folder; no sub-folders needed
+
+### Release notes (`docs/RELEASE_NOTES.md`)
+
+The AI maintains `docs/RELEASE_NOTES.md` as a running log of all production releases. Each release entry is **prepended** (newest first) in this format:
+
+```markdown
+## v YYYY-MM-DD[-N]
+
+**Released:** YYYY-MM-DD  
+**Branch:** release/YYYY-MM-DD  
+**PR:** #N
+
+### Features
+- feat(#N): short description
+
+### Bug Fixes
+- fix(#N): short description
+
+### Breaking Changes / Deployment Notes
+- None  (or describe anything requiring manual steps on the server)
+
+---
+```
+
+- Hotfixes get their own entry with a `🔥 Hotfix` prefix on the version line
+- The file is created automatically on first release if it does not exist
+- Do not manually edit this file — let the AI maintain it at release time
+
+### When to action doc lifecycle
+
+The AI performs doc lifecycle steps **as part of the release PR commit**, so the release branch contains both the code and the updated docs in one coherent snapshot.
+
+---
 
 ## Commit Conventions
 
