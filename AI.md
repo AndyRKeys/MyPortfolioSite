@@ -2,6 +2,22 @@
 
 Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
 
+## Scope Discipline
+
+- **Only make changes explicitly requested** in the linked issue or conversation
+- Never refactor, reorder, reformat, or "improve" code outside the stated scope
+- Never convert literal Unicode characters to escape sequences — `—`, `…`, `©`, `✏`, `✈`, `☾`, `−` etc. must stay as-is in source files
+- If a change requires touching more than the requested lines, flag it and ask first — do not proceed
+- Ask before acting if anything is unclear or the scope is ambiguous
+- One PR per issue — do not bundle unrelated changes
+
+## File Safety
+
+- **Always read the current file from `dev`** immediately before editing — never rely on a version read earlier in the session
+- When rewriting an entire file, flag it in the PR description with: ⚠️ Full file rewrite — please check diff carefully for unintended changes
+
+---
+
 ## Markdown List Conventions
 
 Use this rule consistently throughout this file and in all docs written by the AI:
@@ -65,9 +81,16 @@ Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
 3. Include a clear summary of what changed and why
-4. Wait for review, testing, and approval before merging
+4. Include a detailed test plan (see PR template at `.github/pull_request_template.md`)
+5. Wait for review, testing, and approval before merging
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
+
+**PR test plans must include:**
+- Specific steps to verify the happy path (e.g. exact URL, action, expected result)
+- Edge cases to check (e.g. empty state, error handling, mobile view)
+- Regression checks for related features that could have been affected
+- Any manual setup needed before testing (e.g. seed data, env vars)
 
 ### 5. Release to Production
 
@@ -312,9 +335,11 @@ See README.md for full details, scripts, and local dev setup.
 
 ## When in Doubt
 
-1. Check the README.md for architecture and deployment info
+1. Check README.md for architecture and deployment info
 2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
-3. Review recent commits to match code style
-4. Ask: "Is this change isolated, testable, and reversible?"
-5. If a task is too large, break it into smaller PRs
-6. Test locally before proposing changes (use Docker Compose or manual setup)
+3. Check DATABASE.md before adding or changing any routes, migrations, or queries
+4. Check SECURITY.md before touching auth, sessions, or input handling
+5. Review recent commits to match code style
+6. Ask: "Is this change isolated, testable, and reversible?"
+7. If a task is too large, break it into smaller PRs
+8. Test locally before proposing changes (use Docker Compose or manual setup)
