@@ -136,6 +136,28 @@
                 </div>
             </div>
 
+            <!-- ── CV management (#101) ──────────────────────────────────────────── -->
+            <div class="admin-card">
+                <h2 class="admin-card-title">CV</h2>
+                <p class="hint" style="margin-bottom:1rem">
+                    Upload a PDF CV to make it available for download on the site.
+                    The file will be scanned for obvious private information before publishing.
+                </p>
+                <div style="margin-bottom:1rem">
+                    <span id="cv-status-badge" class="cv-status-badge not-uploaded">Checking…</span>
+                </div>
+                <div class="file-input-wrap" style="margin-bottom:0.75rem">
+                    <button type="button" id="cv-file-btn" class="btn-secondary" aria-label="Choose CV PDF">Choose PDF…</button>
+                    <span id="cv-file-label" class="file-input-label">No file chosen</span>
+                    <input id="cv-file-input" type="file" accept="application/pdf" class="file-input-hidden" />
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cv-upload-btn" class="btn-primary" disabled>Upload CV</button>
+                    <button type="button" id="cv-delete-btn" class="travel-delete-btn" disabled>Delete CV</button>
+                </div>
+                <p id="cv-message" class="admin-message"></p>
+            </div>
+
             <!-- ── Private notes ─────────────────────────────────────────────────── -->
             <div class="admin-card private-card">
                 <h2 class="admin-card-title">Private coding projects</h2>
