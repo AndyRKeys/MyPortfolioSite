@@ -2,7 +2,7 @@ import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
 import exifr from 'https://esm.sh/exifr@7.1.3';
 import { API_BASE } from './config.js';
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────────────────────
+// ── Auth helpers ────────────────────────────────────────────────────────────────────────────────
 
 function getToken() {
     return localStorage.getItem('adminToken');
@@ -54,7 +54,7 @@ function todayIso() {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-// ── Passkey management ──────────────────────────────────────────────────────────────────────
+// ── Passkey management ──────────────────────────────────────────────────────────────────
 
 async function loadPasskeys() {
     const container = document.getElementById('passkey-list');
@@ -126,7 +126,7 @@ function setPasskeyMessage(msg, isError = false) {
     el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
 }
 
-// ── Travel memories ─────────────────────────────────────────────────────────────────────────
+// ── Travel memories ─────────────────────────────────────────────────────────────────────
 
 let pendingFiles = [];         // File objects queued for upload
 let existingMedia = [];        // {id, url, type} from post_media (on edit)
@@ -231,6 +231,7 @@ async function loadTravelMemories() {
     }
 }
 
+// #93 fix: slice ISO timestamp to YYYY-MM-DD before setting date input
 async function loadTravelForEdit(memory) {
     try {
         const res = await authFetch(`/travel/admin/${memory.id}`);
@@ -241,7 +242,9 @@ async function loadTravelForEdit(memory) {
         $('#travel-title').val(full.title || '');
         $('#travel-location').val(full.location || '');
         $('#travel-notes').val(full.notes || '');
-        $('#travel-date').val(full.visit_date || todayIso());
+        // Slice to YYYY-MM-DD — full ISO timestamps like 2026-05-04T00:00:00.000Z
+        // are not accepted by <input type="date"> and silently clear the field (#93)
+        $('#travel-date').val(full.visit_date ? String(full.visit_date).slice(0, 10) : todayIso());
         $('#travel-lat').val(full.lat != null ? full.lat : '');
         $('#travel-lng').val(full.lng != null ? full.lng : '');
 
@@ -307,7 +310,7 @@ function setTravelMessage(msg, isError = false, isHint = false) {
     el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
 }
 
-// ── Geocode confirmation map ────────────────────────────────────────────────────────────────────────
+// ── Geocode confirmation map ─────────────────────────────────────────────────────────────────────────
 
 function updateGeoconfirmMap(lat, lng) {
     if (!window.L) return;
@@ -595,7 +598,7 @@ function initTravelForm() {
     $('#travel-clear').on('click', clearTravelForm);
 }
 
-// ── Blog posts ────────────────────────────────────────────────────────────────────────────
+// ── Blog posts ─────────────────────────────────────────────────────────────────────────────────
 
 const POST_TEMPLATE = `_Short tagline or subtitle._
 
@@ -620,7 +623,7 @@ function example() { return 'hello'; }
 
 ## Wrap-up
 
-End with a takeaway, a question, or a link to what’s next.
+End with a takeaway, a question, or a link to what\'s next.
 `;
 
 function setPostMessage(msg, isError = false) {
@@ -634,7 +637,8 @@ function clearPostForm() {
     $('#post-edit-id').val('');
     $('#post-title').val('');
     $('#post-body').val('');
-    $('#post-date').val('');
+    // #93 fix: default to today so the date field is never blank on a new post
+    $('#post-date').val(todayIso());
     $('#post-cancel-btn').addClass('hidden');
     setPostMessage('');
 }
@@ -678,19 +682,26 @@ async function loadAdminPosts() {
     }
 }
 
-function loadPostForEdit(post) {
+// #95 fix: converted to async/await so body_markdown and post_date always
+// populate before the user can interact with the form.
+// #93 fix: slice ISO timestamp to YYYY-MM-DD before setting the date input.
+async function loadPostForEdit(post) {
     $('#post-edit-id').val(post.id);
     $('#post-title').val(post.title);
-    authFetch(`/posts/admin/${post.id}`).then(async r => {
-        if (r.ok) {
-            const full = await r.json();
-            $('#post-body').val(full.body_markdown);
-            $('#post-date').val(full.post_date || '');
-        }
-    });
     $('#post-cancel-btn').removeClass('hidden');
     setPostMessage('Editing: ' + post.title);
     document.getElementById('post-title').scrollIntoView({ behavior: 'smooth' });
+
+    try {
+        const r = await authFetch(`/posts/admin/${post.id}`);
+        if (!r.ok) throw new Error();
+        const full = await r.json();
+        $('#post-body').val(full.body_markdown || '');
+        // Slice to YYYY-MM-DD — full ISO timestamps silently clear <input type="date"> (#93)
+        $('#post-date').val(full.post_date ? String(full.post_date).slice(0, 10) : todayIso());
+    } catch {
+        setPostMessage('Failed to load post body — please try again.', true);
+    }
 }
 
 async function togglePublish(post) {
@@ -772,6 +783,125 @@ function initPostForm() {
     });
 }
 
+// ── CV management (#101) ──────────────────────────────────────────────────────────────────
+
+function setCvMessage(msg, isError = false) {
+    const el = document.getElementById('cv-message');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
+}
+
+function updateCvStatusBadge(exists) {
+    const badge = document.getElementById('cv-status-badge');
+    if (!badge) return;
+    if (exists) {
+        badge.textContent = '✓ CV uploaded';
+        badge.className = 'cv-status-badge uploaded';
+    } else {
+        badge.textContent = '✕ No CV uploaded';
+        badge.className = 'cv-status-badge not-uploaded';
+    }
+    const deleteBtn = document.getElementById('cv-delete-btn');
+    if (deleteBtn) deleteBtn.disabled = !exists;
+}
+
+async function loadCvStatus() {
+    try {
+        const res = await fetch(`${API_BASE}/cv/exists`);
+        const { exists } = await res.json();
+        updateCvStatusBadge(exists);
+    } catch {
+        setCvMessage('Could not check CV status.', true);
+    }
+}
+
+async function uploadCv(file) {
+    const uploadBtn = document.getElementById('cv-upload-btn');
+    uploadBtn.disabled = true;
+    setCvMessage('Uploading…');
+
+    const fd = new FormData();
+    fd.append('cv', file);
+
+    try {
+        const res = await fetch(`${API_BASE}/cv`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+            body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+        if (data.warnings && data.warnings.length) {
+            // Surface private-info scan warnings before confirming success
+            const warningList = data.warnings.join('\n• ');
+            const proceed = confirm(
+                `The scan found potential private information in this PDF:\n\u2022 ${warningList}\n\nDo you still want to publish it?`
+            );
+            if (!proceed) {
+                // Delete the file we just uploaded so it isn’t accidentally served
+                await authFetch('/cv', { method: 'DELETE' });
+                setCvMessage('Upload cancelled — CV removed from server.', true);
+                await loadCvStatus();
+                return;
+            }
+        }
+
+        setCvMessage('CV uploaded successfully.');
+        await loadCvStatus();
+    } catch (err) {
+        setCvMessage(err.message || 'Upload failed.', true);
+    } finally {
+        uploadBtn.disabled = false;
+        // Reset file input so the same file can be re-selected
+        const input = document.getElementById('cv-file-input');
+        if (input) input.value = '';
+        const label = document.getElementById('cv-file-label');
+        if (label) label.textContent = 'No file chosen';
+    }
+}
+
+async function deleteCv() {
+    if (!confirm('Delete the current CV? It will no longer be available for download.')) return;
+    setCvMessage('');
+    try {
+        const res = await authFetch('/cv', { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        setCvMessage('CV deleted.');
+        await loadCvStatus();
+    } catch {
+        setCvMessage('Failed to delete CV.', true);
+    }
+}
+
+function initCvSection() {
+    const cvFileInput = document.getElementById('cv-file-input');
+    const cvFileBtn   = document.getElementById('cv-file-btn');
+    const cvFileLabel = document.getElementById('cv-file-label');
+    const cvUploadBtn = document.getElementById('cv-upload-btn');
+    const cvDeleteBtn = document.getElementById('cv-delete-btn');
+
+    if (!cvFileInput) return;
+
+    // Wire styled button to hidden native file input
+    cvFileBtn.addEventListener('click', () => cvFileInput.click());
+    cvFileInput.addEventListener('change', () => {
+        const file = cvFileInput.files[0];
+        cvFileLabel.textContent = file ? file.name : 'No file chosen';
+        cvUploadBtn.disabled = !file;
+    });
+
+    cvUploadBtn.addEventListener('click', () => {
+        const file = cvFileInput.files[0];
+        if (file) uploadCv(file);
+    });
+
+    cvDeleteBtn.addEventListener('click', deleteCv);
+
+    loadCvStatus();
+}
+
 // ── Private notes ───────────────────────────────────────────────────────────────────────────
 
 function initPrivateNotes() {
@@ -795,7 +925,7 @@ function setLogout() {
     });
 }
 
-// ── Site stats ──────────────────────────────────────────────────────────────────────────────
+// ── Site stats ────────────────────────────────────────────────────────────────────────
 
 async function loadStats() {
     const list = document.getElementById('stats-list');
@@ -821,13 +951,14 @@ async function loadStats() {
     }
 }
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────────────────────
+// ── Bootstrap ─────────────────────────────────────────────────────────────────────────────────
 
 requireAuth();
 setLogout();
 initTravelForm();
 initPrivateNotes();
 initPostForm();
+initCvSection();
 loadTravelMemories();
 loadAdminPosts();
 loadPasskeys();
