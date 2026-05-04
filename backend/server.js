@@ -9,6 +9,7 @@ import contactRoutes from './routes/contact.js';
 import uploadRoutes from './routes/upload.js';
 import postsRoutes from './routes/posts.js';
 import statsRoutes from './routes/stats.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is not set');
@@ -23,7 +24,6 @@ const PORT = process.env.PORT || 3001;
 const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow same-origin requests (no origin header) and any localhost port in dev
     if (!origin || origin === ALLOWED_ORIGIN ||
         /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       cb(null, true);
@@ -37,7 +37,6 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 
-// Serve uploaded files in dev (Nginx handles this in production)
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -50,10 +49,8 @@ app.use('/stats', statsRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-app.use((err, _req, res, _next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+// Centralised error handler — must be last
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
