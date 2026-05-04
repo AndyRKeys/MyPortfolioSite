@@ -1,30 +1,104 @@
-// ── Request validation middleware (issue #79 — tech-debt-3) ──────────────────
-//
-// TODO: Install Zod:  npm install zod  (in backend/)
-//
-// Usage in a route:
-//   const { validate } = require('../middleware/validate');
-//   const { z } = require('zod');
-//
-//   const CreatePostSchema = z.object({
-//       title:      z.string().min(1),
-//       slug:       z.string().min(1).optional(),
-//       body_markdown: z.string().min(1),
-//       post_date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-//       excerpt:    z.string().optional(),
-//       post_type:  z.enum(['blog', 'travel']).default('blog'),
-//   });
-//
-//   router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => { ... });
-//
-// The middleware replaces manual `if (!title) return res.status(400).json(...)` checks
-// in each route handler.
+import { z } from 'zod';
 
-// TODO: Implement validate() middleware
-// Shape: (schema) => (req, res, next) => void
-// On failure: return res.status(400).json({ error: <zod formatted message> })
-// On success: call next()
+/**
+ * Request body validation middleware.
+ * Parses req.body against the provided Zod schema.
+ * On failure: 400 { error: '<messages>' }
+ * On success: replaces req.body with coerced/defaulted values and calls next().
+ *
+ * Usage:
+ *   import { validate } from '../middleware/validate.js';
+ *   router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => { ... });
+ */
+export function validate(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.body);
+    if (!result.success) {
+      const message = result.error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: message });
+    }
+    req.body = result.data;
+    next();
+  };
+}
 
-module.exports = {
-    // validate: (schema) => (req, res, next) => { ... }
-};
+// ── Shared field definitions ──────────────────────────────────────────────────
+
+const dateString = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+  .optional();
+
+const latLng = z
+  .union([z.number(), z.string().transform(v => (v === '' ? null : parseFloat(v))), z.null()])
+  .optional()
+  .nullable();
+
+const mediaItem = z.object({
+  url:  z.string().min(1),
+  type: z.string().optional().nullable(),
+});
+
+// ── Posts schemas ─────────────────────────────────────────────────────────────
+
+export const CreatePostSchema = z.object({
+  title:         z.string().min(1, 'Title is required'),
+  body_markdown: z.string().optional().default(''),
+  post_date:     dateString,
+  publish:       z.boolean().optional(),
+});
+
+export const UpdatePostSchema = z.object({
+  title:         z.string().min(1, 'Title is required'),
+  body_markdown: z.string().optional(),
+  post_date:     dateString,
+  publish:       z.union([z.boolean(), z.literal(false)]).optional(),
+});
+
+// ── Travel schemas ────────────────────────────────────────────────────────────
+
+export const CreateTravelSchema = z.object({
+  title:      z.string().min(1, 'Title is required'),
+  location:   z.string().optional().nullable(),
+  notes:      z.string().optional().nullable(),
+  visitDate:  dateString,
+  lat:        latLng,
+  lng:        latLng,
+  publish:    z.boolean().optional(),
+  mediaItems: z.array(mediaItem).optional().default([]),
+});
+
+export const UpdateTravelSchema = CreateTravelSchema.extend({
+  mediaItems: z.array(mediaItem).optional(),
+});
+
+// ── Contact schema ────────────────────────────────────────────────────────────
+
+export const ContactSchema = z.object({
+  name:    z.string().min(1, 'Name is required'),
+  email:   z.string().email('Invalid email address'),
+  message: z.string().min(1, 'Message is required'),
+  website: z.string().optional(), // honeypot — presence checked in handler
+});
+
+// ── Auth schemas ──────────────────────────────────────────────────────────────
+
+export const SetupSchema = z.object({
+  email:    z.string().email('Valid email required'),
+  username: z.string().min(1, 'Username is required'),
+});
+
+export const EmailSendSchema = z.object({
+  email: z.string().email('Valid email required'),
+});
+
+export const PasskeyRegisterFinishSchema = z.object({
+  response:    z.object({}).passthrough(),
+  sessionKey:  z.string().min(1, 'sessionKey is required'),
+  passkeyName: z.string().optional(),
+});
+
+export const PasskeyLoginFinishSchema = z.object({
+  response:   z.object({}).passthrough(),
+  sessionKey: z.string().min(1, 'sessionKey is required'),
+});

@@ -2,28 +2,18 @@ import { Router } from 'express';
 import nodemailer from 'nodemailer';
 import { pool } from '../db/pool.js';
 import { escapeHtml } from '../utils/html.js';
+import { validate, ContactSchema } from '../middleware/validate.js';
 
 const router = Router();
 
-const RATE_LIMIT = 3;
+const RATE_LIMIT    = 3;
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-/**
- * DB-backed rate limiter using the rate_limits table.
- * Falls back to allowing the request if the DB call fails, so a DB hiccup
- * doesn't silently block legitimate contact form submissions.
- *
- * @param {string} ip
- * @returns {Promise<boolean>} true = allow, false = block
- */
 async function checkRateLimit(ip) {
   try {
-    const now = new Date();
+    const now         = new Date();
     const windowStart = new Date(now.getTime() - RATE_WINDOW_MS);
 
-    // Upsert: if no row for this IP, create one with count=1.
-    // If an existing row's window has expired, reset it.
-    // Otherwise increment the counter and return it.
     const result = await pool.query(
       `INSERT INTO rate_limits (ip, count, window_start)
        VALUES ($1, 1, $2)
@@ -43,7 +33,6 @@ async function checkRateLimit(ip) {
 
     return result.rows[0].count <= RATE_LIMIT;
   } catch (err) {
-    // Fail open: log and allow so a DB issue doesn't break the contact form.
     console.error('Rate limit DB error (failing open):', err.message);
     return true;
   }
@@ -51,8 +40,8 @@ async function checkRateLimit(ip) {
 
 function getTransporter() {
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587'),
+    host:   process.env.SMTP_HOST,
+    port:   parseInt(process.env.SMTP_PORT || '587'),
     secure: false,
     auth: {
       user: process.env.SMTP_USER,
@@ -61,10 +50,10 @@ function getTransporter() {
   });
 }
 
-router.post('/', async (req, res) => {
-  // Honeypot: bots fill in the hidden website field
+router.post('/', validate(ContactSchema), async (req, res) => {
+  // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
-    return res.json({ message: 'Message sent.' });
+    return res.json({ success: true });
   }
 
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
@@ -73,25 +62,18 @@ router.post('/', async (req, res) => {
   }
 
   const { name, email, message } = req.body;
-  if (!name || !email || !message) {
-    return res.status(400).json({ error: 'Name, email, and message are required.' });
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Invalid email address.' });
-  }
+  // Field presence and email format are now guaranteed by validate(ContactSchema)
 
   try {
     await getTransporter().sendMail({
-      from: `"AK Portfolio" <${process.env.SMTP_FROM}>`,
-      to: process.env.SMTP_FROM,
+      from:    `"AK Portfolio" <${process.env.SMTP_FROM}>`,
+      to:      process.env.SMTP_FROM,
       replyTo: email,
       subject: `Portfolio contact from ${name}`,
-      text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
-      html: `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p><hr><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`,
+      text:    `Name: ${name}\nEmail: ${email}\n\n${message}`,
+      html:    `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p><hr><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`,
     });
-    res.json({ message: 'Message sent successfully.' });
+    res.json({ success: true });
   } catch (err) {
     console.error('Contact email error:', err.message);
     res.status(500).json({ error: 'Failed to send message. Please email directly.' });

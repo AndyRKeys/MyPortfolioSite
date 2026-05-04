@@ -2,10 +2,10 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { slugify } from '../utils/slugify.js';
+import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 
 const router = Router();
 
-// Shared SELECT — aliases keep frontend field names; media aggregated from post_media
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
@@ -22,7 +22,6 @@ const TRAVEL_COLS = `
   ) AS media
 `;
 
-// Replace all post_media rows for a post and sync posts.media_url/media_type to first item.
 async function replaceMedia(client, postId, mediaItems) {
   await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
   if (!mediaItems || !mediaItems.length) {
@@ -32,7 +31,7 @@ async function replaceMedia(client, postId, mediaItems) {
     );
     return;
   }
-  const vals = mediaItems.map((m, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, ${i})`).join(', ');
+  const vals   = mediaItems.map((m, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, ${i})`).join(', ');
   const params = [postId, ...mediaItems.flatMap(m => [m.url, m.type || null])];
   await client.query(
     `INSERT INTO post_media (post_id, media_url, media_type, order_index) VALUES ${vals}`,
@@ -108,21 +107,21 @@ router.get('/:id', async (req, res) => {
 });
 
 // Admin: create travel post
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { title, location, notes, mediaItems, lat, lng, visitDate, publish } = req.body;
-    if (!title) return res.status(400).json({ error: 'Title is required' });
+    // title guaranteed present by validate()
 
-    const latVal = lat !== undefined && lat !== '' ? parseFloat(lat) : null;
-    const lngVal = lng !== undefined && lng !== '' ? parseFloat(lng) : null;
+    const latVal     = lat  != null ? parseFloat(lat)  : null;
+    const lngVal     = lng  != null ? parseFloat(lng)  : null;
     const postDateVal = visitDate || null;
     const publishedAt = publish ? new Date() : null;
 
     const baseSlug = slugify(title, 'travel');
-    let slug = baseSlug;
-    let i = 1;
+    let slug   = baseSlug;
+    let i      = 1;
     let postId = null;
 
     while (!postId && i <= 100) {
@@ -169,12 +168,12 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // Admin: update travel post
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { title, location, notes, mediaItems, lat, lng, visitDate, publish } = req.body;
-    if (!title) return res.status(400).json({ error: 'Title is required' });
+    // title guaranteed present by validate()
 
     const existing = await client.query(
       `SELECT * FROM posts WHERE id = $1 AND post_type = 'travel'`,
@@ -182,9 +181,9 @@ router.put('/:id', authenticate, async (req, res) => {
     );
     if (!existing.rows.length) return res.status(404).json({ error: 'Memory not found' });
 
-    const latVal = lat !== undefined && lat !== '' ? parseFloat(lat) : null;
-    const lngVal = lng !== undefined && lng !== '' ? parseFloat(lng) : null;
-    const postDateVal = visitDate || null;
+    const latVal      = lat  != null ? parseFloat(lat)  : null;
+    const lngVal      = lng  != null ? parseFloat(lng)  : null;
+    const postDateVal  = visitDate || null;
 
     let { published_at } = existing.rows[0];
     if (publish && !published_at) published_at = new Date();
