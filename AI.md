@@ -5,11 +5,17 @@ Guidelines for AI-assisted development on this project (Claude, Perplexity, or o
 ## Scope Discipline
 
 - **Only make changes explicitly requested** in the linked issue or conversation
-- Never refactor, reorder, reformat, or "improve" code outside the stated scope
+- If you spot an improvement while implementing (e.g. a refactoring that reduces duplication, a performance fix, a missing null check):
+  - **If minor and clearly sensible** (e.g. renaming a variable for clarity, fixing an obvious bug): include it in the current PR with a note in the PR description
+  - **If significant** (e.g. a larger refactor, architectural change, new abstraction): raise a new GitHub issue instead and continue with the original scope only. Ask the owner before proceeding with the improvement
+  - **If unclear whether it's within scope**: ask before acting
 - Never convert literal Unicode characters to escape sequences — `—`, `…`, `©`, `✏`, `✈`, `☾`, `−` etc. must stay as-is in source files
 - If a change requires touching more than the requested lines, flag it and ask first — do not proceed
 - Ask before acting if anything is unclear or the scope is ambiguous
-- One PR per issue — do not bundle unrelated changes
+- **One PR per issue**, unless issues are explicitly related:
+  - Related issues (e.g. #80 and #81 fixing the same feature) can be bundled in one PR
+  - Unrelated issues must go in separate PRs
+  - If unsure whether issues are related, ask before bundling
 
 ## File Safety
 
