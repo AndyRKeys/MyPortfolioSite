@@ -736,6 +736,47 @@ footer {
     font-size: 0.9rem;
 }
 
+.footer-visits {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+.stat-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-page {
+    flex: 1;
+    font-weight: 600;
+    text-transform: capitalize;
+    color: var(--color-text);
+}
+
+.stat-count {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-accent);
+    min-width: 3rem;
+    text-align: right;
+}
+
+.stat-last {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    min-width: 8rem;
+    text-align: right;
+}
+
 /* Travel empty state */
 .travel-empty {
     text-align: center;
@@ -1618,6 +1659,23 @@ footer {
 }
 
 /* ── Admin coord row (Issue #8) ─────────────────────────────────────────────── */
+
+.location-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.location-row input {
+    flex: 1;
+}
+
+.location-row .btn-secondary {
+    flex-shrink: 0;
+    padding: 0 0.75rem;
+    height: 38px;
+    font-size: 0.85rem;
+}
 
 .coord-row {
     display: grid;

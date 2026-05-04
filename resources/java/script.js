@@ -411,10 +411,31 @@ function initContactForm() {
     });
 }
 
+// ── Visit counter ─────────────────────────────────────────────────────────────
+
+function recordVisit(page) {
+    if (isAdminSession()) return;
+
+    var counterLine = document.getElementById('visit-counter-line');
+    var countEl = document.getElementById('visit-count');
+    if (!counterLine || !countEl) return;
+
+    fetch(API_BASE + '/stats/visit?page=' + encodeURIComponent(page), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.count) {
+                countEl.textContent = data.count.toLocaleString();
+                counterLine.style.display = '';
+            }
+        })
+        .catch(function() {});
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 $(document).ready(function() {
     loadPublicTravelPosts();
     loadGithubWidget();
     initContactForm();
+    recordVisit('home');
 });
