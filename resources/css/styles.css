@@ -618,6 +618,36 @@ footer a:hover {
     color: var(--color-text);
 }
 
+.about-actions {
+    margin-top: 1.5rem;
+}
+
+.btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1.4rem;
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 8px;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.btn-download:hover {
+    background: var(--color-accent-hover);
+    transform: translateY(-1px);
+}
+
+.btn-download::before {
+    content: '↓';
+    font-size: 1.1em;
+    line-height: 1;
+}
+
 /* Projects Grid */
 .projects-grid {
     display: grid;
