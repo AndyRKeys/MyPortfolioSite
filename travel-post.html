@@ -88,9 +88,10 @@
     <script src="./resources/java/dev-env.js"></script>
     <script src="./resources/java/darkmode.js"></script>
     <script src="./resources/java/nav.js"></script>
+    <!-- jQuery must load before the module so $ is available as a global -->
     <script src="./resources/java/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="./resources/java/travel-post.js"></script>
+    <script type="module" src="./resources/java/travel-post.js"></script>
 </body>
 </html>
