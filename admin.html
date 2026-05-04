@@ -10,6 +10,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet for geocode confirmation map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
     <header>
@@ -30,7 +33,7 @@
     <main class="admin-page">
         <section class="sec-cont admin-panel">
 
-            <!-- ── Travel memories ─────────────────────────────────────────────────── -->
+            <!-- ── Travel memories ───────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2 class="admin-card-title">Travel memories</h2>
                 <form id="travel-form">
@@ -75,6 +78,8 @@
                             </div>
                         </label>
                     </div>
+                    <!-- Geocode confirmation map: hidden until coords are set -->
+                    <div id="geoconfirm-map" class="hidden" style="height:200px;margin-top:0.5rem;border-radius:var(--radius-md);overflow:hidden;"></div>
                     <div class="form-actions">
                         <button type="submit" id="travel-save-btn" class="btn-primary">Save draft</button>
                         <button type="submit" id="travel-publish-btn" class="btn-primary">Publish</button>
@@ -96,7 +101,7 @@
                 </div>
             </div>
 
-            <!-- ── Blog posts ────────────────────────────────────────────────────── -->
+            <!-- ── Blog posts ──────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2 class="admin-card-title">Blog posts</h2>
                 <form id="post-form">
@@ -126,7 +131,7 @@
                 </div>
             </div>
 
-            <!-- ── Private notes ───────────────────────────────────────────────────── -->
+            <!-- ── Private notes ─────────────────────────────────────────────────── -->
             <div class="admin-card private-card">
                 <h2 class="admin-card-title">Private coding projects</h2>
                 <label>Private notes
@@ -139,7 +144,7 @@
                 <p class="hint" style="margin-top:0.75rem">Notes are saved locally in your browser.</p>
             </div>
 
-            <!-- ── Passkeys ────────────────────────────────────────────────────────── -->
+            <!-- ── Passkeys ─────────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2 class="admin-card-title">Manage passkeys</h2>
                 <p style="color:var(--color-text-secondary);margin-bottom:1rem">Passkeys let you sign in with your device's biometrics or PIN — no password needed.</p>
