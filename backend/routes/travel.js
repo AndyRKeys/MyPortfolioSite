@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { slugify } from '../utils/slugify.js';
 
 const router = Router();
 
@@ -90,6 +91,22 @@ router.get('/admin/:id', authenticate, async (req, res) => {
   }
 });
 
+// Public: single published travel post by id
+router.get('/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ${TRAVEL_COLS} FROM posts p
+       WHERE p.id = $1 AND p.post_type = 'travel' AND p.published_at IS NOT NULL`,
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Admin: create travel post
 router.post('/', authenticate, async (req, res) => {
   const client = await pool.connect();
@@ -103,29 +120,35 @@ router.post('/', authenticate, async (req, res) => {
     const postDateVal = visitDate || null;
     const publishedAt = publish ? new Date() : null;
 
-    const baseSlug = title.trim().toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 90);
-    let slug = baseSlug || 'travel';
+    const baseSlug = slugify(title, 'travel');
+    let slug = baseSlug;
     let i = 1;
-    while (true) {
-      const { rows } = await client.query('SELECT id FROM posts WHERE slug = $1', [slug]);
-      if (!rows.length) break;
-      slug = `${baseSlug}-${i++}`;
+    let postId = null;
+
+    while (!postId && i <= 100) {
+      const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
+      const insert = await client.query(
+        `INSERT INTO posts
+           (post_type, title, slug, body_markdown, post_date, published_at,
+            location, media_url, media_type, lat, lng)
+         VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (slug) DO NOTHING
+         RETURNING id`,
+        [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
+         location?.trim() || null,
+         firstMedia?.url || null, firstMedia?.type || null,
+         latVal, lngVal]
+      );
+
+      if (insert.rows.length > 0) {
+        postId = insert.rows[0].id;
+      } else {
+        slug = `${baseSlug}-${i++}`;
+      }
     }
 
-    const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
-    const insert = await client.query(
-      `INSERT INTO posts
-         (post_type, title, slug, body_markdown, post_date, published_at,
-          location, media_url, media_type, lat, lng)
-       VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id`,
-      [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
-       location?.trim() || null,
-       firstMedia?.url || null, firstMedia?.type || null,
-       latVal, lngVal]
-    );
-    const postId = insert.rows[0].id;
+    if (!postId) throw new Error('Could not generate unique slug after 100 attempts');
+
     if (mediaItems && mediaItems.length) {
       await replaceMedia(client, postId, mediaItems);
     }
@@ -180,7 +203,6 @@ router.put('/:id', authenticate, async (req, res) => {
        latVal, lngVal, req.params.id]
     );
 
-    // If mediaItems provided, replace all media; otherwise leave existing post_media untouched
     if (mediaItems !== undefined) {
       await replaceMedia(client, req.params.id, mediaItems);
     }
@@ -224,7 +246,6 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Media item not found' });
 
-    // Re-sync posts.media_url to the new first item
     const first = await pool.query(
       `SELECT media_url, media_type FROM post_media WHERE post_id = $1 ORDER BY order_index, created_at LIMIT 1`,
       [req.params.id]
