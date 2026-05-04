@@ -1349,6 +1349,12 @@ footer {
     text-align: left;
 }
 
+/* Specificity fix: .posts-list { display: grid } beats .hidden { display: none }
+   because it appears later in the file. Double-class selector restores correct behaviour. */
+.posts-list.hidden {
+    display: none;
+}
+
 .post-card {
     display: block;
     background: var(--color-surface);
