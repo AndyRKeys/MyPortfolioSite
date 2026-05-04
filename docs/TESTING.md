@@ -12,13 +12,13 @@ The dev environment runs inside Docker. Tests must be run **inside the backend c
 
 ```powershell
 # 1. Make sure the dev environment is running
-bash scripts/dev-local.sh up
+. scripts\dev\dev-local.ps1 up
 
 # 2. Run the test suite
-bash scripts/dev-local.sh test
+. scripts\dev\dev-local.ps1 test
 
 # 3. Run tests with a coverage report
-bash scripts/dev-local.sh test:coverage
+. scripts\dev\dev-local.ps1 test:coverage
 ```
 
 The `test` command installs devDependencies inside the container (vitest, supertest) then runs `npm test`. This is safe to run repeatedly — `npm install` is a no-op if nothing has changed.
@@ -50,16 +50,17 @@ Test output is verbose and scrolls quickly. There are two patterns depending on 
 Pipe any command through `Tee-Object` to write output to a timestamped file **and** keep it visible in the terminal simultaneously:
 
 ```powershell
-bash scripts/dev-local.sh test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+. scripts\dev\dev-local.ps1 test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 ```
 
 ### PR validation scripts — use `Start-Transcript` (built in)
 
-All `scripts/Test-PR*.ps1` scripts use `Start-Transcript` internally, so output is captured automatically — no extra flags needed:
+All `scripts/tests/Test-PR*.ps1` scripts use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
 
 ```powershell
 # Output goes to console AND test-results\PR104-<timestamp>.txt automatically
-.\scripts\Test-PR104.ps1 -Token "eyJ..."
+# JWT is auto-generated from the container — no -Token flag required
+.\scripts\tests\Test-PR104.ps1
 ```
 
 The log file path is printed in the script header and footer so you always know where to find it.
@@ -76,7 +77,10 @@ New-Item -ItemType Directory -Force -Path test-results
 
 ## PR Validation Script Template
 
-When creating a `Test-PR<N>.ps1` script for a new PR, use this as the starting point. The key requirement is that **every PR test script must include `Start-Transcript` / `Stop-Transcript`** so output is always captured to `test-results\` without the caller having to remember anything.
+When creating a `Test-PR<N>.ps1` script for a new PR, place it in `scripts/tests/` and use this as the starting point. The key requirements are:
+1. **`Start-Transcript` / `Stop-Transcript`** — output always captured without the caller needing flags
+2. **Auto-generate JWT** from the container — no hardcoded secrets, no manual token passing
+3. **`$PSScriptRoot '../..' 'test-results'`** path — resolves correctly from `scripts/tests/`
 
 ```powershell
 #Requires -Version 5.1
@@ -87,13 +91,26 @@ param(
 )
 
 # Output capture — console AND timestamped file
-$resultsDir = Join-Path $PSScriptRoot '..' 'test-results'
+$resultsDir = Join-Path $PSScriptRoot '..' '..' 'test-results'
 if (-not (Test-Path $resultsDir)) {
     New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 }
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile   = Join-Path $resultsDir "PR<N>-$timestamp.txt"
 Start-Transcript -Path $logFile -Append | Out-Null
+
+# Auto-generate JWT if not provided
+if (-not $Token) {
+    try {
+        $generated = docker compose exec -T backend node -e @"
+const jwt = require('jsonwebtoken');
+if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET'); process.exit(1); }
+console.log(jwt.sign({ userId: 'dev-test-user' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
+"@ 2>&1
+        $generated = ($generated | Where-Object { $_ -notmatch '^npm ' } | Select-Object -Last 1).Trim()
+        if ($generated -match '^eyJ') { $Token = $generated }
+    } catch {}
+}
 
 $pass = 0; $fail = 0; $skip = 0; $results = @()
 
@@ -109,7 +126,7 @@ function Test-Endpoint {
         [bool]$RequiresAuth = $false
     )
     if ($RequiresAuth -and -not $Token) {
-        Write-Host "  [SKIP] $Name (no token provided)" -ForegroundColor DarkYellow
+        Write-Host "  [SKIP] $Name (no token available)" -ForegroundColor DarkYellow
         $script:skip++
         $script:results += [PSCustomObject]@{ Result = 'SKIP'; Name = $Name; Detail = 'No token' }
         return
@@ -138,6 +155,8 @@ function Test-Endpoint {
 Write-Host ""
 Write-Host "═" * 54 -ForegroundColor Cyan
 Write-Host "  PR #<N> Test Run — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
+Write-Host "  Base URL : $BaseUrl"
+Write-Host "  Token    : $(if ($Token) { 'auto-generated from container' } else { 'not available (auth tests skipped)' })"
 Write-Host "  Log file : $logFile"
 Write-Host "═" * 54 -ForegroundColor Cyan
 
@@ -156,7 +175,7 @@ Stop-Transcript | Out-Null
 if ($fail -gt 0) { exit 1 } else { exit 0 }
 ```
 
-Name the script `scripts/Test-PR<N>.ps1` where `<N>` is the PR number, and replace the two `<N>` placeholders in the template.
+Name the script `scripts/tests/Test-PR<N>.ps1` and replace the two `<N>` placeholders.
 
 ---
 
@@ -225,7 +244,7 @@ When adding a new route or middleware:
 2. Mock `pg` at the top of the file with `vi.mock('pg', ...)`
 3. Import `createApp` from `../../app.js` and pass it to `supertest()`
 4. Use `jwt.sign({ userId: 'test-user' }, process.env.JWT_SECRET, ...)` for authenticated requests — `JWT_SECRET` is injected by `vitest.config.js`
-5. Run `bash scripts/dev-local.sh test` to verify
+5. Run `. scripts\dev\dev-local.ps1 test` to verify
 
 ### Test file template
 
