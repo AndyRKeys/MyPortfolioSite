@@ -95,6 +95,22 @@ router.get('/admin/:id', authenticate, async (req, res) => {
   }
 });
 
+// Public: single published travel post by id
+router.get('/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ${TRAVEL_COLS} FROM posts p
+       WHERE p.id = $1 AND p.post_type = 'travel' AND p.published_at IS NOT NULL`,
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Admin: create travel post
 router.post('/', authenticate, async (req, res) => {
   const client = await pool.connect();
