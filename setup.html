@@ -48,7 +48,7 @@
 
     <script type="module">
         import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
-        import { API } from './resources/java/config.js';
+        import { API_BASE } from './resources/java/config.js';
 
         function setMessage(msg, isError = false) {
             const el = document.getElementById('setup-message');
@@ -57,7 +57,7 @@
         }
 
         // Redirect if setup is already done
-        fetch(`${API}/auth/setup/status`)
+        fetch(`${API_BASE}/auth/setup/status`)
             .then(r => r.json())
             .then(({ hasUsers }) => {
                 if (hasUsers) {
@@ -81,7 +81,7 @@
 
             try {
                 // Step 1 — create user account
-                const setupRes = await fetch(`${API}/auth/setup`, {
+                const setupRes = await fetch(`${API_BASE}/auth/setup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, username }),
@@ -95,7 +95,7 @@
                 // Step 2 — register first passkey
                 setMessage('Account created. Follow the passkey prompt on your device…');
 
-                const startRes = await fetch(`${API}/auth/passkey/register/start`, {
+                const startRes = await fetch(`${API_BASE}/auth/passkey/register/start`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -107,7 +107,7 @@
 
                 const response = await startRegistration(options);
 
-                const finishRes = await fetch(`${API}/auth/passkey/register/finish`, {
+                const finishRes = await fetch(`${API_BASE}/auth/passkey/register/finish`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
