@@ -24,6 +24,26 @@ Guidelines for AI-assisted development on this project (Claude, Perplexity, or o
 
 ---
 
+## Documentation Hygiene
+
+**Keeping docs up to date is part of every change — not an afterthought.**
+
+Whenever a file is added, moved, renamed, or removed, update all relevant documentation in the **same commit**:
+
+- `README.md` — update any script reference tables, command examples, or directory trees
+- `AI.md` — update any paths or workflow steps that reference the changed files
+- `docs/TESTING.md` — update script paths, PR template examples, or test commands
+- Any other doc that contains the old path or filename
+
+This applies to:
+- Scripts being added or reorganised (e.g. moving `scripts/foo.ps1` → `scripts/tests/foo.ps1`)
+- Source files being renamed or relocated
+- New docs or config files being introduced
+
+The rule: **if the repo structure changes, the docs that describe that structure change in the same commit.**
+
+---
+
 ## Markdown List Conventions
 
 Use this rule consistently throughout this file and in all docs written by the AI:
@@ -97,7 +117,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - Edge cases to check (e.g. empty state, error handling, mobile view)
 - Regression checks for related features that could have been affected
 - Any manual setup needed before testing (e.g. seed data, env vars)
-- A reference to `scripts/Test-PRN.ps1` if one exists for the PR
+- A reference to `scripts/tests/Test-PRN.ps1` if one exists for the PR
 
 ### 5. Release to Production
 
@@ -304,26 +324,26 @@ var name = user.name; // Get the user's name
 
 ```powershell
 # 1. Ensure the dev environment is running
-.\scripts\dev-local.ps1 up
+. scripts\dev\dev-local.ps1 up
 
 # 2. Run the full test suite inside the backend container
-.\scripts\dev-local.ps1 test
+. scripts\dev\dev-local.ps1 test
 
 # 3. Run with coverage report
-.\scripts\dev-local.ps1 test:coverage
+. scripts\dev\dev-local.ps1 test:coverage
 ```
 
 ### PR smoke test scripts
 
-Every PR that touches backend code **must** include a `scripts/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
+Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
 
 - The PR description **must** reference the script in its Testing Checklist section
 - The script runs `docker compose exec` directly — it does not require bash or WSL
-- Run it after `dev-local.ps1 up` with: `.\scripts\Test-PRN.ps1`
+- Run it after `. scripts\dev\dev-local.ps1 up` with: `.\scripts\tests\Test-PRN.ps1`
 
 ### What to verify
 
-- Run `.\scripts\Test-PRN.ps1` — all checks must pass
+- Run `.\scripts\tests\Test-PRN.ps1` — all checks must pass
 - Verify the golden path and edge cases manually for UI changes
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
@@ -378,4 +398,4 @@ See README.md for full details, scripts, and local dev setup.
 6. Review recent commits to match code style
 7. Ask: "Is this change isolated, testable, and reversible?"
 8. If a task is too large, break it into smaller PRs
-9. Test inside the Docker container before proposing changes — use `.\scripts\dev-local.ps1 test`
+9. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
