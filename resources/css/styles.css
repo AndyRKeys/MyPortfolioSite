@@ -4,6 +4,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* ── Prevent horizontal overflow on all screen sizes ────────────────────── */
+html {
+    overflow-x: hidden;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 /* ── CSS custom properties (colour tokens) ──────────────────────────────────── */
 
 :root {
@@ -76,7 +85,8 @@
 
 body {
     font-family: 'Inter', system-ui, sans-serif;
-    margin: 0 10%;
+    /* cap side margins so mid-tablet content isn't over-indented */
+    margin: 0 min(10%, 140px);
     background-color: var(--color-bg);
     color: var(--color-text);
     transition: background-color 0.3s ease, color 0.3s ease;
@@ -162,13 +172,40 @@ strong {
 
 nav {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     width: 100%;
     position: -webkit-sticky;
-    position: sticky;    
+    position: sticky;
     top: 0;
-    overflow: hidden;
     z-index: 99;
+    background-color: var(--color-nav-bg);
+}
+
+/* Hamburger toggle — hidden on desktop, visible on mobile */
+.nav-toggle {
+    display: none;
+    width: 100%;
+    background: var(--color-nav-bg);
+    color: var(--color-nav-text);
+    border: none;
+    border-radius: 0;
+    padding: 14px 1.25rem;
+    font-size: 0.95rem;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    align-items: center;
+    justify-content: space-between;
+    height: auto;
+}
+
+.nav-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-toggle-icon {
+    font-size: 1.25rem;
+    line-height: 1;
 }
 
 ul.nav {
@@ -176,7 +213,7 @@ ul.nav {
     flex-wrap: wrap;
     justify-content: center;
     width: 100%;
-    margin: 0 auto;
+    margin: 0;
     padding: 0;
     list-style: none;
     background-color: var(--color-nav-bg);
@@ -198,21 +235,19 @@ ul.nav {
     display: block;
     font-size: 0.95rem;
     transition: background-color 0.2s ease;
+    white-space: nowrap;
 }
 
-li.nav a:hover {
-    background-color: #111;
-}
-
-li a:hover {
-    background-color: #111;
+.nav a:hover,
+.nav li a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .sec-cont {
     width: 100%;
-    display: flexbox;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    align-content: center;
     text-align: center;
 }
 
@@ -300,8 +335,8 @@ li a:hover {
 }
 
 img {
-    height: 100%;
-    width: 100%;
+    max-width: 100%;
+    height: auto;
 }
 
 .hs-wrap {
@@ -896,6 +931,50 @@ footer {
 }
 
 @media screen and (max-width: 768px) {
+    /* ── Hamburger nav ───────────────────────────────────────────────────── */
+    .nav-toggle {
+        display: flex;
+    }
+
+    ul.nav {
+        display: none;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    ul.nav.nav-open {
+        display: flex;
+    }
+
+    .nav li {
+        width: 100%;
+        display: flex;
+    }
+
+    .nav a {
+        text-align: left;
+        padding: 13px 1.5rem;
+        width: 100%;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* dark mode toggle in collapsed nav */
+    .nav li #dark-mode-toggle {
+        width: 100%;
+        text-align: left;
+        border-radius: 0;
+        padding: 13px 1.5rem;
+        height: auto;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 0.95rem;
+        background: transparent;
+        border-top: none;
+        border-left: none;
+        border-right: none;
+    }
+
+    /* ── General mobile layout ──────────────────────────────────────────── */
     .cert-card {
         flex-direction: column;
         align-items: flex-start;
