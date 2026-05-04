@@ -377,9 +377,9 @@ async function reverseGeocodeToLocation(lat, lng) {
     }
 }
 
-// Try to read GPS coords from image EXIF and populate the lat/lng inputs.
-async function tryAutofillGpsFromFile(file) {
-    if (!file || !file.type || !file.type.startsWith('image/')) return;
+// Extract GPS from a single file without setting the form.
+async function extractGpsFromFile(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return null;
     try {
         let gps = null;
         try {
@@ -395,19 +395,47 @@ async function tryAutofillGpsFromFile(file) {
                 gps = raw;
             }
         }
+        return gps;
+    } catch {
+        return null;
+    }
+}
 
+// Try to read GPS coords from image EXIF and populate the lat/lng inputs.
+async function tryAutofillGpsFromFile(file) {
+    const gps = await extractGpsFromFile(file);
+    if (gps) {
+        $('#travel-lat').val(gps.latitude.toFixed(6));
+        $('#travel-lng').val(gps.longitude.toFixed(6));
+        setTravelMessage('GPS auto-filled from photo EXIF.');
+        updateGeoconfirmMap(gps.latitude, gps.longitude);
+        reverseGeocodeToLocation(gps.latitude, gps.longitude);
+    } else {
+        setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
+    }
+}
+
+// Loop through sorted files to find the first one with valid GPS coords.
+async function tryAutofillGpsFromFileList(files) {
+    // Sort by filename for consistent results across different selection orders
+    const sortedImages = files
+        .filter(f => f.type && f.type.startsWith('image/'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const file of sortedImages) {
+        const gps = await extractGpsFromFile(file);
         if (gps) {
             $('#travel-lat').val(gps.latitude.toFixed(6));
             $('#travel-lng').val(gps.longitude.toFixed(6));
-            setTravelMessage('GPS auto-filled from photo EXIF.');
+            setTravelMessage(`GPS auto-filled from ${file.name}.`);
             updateGeoconfirmMap(gps.latitude, gps.longitude);
             reverseGeocodeToLocation(gps.latitude, gps.longitude);
-        } else {
-            setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
+            return; // Stop after finding the first valid one
         }
-    } catch {
-        setTravelMessage('No GPS data in photo — enter coordinates manually or use Geocode.', false, true);
     }
+
+    // None of the images had valid GPS
+    setTravelMessage('No GPS data in any photo — enter coordinates manually or use Geocode.', false, true);
 }
 
 async function geocodeLocation() {
@@ -482,11 +510,15 @@ function initTravelForm() {
         const files = Array.from(event.target.files || []);
         if (!files.length) return;
 
-        // EXIF auto-fill from first image in the selection
-        const firstImage = files.find(f => f.type.startsWith('image/'));
-        if (firstImage) {
-            tryAutofillGpsFromFile(firstImage);
-            tryAutofillDateFromFile(firstImage);
+        // EXIF auto-fill: loop through sorted images to find first with valid GPS
+        tryAutofillGpsFromFileList(files);
+
+        // Date auto-fill from first image by filename (for consistency)
+        const sortedImages = files
+            .filter(f => f.type && f.type.startsWith('image/'))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        if (sortedImages.length) {
+            tryAutofillDateFromFile(sortedImages[0]);
         }
 
         pendingFiles = pendingFiles.concat(files);
