@@ -14,7 +14,8 @@ export function validate(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      const message = result.error.errors.map(e => e.message).join('; ');
+      // v4: error.issues (was error.errors in v3)
+      const message = result.error.issues.map(e => e.message).join('; ');
       return res.status(400).json({ error: message });
     }
     req.body = result.data;
@@ -52,7 +53,8 @@ export const UpdatePostSchema = z.object({
   title:         z.string().min(1, 'Title is required'),
   body_markdown: z.string().optional(),
   post_date:     dateString,
-  publish:       z.union([z.boolean(), z.literal(false)]).optional(),
+  // v4: z.literal(false) is redundant inside a union with z.boolean() — simplified
+  publish:       z.boolean().optional(),
 });
 
 // ── Travel schemas ────────────────────────────────────────────────────────────
