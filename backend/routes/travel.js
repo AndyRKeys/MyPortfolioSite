@@ -21,6 +21,11 @@ const TRAVEL_COLS = `
   ) AS media
 `;
 
+function slugify(title) {
+  return title.trim().toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 90);
+}
+
 // Replace all post_media rows for a post and sync posts.media_url/media_type to first item.
 async function replaceMedia(client, postId, mediaItems) {
   await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
@@ -103,29 +108,36 @@ router.post('/', authenticate, async (req, res) => {
     const postDateVal = visitDate || null;
     const publishedAt = publish ? new Date() : null;
 
-    const baseSlug = title.trim().toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 90);
-    let slug = baseSlug || 'travel';
+    const baseSlug = slugify(title) || 'travel';
+    let slug = baseSlug;
     let i = 1;
-    while (true) {
-      const { rows } = await client.query('SELECT id FROM posts WHERE slug = $1', [slug]);
-      if (!rows.length) break;
-      slug = `${baseSlug}-${i++}`;
+    let postId = null;
+
+    // Try to insert with ON CONFLICT, retry with incremented slug on collision
+    while (!postId && i <= 100) {
+      const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
+      const insert = await client.query(
+        `INSERT INTO posts
+           (post_type, title, slug, body_markdown, post_date, published_at,
+            location, media_url, media_type, lat, lng)
+         VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (slug) DO NOTHING
+         RETURNING id`,
+        [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
+         location?.trim() || null,
+         firstMedia?.url || null, firstMedia?.type || null,
+         latVal, lngVal]
+      );
+
+      if (insert.rows.length > 0) {
+        postId = insert.rows[0].id;
+      } else {
+        slug = `${baseSlug}-${i++}`;
+      }
     }
 
-    const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
-    const insert = await client.query(
-      `INSERT INTO posts
-         (post_type, title, slug, body_markdown, post_date, published_at,
-          location, media_url, media_type, lat, lng)
-       VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id`,
-      [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
-       location?.trim() || null,
-       firstMedia?.url || null, firstMedia?.type || null,
-       latVal, lngVal]
-    );
-    const postId = insert.rows[0].id;
+    if (!postId) throw new Error('Could not generate unique slug after 100 attempts');
+
     if (mediaItems && mediaItems.length) {
       await replaceMedia(client, postId, mediaItems);
     }

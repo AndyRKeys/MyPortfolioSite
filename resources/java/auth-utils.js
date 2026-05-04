@@ -9,3 +9,6 @@ function isAdminSession() {
         return false;
     }
 }
+
+// Export for ES module usage
+export { isAdminSession };

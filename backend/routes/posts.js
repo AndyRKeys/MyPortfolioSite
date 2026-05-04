@@ -14,13 +14,31 @@ function slugify(title) {
     .slice(0, 100);
 }
 
-async function uniqueSlug(base) {
-  let slug = base;
-  let i = 1;
-  while (true) {
-    const { rows } = await pool.query('SELECT id FROM posts WHERE slug = $1', [slug]);
-    if (!rows.length) return slug;
-    slug = `${base}-${i++}`;
+async function tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt = 0, maxAttempts = 100) {
+  const baseSlug = slugify(title) || 'post';
+  const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO posts (post_type, title, slug, body_markdown, post_date, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (slug) DO NOTHING
+       RETURNING *`,
+      [post_type, title.trim(), slug, body_markdown || '', post_date, published_at]
+    );
+
+    if (result.rows.length > 0) {
+      return result.rows[0];
+    } else if (attempt < maxAttempts) {
+      return tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt + 1, maxAttempts);
+    } else {
+      throw new Error('Could not generate unique slug after max attempts');
+    }
+  } catch (err) {
+    if (attempt < maxAttempts) {
+      return tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt + 1, maxAttempts);
+    }
+    throw err;
   }
 }
 
@@ -97,17 +115,10 @@ router.post('/', authenticate, async (req, res) => {
     const { title, body_markdown, post_date, publish } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
 
-    const base = slugify(title) || 'post';
-    const slug = await uniqueSlug(base);
     const publishedAt = publish ? new Date() : null;
     const postDateVal = post_date || null;
-
-    const result = await pool.query(
-      `INSERT INTO posts (post_type, title, slug, body_markdown, post_date, published_at)
-       VALUES ('blog', $1, $2, $3, $4, $5) RETURNING *`,
-      [title.trim(), slug, body_markdown || '', postDateVal, publishedAt]
-    );
-    res.status(201).json(result.rows[0]);
+    const result = await tryInsertPost('blog', title, body_markdown, postDateVal, publishedAt);
+    res.status(201).json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database error' });
@@ -129,7 +140,19 @@ router.put('/:id', authenticate, async (req, res) => {
     let { slug, published_at } = existing.rows[0];
     if (existing.rows[0].title !== title.trim()) {
       const base = slugify(title) || 'post';
-      slug = await uniqueSlug(base);
+      let attempt = 0;
+      let newSlug = base;
+      while (attempt < 100) {
+        const { rows } = await pool.query(
+          `SELECT id FROM posts WHERE slug = $1 AND id != $2`,
+          [newSlug, req.params.id]
+        );
+        if (!rows.length) {
+          slug = newSlug;
+          break;
+        }
+        newSlug = `${base}-${++attempt}`;
+      }
     }
     if (publish && !published_at) published_at = new Date();
     if (publish === false) published_at = null;
