@@ -35,27 +35,41 @@ function renderLightboxItem() {
 }
 
 function initLightbox() {
-    $(document).on('click', '.lightbox-close', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeLightbox();
+    var lightbox = document.getElementById('travel-lightbox');
+    if (!lightbox) return;
+
+    var closeBtn = lightbox.querySelector('.lightbox-close');
+    var prevBtn = lightbox.querySelector('.lightbox-prev');
+    var nextBtn = lightbox.querySelector('.lightbox-next');
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeLightbox();
+        });
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
+        });
+    }
+
+    lightbox.addEventListener('click', function (e) {
+        if (e.target === lightbox) closeLightbox();
     });
-    $(document).on('click', '#travel-lightbox', function (e) {
-        if (e.target.id === 'travel-lightbox') closeLightbox();
-    });
-    $(document).on('click', '.lightbox-prev', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
-    });
-    $(document).on('click', '.lightbox-next', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
-    });
-    $(document).on('keydown', function (e) {
-        var lightbox = document.getElementById('travel-lightbox');
-        if (!lightbox || lightbox.classList.contains('hidden')) return;
+
+    document.addEventListener('keydown', function (e) {
+        if (lightbox.classList.contains('hidden')) return;
         if (e.key === 'Escape') {
             e.preventDefault();
             closeLightbox();
