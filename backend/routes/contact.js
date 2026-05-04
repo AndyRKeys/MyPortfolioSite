@@ -1,25 +1,52 @@
 import { Router } from 'express';
 import nodemailer from 'nodemailer';
+import { pool } from '../db/pool.js';
+import { escapeHtml } from '../utils/html.js';
 
 const router = Router();
 
-const rateLimitMap = new Map();
 const RATE_LIMIT = 3;
-const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-// TODO(#79): Replace in-memory rate limiter with persistent store (Redis/DB)
-// Current implementation doesn't work across multiple processes or after server restart.
-// For production with horizontal scaling, use Redis or database-backed rate limiting.
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
-    rateLimitMap.set(ip, { count: 1, windowStart: now });
+/**
+ * DB-backed rate limiter using the rate_limits table.
+ * Falls back to allowing the request if the DB call fails, so a DB hiccup
+ * doesn't silently block legitimate contact form submissions.
+ *
+ * @param {string} ip
+ * @returns {Promise<boolean>} true = allow, false = block
+ */
+async function checkRateLimit(ip) {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - RATE_WINDOW_MS);
+
+    // Upsert: if no row for this IP, create one with count=1.
+    // If an existing row's window has expired, reset it.
+    // Otherwise increment the counter and return it.
+    const result = await pool.query(
+      `INSERT INTO rate_limits (ip, count, window_start)
+       VALUES ($1, 1, $2)
+       ON CONFLICT (ip) DO UPDATE
+         SET
+           count = CASE
+             WHEN rate_limits.window_start < $3 THEN 1
+             ELSE rate_limits.count + 1
+           END,
+           window_start = CASE
+             WHEN rate_limits.window_start < $3 THEN $2
+             ELSE rate_limits.window_start
+           END
+       RETURNING count`,
+      [ip, now, windowStart]
+    );
+
+    return result.rows[0].count <= RATE_LIMIT;
+  } catch (err) {
+    // Fail open: log and allow so a DB issue doesn't break the contact form.
+    console.error('Rate limit DB error (failing open):', err.message);
     return true;
   }
-  if (entry.count >= RATE_LIMIT) return false;
-  entry.count++;
-  return true;
 }
 
 function getTransporter() {
@@ -41,7 +68,7 @@ router.post('/', async (req, res) => {
   }
 
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
-  if (!checkRateLimit(ip)) {
+  if (!await checkRateLimit(ip)) {
     return res.status(429).json({ error: 'Too many requests. Please try again later.' });
   }
 
@@ -70,13 +97,5 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to send message. Please email directly.' });
   }
 });
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 export default router;

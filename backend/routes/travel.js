@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { slugify } from '../utils/slugify.js';
 
 const router = Router();
 
@@ -20,11 +21,6 @@ const TRAVEL_COLS = `
     ), '[]'::json
   ) AS media
 `;
-
-function slugify(title) {
-  return title.trim().toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 90);
-}
 
 // Replace all post_media rows for a post and sync posts.media_url/media_type to first item.
 async function replaceMedia(client, postId, mediaItems) {
@@ -124,12 +120,11 @@ router.post('/', authenticate, async (req, res) => {
     const postDateVal = visitDate || null;
     const publishedAt = publish ? new Date() : null;
 
-    const baseSlug = slugify(title) || 'travel';
+    const baseSlug = slugify(title, 'travel');
     let slug = baseSlug;
     let i = 1;
     let postId = null;
 
-    // Try to insert with ON CONFLICT, retry with incremented slug on collision
     while (!postId && i <= 100) {
       const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
       const insert = await client.query(
@@ -208,7 +203,6 @@ router.put('/:id', authenticate, async (req, res) => {
        latVal, lngVal, req.params.id]
     );
 
-    // If mediaItems provided, replace all media; otherwise leave existing post_media untouched
     if (mediaItems !== undefined) {
       await replaceMedia(client, req.params.id, mediaItems);
     }
@@ -252,7 +246,6 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Media item not found' });
 
-    // Re-sync posts.media_url to the new first item
     const first = await pool.query(
       `SELECT media_url, media_type FROM post_media WHERE post_id = $1 ORDER BY order_index, created_at LIMIT 1`,
       [req.params.id]
