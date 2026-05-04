@@ -1,4 +1,4 @@
-var API_BASE = '/api';
+import { API_BASE } from './config.js';
 
 // ── Lightbox state ────────────────────────────────────────────────────────────
 var lightboxItems = [];
@@ -126,7 +126,6 @@ function renderTravelPost(travel) {
     var dateText = formatVisitDate(travel.visit_date);
     document.getElementById('post-date').textContent = dateText;
 
-    // Render media gallery
     var allMedia = Array.isArray(travel.media) && travel.media.length
         ? travel.media
         : (travel.media_url ? [{ url: travel.media_url, type: travel.media_type }] : []);
@@ -137,7 +136,7 @@ function renderTravelPost(travel) {
         allMedia.forEach(function (item, idx) {
             var thumb = $('<div class="gallery-thumb"></div>');
             if (item.type && item.type.indexOf('video') === 0) {
-                thumb.append($('<video src="' + item.url + '" muted></video>'));
+                thumb.append($('<video muted></video>').attr('src', item.url));
             } else {
                 thumb.append($('<img alt="Travel media">').attr('src', item.url));
             }
@@ -148,14 +147,12 @@ function renderTravelPost(travel) {
         });
     }
 
-    // Render notes (plain text, not markdown for travel)
     var notesEl = document.getElementById('post-notes');
     notesEl.textContent = travel.notes || '';
 
     document.getElementById('post-loading').classList.add('hidden');
     document.getElementById('post-body').classList.remove('hidden');
 
-    // Render map after post-body is visible so Leaflet can measure real dimensions
     if (travel.lat != null && travel.lng != null) {
         var lat = parseFloat(travel.lat);
         var lng = parseFloat(travel.lng);
@@ -178,7 +175,7 @@ function showError() {
     document.getElementById('post-error').classList.remove('hidden');
 }
 
-$(document).ready(function () {
-    initLightbox();
-    loadTravelPost();
-});
+// Modules are deferred by default — DOM is ready and jQuery/$  is available
+// because the jQuery <script> tag runs before this module.
+initLightbox();
+loadTravelPost();
