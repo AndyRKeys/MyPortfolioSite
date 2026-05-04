@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { slugify } from '../utils/slugify.js';
+import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 
 const router = Router();
 
 async function tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt = 0, maxAttempts = 100) {
   const baseSlug = slugify(title);
-  const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
+  const slug     = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
 
   try {
     const result = await pool.query(
@@ -101,13 +102,12 @@ router.get('/:slug', async (req, res) => {
 });
 
 // Admin: create blog post
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
-    if (!title) return res.status(400).json({ error: 'Title is required' });
-
+    // title guaranteed present by validate()
     const publishedAt = publish ? new Date() : null;
-    const postDateVal = post_date || null;
+    const postDateVal  = post_date || null;
     const result = await tryInsertPost('blog', title, body_markdown, postDateVal, publishedAt);
     res.status(201).json(result);
   } catch (err) {
@@ -117,10 +117,10 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // Admin: update blog post
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
-    if (!title) return res.status(400).json({ error: 'Title is required' });
+    // title guaranteed present by validate()
 
     const existing = await pool.query(
       `SELECT * FROM posts WHERE id = $1 AND post_type = 'blog'`,
@@ -138,10 +138,7 @@ router.put('/:id', authenticate, async (req, res) => {
           `SELECT id FROM posts WHERE slug = $1 AND id != $2`,
           [newSlug, req.params.id]
         );
-        if (!rows.length) {
-          slug = newSlug;
-          break;
-        }
+        if (!rows.length) { slug = newSlug; break; }
         newSlug = `${base}-${++attempt}`;
       }
     }

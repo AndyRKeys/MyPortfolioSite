@@ -2,6 +2,15 @@
 
 Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
 
+## Markdown List Conventions
+
+Use this rule consistently throughout this file and in all docs written by the AI:
+
+- **Numbered lists** — for ordered sequences where the steps must happen in a specific order (e.g. a deployment procedure, a hotfix process)
+- **Bullet lists** — for unordered collections of rules, properties, options, or items where sequence does not matter
+
+---
+
 ## Branching Strategy
 
 This project follows a three-tier branching model:
@@ -22,7 +31,6 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
-
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
 - **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
@@ -36,30 +44,30 @@ feature/* or fix/* (per GitHub issue)
 If the issue doesn't exist yet, create it on GitHub with:
 - Clear title and description
 - Steps to reproduce (for bugs)
-- Expected vs actual behavior
+- Expected vs actual behaviour
 - Any relevant context (related PRs, design docs, etc.)
 
 ### 2. Planning
 Before writing code:
-- Read the issue and any linked context
-- Examine existing code patterns and architecture
-- Comment a plan on the issue before starting work
-- Ask for clarification if requirements are ambiguous
+1. Read the issue and any linked context
+2. Examine existing code patterns and architecture
+3. Comment a plan on the issue before starting work
+4. Ask for clarification if requirements are ambiguous
 
 ### 3. Implementation
-- Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
-- Commit regularly with clear messages
-- Keep changes focused — one issue per branch
-- Push commits as you go (don't wait until done)
+1. Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
+2. Commit regularly with clear messages
+3. Keep changes focused — one issue per branch
+4. Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
 Once implementation is complete:
-- Raise a PR from the branch → `dev`
-- Link the issue number (`Closes #N`)
-- Include a clear summary of what changed and why
-- Wait for review, testing, and approval before merging
+1. Raise a PR from the branch → `dev`
+2. Link the issue number (`Closes #N`)
+3. Include a clear summary of what changed and why
+4. Wait for review, testing, and approval before merging
 
-**You** will review, test locally, and merge when ready. The AI does not merge PRs.
+The AI does not merge PRs — you will review, test locally, and merge when ready.
 
 ### 5. Release to Production
 
@@ -76,22 +84,24 @@ The AI will:
    - All bugs fixed (with issue numbers)
    - Any breaking changes or deployment notes
    - Links to all related PRs merged since last release
+4. Append an entry to `docs/RELEASE_NOTES.md` (see [Doc Lifecycle](#doc-lifecycle) below)
+5. Archive or clean up any planning docs whose work is now fully shipped (see [Doc Lifecycle](#doc-lifecycle) below)
 
-**You** will:
-- Review the release summary
-- Test any critical paths on `release/YYYY-MM-DD` if needed
-- Approve and merge the PR to `main` (the AI does not merge)
-- The deployment script will pull from `main` and go live
+You will:
+1. Review the release summary
+2. Test any critical paths on `release/YYYY-MM-DD` if needed
+3. Approve and merge the PR to `main` (the AI does not merge)
+4. The deployment script will pull from `main` and go live
 
 ### 6. Hotfixes (Emergency Production Fixes)
 
 If a critical bug is discovered on production:
-
 1. Instruct the AI to create a hotfix: `Create hotfix/issue-N-short-description for the production bug`
 2. The AI will branch from `main`, fix, commit, and raise a PR → `main`
 3. You review and approve the hotfix PR
 4. After merging to `main`, instruct: `Merge hotfix into dev to keep branches in sync`
 5. The AI will merge `main` back to `dev`
+6. A hotfix entry is appended to `docs/RELEASE_NOTES.md`
 
 ### Branching diagram
 
@@ -100,6 +110,56 @@ main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/
  ↑                                              ←── fix/issue-N-*
  └── hotfix/issue-N-* ────────────────────────(emergency fixes only)
 ```
+
+## Doc Lifecycle
+
+Planning documents in `docs/` have a lifecycle — they should be kept tidy as work progresses.
+
+### Planning docs
+
+| State | What to do |
+|-------|------------|
+| Work in progress | Leave the plan doc in place |
+| Partially complete | Add a `> ⚠️ Partially actioned — see issue #N` note at the top |
+| Fully shipped in a release | Move to `docs/archive/` with no other changes |
+| Superseded / abandoned | Move to `docs/archive/` and add a note explaining why |
+
+- **Never delete** planning docs — they are useful historical context
+- **Never edit** the content of an archived doc — only add a header note if needed
+- `docs/archive/` is a flat folder; no sub-folders needed
+
+### Release notes (`docs/RELEASE_NOTES.md`)
+
+The AI maintains `docs/RELEASE_NOTES.md` as a running log of all production releases. Each release entry is **prepended** (newest first) in this format:
+
+```markdown
+## v YYYY-MM-DD[-N]
+
+**Released:** YYYY-MM-DD  
+**Branch:** release/YYYY-MM-DD  
+**PR:** #N
+
+### Features
+- feat(#N): short description
+
+### Bug Fixes
+- fix(#N): short description
+
+### Breaking Changes / Deployment Notes
+- None  (or describe anything requiring manual steps on the server)
+
+---
+```
+
+- Hotfixes get their own entry with a `🔥 Hotfix` prefix on the version line
+- The file is created automatically on first release if it does not exist
+- Do not manually edit this file — let the AI maintain it at release time
+
+### When to action doc lifecycle
+
+The AI performs doc lifecycle steps **as part of the release PR commit**, so the release branch contains both the code and the updated docs in one coherent snapshot.
+
+---
 
 ## Commit Conventions
 
@@ -122,18 +182,39 @@ Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexit
 - ❌ `Fixed bug` (too vague, missing scope)
 - ❌ `WIP` (incomplete, no description)
 
+## Developer Environment
+
+### Terminal
+
+- **Preferred terminal: PowerShell** (Windows). Use PowerShell syntax for all shell commands, scripts, and examples provided by the AI.
+- Use backtick (`` ` ``) for line continuation, not `\`.
+- Use `curl.exe` (not `curl`) to invoke real curl — `curl` in PowerShell is an alias for `Invoke-WebRequest` and behaves differently.
+- Escape inner double-quotes in `-d` bodies with `\"` when using `curl.exe`.
+- For multi-line `curl.exe` commands:
+
+```powershell
+curl.exe -s -X POST http://localhost/api/contact `
+  -H 'Content-Type: application/json' `
+  -d '{\"name\":\"Test\",\"email\":\"test@example.com\",\"message\":\"Hello\"}'
+```
+
+- Bash scripts (`*.sh`) are still used for Pi/server-side operations and Docker. When providing commands intended to run on the Pi or inside a container, Bash syntax is correct. When providing commands to run on your local Windows machine, use PowerShell.
+
 ## Code Style
+
+**See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full coding style guide** — naming conventions, alignment & whitespace rules, JavaScript, CSS, HTML, and Express patterns.
+
+Key points summarised here:
 
 ### Comments
 
 Keep comments **concise and rare**. Add them only when:
-
 - The logic is unusual or non-obvious
 - Explaining a workaround for a specific bug
 - Documenting a hidden constraint or invariant
 - The code does something surprising
 
-**Do NOT comment:**
+Do NOT comment:
 - What the code does (use clear variable names instead)
 - The current task (that belongs in PR descriptions)
 - Obvious operations
@@ -189,6 +270,7 @@ var name = user.name; // Get the user's name
 - Verify the golden path and edge cases
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the UI
+- When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
 
 ## Database
 
@@ -208,10 +290,12 @@ var name = user.name; // Get the user's name
 
 For urgent production bugs that can't wait for the normal release cycle:
 
-- Branch from `main` as `hotfix/issue-N-short-description`
-- Fix, commit, and raise a PR → `main` with a hotfix summary
-- After merging to `main`, also merge back to `dev` to keep branches in sync
-- Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
+1. Branch from `main` as `hotfix/issue-N-short-description`
+2. Fix, commit, and raise a PR → `main` with a hotfix summary
+3. After merging to `main`, merge back to `dev` to keep branches in sync
+4. Append a hotfix entry to `docs/RELEASE_NOTES.md`
+
+Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
 
 ## Context for AI Models
 
@@ -222,13 +306,15 @@ When working with this project:
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
 - **Deployment:** Smart deploy script detects changes and restarts only what's needed
+- **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
 
 See README.md for full details, scripts, and local dev setup.
 
 ## When in Doubt
 
 1. Check the README.md for architecture and deployment info
-2. Review recent commits to match code style
-3. Ask: "Is this change isolated, testable, and reversible?"
-4. If a task is too large, break it into smaller PRs
-5. Test locally before proposing changes (use Docker Compose or manual setup)
+2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
+3. Review recent commits to match code style
+4. Ask: "Is this change isolated, testable, and reversible?"
+5. If a task is too large, break it into smaller PRs
+6. Test locally before proposing changes (use Docker Compose or manual setup)

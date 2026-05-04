@@ -1,3 +1,5 @@
+> ✅ Fully shipped in PR #86 (`feature/issue-79-tech-debt-2`) — archived per doc lifecycle policy.
+
 # ES Module Migration Plan
 
 **Branch:** `feature/issue-79-tech-debt-2`  
