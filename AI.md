@@ -142,6 +142,10 @@ curl.exe -s -X POST http://localhost/api/contact `
 
 ## Code Style
 
+**See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full coding style guide** — naming conventions, alignment & whitespace rules, JavaScript, CSS, HTML, and Express patterns.
+
+Key points summarised here:
+
 ### Comments
 
 Keep comments **concise and rare**. Add them only when:
@@ -248,7 +252,8 @@ See README.md for full details, scripts, and local dev setup.
 ## When in Doubt
 
 1. Check the README.md for architecture and deployment info
-2. Review recent commits to match code style
-3. Ask: "Is this change isolated, testable, and reversible?"
-4. If a task is too large, break it into smaller PRs
-5. Test locally before proposing changes (use Docker Compose or manual setup)
+2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
+3. Review recent commits to match code style
+4. Ask: "Is this change isolated, testable, and reversible?"
+5. If a task is too large, break it into smaller PRs
+6. Test locally before proposing changes (use Docker Compose or manual setup)
