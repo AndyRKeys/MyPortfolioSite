@@ -6,6 +6,8 @@ import { validate, ContactSchema } from '../middleware/validate.js';
 
 const router = Router();
 
+// Rate limiting for contact form — kept in code (not in docs) to prevent spam bots from auto-tuning
+// Current limits: 3 requests per hour per IP address
 const RATE_LIMIT    = 3;
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
