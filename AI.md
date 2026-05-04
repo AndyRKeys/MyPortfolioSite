@@ -122,17 +122,37 @@ var name = user.name; // Get the user's name
 
 ### HTML / CSS / JS
 
-- Use vanilla JS when possible, jQuery only for cross-browser compat
-- Keep CSS organized by component
+**ES Modules & Code Organization**
+- Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
+- Create shared utilities in `resources/java/utils/*` instead of duplicating functions
+- Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
+- Import utilities as: `import { escapeHtml, formatVisitDate } from './utils/html.js'`
+- Avoid copy-pasting logic across multiple files — extract to utils first
+
+**HTML & CSS**
+- Keep CSS organized by component/feature
 - Prefer editing existing files over creating new ones
 - Delete unused code completely (no `// removed` comments)
-- Use `var` for compatibility (jQuery environment)
+- Use semantic HTML (`<article>`, `<header>`, `<nav>`, `<button>` with proper `aria-` attributes)
+
+**JavaScript**
+- Use vanilla JS when possible, jQuery only for legacy compatibility
+- Use `const/let` in modern ES modules (use `var` only in legacy jQuery files)
+- For security-critical operations (escaping, DOM manipulation), always use shared utilities
+- Prevent XSS: escape user input with `escapeHtml()` before setting `innerHTML`
+- Prevent SQL injection: use parameterized queries on backend (never string concatenation)
+
+**Design Patterns (Anti-Debt)**
+- **DRY (Don't Repeat Yourself):** Extract repeated logic to utilities or shared functions
+- **Single Responsibility:** Each function/module has one clear purpose
+- **No Quick Fixes:** If tempted to duplicate code, create a utility instead
+- **Testability:** Write utilities to be testable independently of DOM
 
 ## Architecture Notes
 
-- **Frontend:** Plain HTML/CSS/JS + jQuery, no build step
-- **Backend:** Node.js/Express (ES modules), PostgreSQL
-- **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static)
+- **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
+- **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
+- **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
 - **Auth:** JWT + WebAuthn/FIDO2 passkeys
 - **Dev setup:** Docker Compose (recommended) or manual Node + PostgreSQL
 
