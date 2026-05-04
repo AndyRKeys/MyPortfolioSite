@@ -79,6 +79,7 @@ Align colons and values in logically grouped CSS declarations:
 | DB tables    | snake_case       | `blog_posts`, `travel_posts`   |
 | Constants    | SCREAMING_SNAKE  | `MAX_RETRIES`, `API_BASE`      |
 | Env vars     | SCREAMING_SNAKE  | `JWT_SECRET`, `DATABASE_URL`   |
+| Test files   | Mirror source path, `.test.js` suffix | `tests/routes/posts.test.js` |
 
 ---
 
@@ -353,6 +354,56 @@ var name = user.name; // Get the user's name
 // ❌ Task note — belongs in the PR, not the code
 // TODO: fix this later
 ```
+
+---
+
+## Testing
+
+> ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.**
+
+See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide. Key conventions:
+
+### File structure
+
+Test files mirror the source tree under `backend/tests/`:
+
+```
+backend/tests/
+  middleware/validate.test.js
+  middleware/errorHandler.test.js
+  routes/contact.test.js
+  routes/posts.test.js
+```
+
+File naming: `<source-filename>.test.js` in a mirrored path.
+
+### Naming
+
+- `describe` block: matches the route or module name (`'POST /posts'`, `'validate middleware'`)
+- `it` block: plain English description of behaviour (`'returns 400 when title is missing'`)
+
+### Mocking conventions
+
+- Mock `pg` at the **module level** with `vi.mock('pg', ...)` — never mock it inside a test
+- Mock `nodemailer` the same way for routes that send email
+- Never use a live database or live network in unit/integration tests
+- Use `vi.fn().mockResolvedValue({ rows: [] })` as the default pg query stub; override per-test when needed
+
+### Running tests
+
+```powershell
+.\scripts\dev-local.ps1 up             # ensure dev environment is running
+.\scripts\dev-local.ps1 test           # run full suite
+.\scripts\dev-local.ps1 test:coverage  # run with coverage report
+```
+
+### PR smoke test scripts
+
+Every PR that touches backend code must include a `scripts/Test-PRN.ps1` (where N is the PR number).
+
+- Run after `dev-local.ps1 up`: `.\scripts\Test-PRN.ps1`
+- The PR description Testing Checklist must reference it as the primary verification step
+- Scripts use `docker compose exec` directly — no bash or WSL dependency
 
 ---
 
