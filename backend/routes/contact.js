@@ -7,6 +7,9 @@ const rateLimitMap = new Map();
 const RATE_LIMIT = 3;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 
+// TODO(#79): Replace in-memory rate limiter with persistent store (Redis/DB)
+// Current implementation doesn't work across multiple processes or after server restart.
+// For production with horizontal scaling, use Redis or database-backed rate limiting.
 function checkRateLimit(ip) {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
