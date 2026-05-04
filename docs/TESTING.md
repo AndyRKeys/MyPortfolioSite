@@ -41,6 +41,30 @@ docker compose exec backend npm run test:coverage
 
 ---
 
+## Capturing Test Output
+
+Test output is verbose and scrolls quickly. Use `Tee-Object` to write output to a timestamped file **and** keep it visible in the terminal simultaneously:
+
+```powershell
+bash scripts/dev-local.sh test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+```
+
+The `test-results\` folder is gitignored — create it once if it doesn't exist:
+
+```powershell
+New-Item -ItemType Directory -Force -Path test-results
+```
+
+This is especially useful when running the full PR validation script, which produces long output across multiple test suites:
+
+```powershell
+.\scripts\Test-PR104.ps1 | Tee-Object -FilePath "test-results\PR104-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+```
+
+The terminal still shows live output; the file is there for scrolling back through failures or sharing with reviewers.
+
+---
+
 ## Test Structure
 
 All test files live under `backend/tests/`, mirroring the source structure.
