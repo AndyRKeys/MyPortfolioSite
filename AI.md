@@ -1,0 +1,187 @@
+# AI Pair Programmer Instructions
+
+Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
+
+## Branching Strategy
+
+This project follows a three-tier branching model:
+
+```
+main (production)
+ ↑
+dev (integration)
+ ↑
+feature/* or fix/* (per GitHub issue)
+```
+
+**Branch naming:**
+- `feature/issue-N-short-description` — for new features
+- `fix/issue-N-short-description` — for bug fixes
+- One branch per GitHub issue only
+
+**Critical guardrails:**
+
+- **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
+- **Pull requests** go `feature|fix/* → dev` for integration testing, then `dev → main` for production.
+- **Never force-push** to shared branches (`dev`, `main`). Only force-push to your own feature branch if absolutely necessary.
+
+## Expected AI Workflow
+
+### 1. Issue Creation
+If the issue doesn't exist yet, create it on GitHub with:
+- Clear title and description
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- Any relevant context (related PRs, design docs, etc.)
+
+### 2. Planning
+Before writing code:
+- Read the issue and any linked context
+- Examine existing code patterns and architecture
+- Comment a plan on the issue before starting work
+- Ask for clarification if requirements are ambiguous
+
+### 3. Implementation
+- Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
+- Commit regularly with clear messages
+- Keep changes focused — one issue per branch
+- Push commits as you go (don't wait until done)
+
+### 4. PR to Dev
+Once implementation is complete:
+- Raise a PR from the branch → `dev`
+- Link the issue number (`Closes #N`)
+- Include a clear summary of what changed and why
+- Wait for review, testing, and approval before merging
+
+**You** will review, test locally, and merge when ready. The AI does not merge PRs.
+
+### 5. Release
+When you are ready to release, instruct the AI to:
+1. Create a `release/YYYY-MM-DD` branch from `dev`
+   - If releasing more than once on the same day: `release/YYYY-MM-DD-2`, `release/YYYY-MM-DD-3`, etc.
+2. Raise a PR from `release/YYYY-MM-DD` → `main` summarising:
+   - All features added
+   - All bugs fixed
+   - Any breaking changes or deployment notes
+
+**You** approve all merges to `main`. The AI never merges to main.
+
+### Branching diagram
+
+```
+main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/issue-N-*
+                                                   ←── fix/issue-N-*
+```
+
+## Commit Conventions
+
+Follow imperative style with optional Co-Authored-By:
+
+```
+Short imperative summary (50 chars max)
+
+Optional explanation if the why isn't obvious.
+
+Co-Authored-By: AI Model Name <noreply@ai-provider.com>
+```
+
+Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexity Sonar`, `GPT-4`).
+
+**Examples:**
+- ✅ `fix(#81): use /api as API_BASE in blog-post.js`
+- ✅ `feat(#78): add travel-post detail page`
+- ✅ `refactor: simplify lightbox initialization`
+- ❌ `Fixed bug` (too vague, missing scope)
+- ❌ `WIP` (incomplete, no description)
+
+## Code Style
+
+### Comments
+
+Keep comments **concise and rare**. Add them only when:
+
+- The logic is unusual or non-obvious
+- Explaining a workaround for a specific bug
+- Documenting a hidden constraint or invariant
+- The code does something surprising
+
+**Do NOT comment:**
+- What the code does (use clear variable names instead)
+- The current task (that belongs in PR descriptions)
+- Obvious operations
+
+**Examples:**
+```javascript
+// Good: explains why, not what
+var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
+
+// Bad: obvious
+var name = user.name; // Get the user's name
+```
+
+### HTML / CSS / JS
+
+- Use vanilla JS when possible, jQuery only for cross-browser compat
+- Keep CSS organized by component
+- Prefer editing existing files over creating new ones
+- Delete unused code completely (no `// removed` comments)
+- Use `var` for compatibility (jQuery environment)
+
+## Architecture Notes
+
+- **Frontend:** Plain HTML/CSS/JS + jQuery, no build step
+- **Backend:** Node.js/Express (ES modules), PostgreSQL
+- **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static)
+- **Auth:** JWT + WebAuthn/FIDO2 passkeys
+- **Dev setup:** Docker Compose (recommended) or manual Node + PostgreSQL
+
+## Testing Before Merge
+
+- Test locally in Docker or manual dev setup
+- Verify the golden path and edge cases
+- Check for regressions in related features
+- Type checking and linting provide code correctness, **not feature correctness** — test the UI
+
+## Database
+
+- PostgreSQL with UUID PKs and unique slug constraints
+- Schema migrations are idempotent (use `IF NOT EXISTS`)
+- Never use transaction-blocking operations in production code
+- Use parameterized queries to prevent SQL injection
+
+## Security
+
+- Sanitize HTML output to prevent XSS
+- Use parameterized queries for SQL
+- Validate user input at system boundaries only
+- Never log or commit sensitive data (`.env`, tokens, API keys)
+
+## Hotfixes
+
+For urgent production bugs that can't wait for the normal release cycle:
+
+- Branch from `main` as `hotfix/issue-N-short-description`
+- Fix, commit, and raise a PR → `main` with a hotfix summary
+- After merging to `main`, also merge back to `dev` to keep branches in sync
+- Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
+
+## Context for AI Models
+
+When working with this project:
+
+- **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
+- **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
+- **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
+- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
+- **Deployment:** Smart deploy script detects changes and restarts only what's needed
+
+See README.md for full details, scripts, and local dev setup.
+
+## When in Doubt
+
+1. Check the README.md for architecture and deployment info
+2. Review recent commits to match code style
+3. Ask: "Is this change isolated, testable, and reversible?"
+4. If a task is too large, break it into smaller PRs
+5. Test locally before proposing changes (use Docker Compose or manual setup)
