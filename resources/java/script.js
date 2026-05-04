@@ -96,6 +96,52 @@ function setHeight(div, height) {
     div.style.height = height + "px";
 }
 
+// ── Shared timeline builder ───────────────────────────────────────────────────
+// Used by both travel (script.js) and blog (blog.js via window.buildTimelineItem).
+// opts: { dateStr, title, location, notes, mediaUrl, mediaType, linkHref }
+//
+// - All text fields are set via .text() to prevent XSS.
+// - location and mediaUrl are optional.
+// - linkHref wraps the title in an <a> if provided (e.g. blog post slug).
+
+function buildTimelineItem(opts) {
+    var item = $('<div class="timeline-item"></div>');
+    item.append('<div class="timeline-marker"></div>');
+    var content = $('<div class="timeline-content"></div>');
+
+    if (opts.dateStr) {
+        $('<span class="timeline-date"></span>').text(opts.dateStr).appendTo(content);
+    }
+
+    if (opts.linkHref) {
+        var link = $('<a></a>').attr('href', opts.linkHref);
+        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(link);
+        content.append(link);
+    } else {
+        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(content);
+    }
+
+    if (opts.location) {
+        $('<p class="timeline-location"></p>').text('📍 ' + opts.location).appendTo(content);
+    }
+
+    if (opts.notes) {
+        $('<p></p>').text(opts.notes).appendTo(content);
+    }
+
+    if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
+        var img = $('<img class="timeline-thumb" alt="">').attr('src', opts.mediaUrl);
+        img.on('error', function () { $(this).remove(); });
+        content.append(img);
+    }
+
+    item.append(content);
+    return item;
+}
+
+// Expose for blog.js (loaded separately on blog.html)
+window.buildTimelineItem = buildTimelineItem;
+
 // ── Travel memories ───────────────────────────────────────────────────────────
 
 function formatVisitDate(dateStr) {
@@ -137,35 +183,6 @@ function buildPublicTravelCard(travel) {
     content.append('<p>' + (travel.notes || 'No notes yet.') + '</p>');
     card.append(media).append(content);
     return card;
-}
-
-function buildTravelTimelineItem(travel) {
-    var item = $('<div class="timeline-item"></div>');
-    item.append('<div class="timeline-marker"></div>');
-    var content = $('<div class="timeline-content"></div>');
-
-    var formattedDate = formatVisitDate(travel.visit_date);
-    if (formattedDate) {
-        content.append('<span class="timeline-date">' + formattedDate + '</span>');
-    }
-    content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
-    if (travel.location) {
-        content.append('<p class="timeline-location">📍 ' + travel.location + '</p>');
-    }
-    if (travel.notes) {
-        content.append('<p>' + travel.notes + '</p>');
-    }
-
-    var mediaUrl = travel.media_url || travel.mediaUrl;
-    var mediaType = travel.media_type || travel.mediaType;
-    if (mediaUrl && mediaType && mediaType.indexOf('image') === 0) {
-        var img = $('<img class="timeline-thumb" alt="Travel snapshot">').attr('src', mediaUrl);
-        img.on('error', function () { $(this).remove(); });
-        content.append(img);
-    }
-
-    item.append(content);
-    return item;
 }
 
 // ── Travel map (Leaflet) ──────────────────────────────────────────────────────
@@ -234,6 +251,7 @@ function initTravelMap(memories) {
 }
 
 function initViewToggle() {
+    // Cards and timeline must both be populated before initViewToggle wires the buttons.
     $('.view-toggle-btn').on('click', function () {
         var view = $(this).data('view');
         $('.view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
@@ -243,7 +261,11 @@ function initViewToggle() {
         var grid = $('#travel-grid');
         var timeline = $('#travel-timeline');
 
-        if (view === 'map') {
+        if (view === 'all') {
+            mapEl.removeClass('hidden');
+            grid.removeClass('hidden');
+            timeline.removeClass('hidden');
+        } else if (view === 'map') {
             mapEl.removeClass('hidden');
             grid.addClass('hidden');
             timeline.addClass('hidden');
@@ -256,12 +278,13 @@ function initViewToggle() {
             grid.addClass('hidden');
             timeline.removeClass('hidden');
         } else {
+            // 'both' legacy fallback
             mapEl.removeClass('hidden');
             grid.removeClass('hidden');
             timeline.addClass('hidden');
         }
 
-        if (travelMap && (view === 'map' || view === 'both')) {
+        if (travelMap && (view === 'all' || view === 'map' || view === 'both')) {
             setTimeout(function () { travelMap.invalidateSize(); }, 50);
         }
     });
@@ -297,9 +320,17 @@ function loadPublicTravelPosts() {
             });
             var timelineEl = $('#travel-timeline');
             sorted.forEach(function(travel) {
-                timelineEl.append(buildTravelTimelineItem(travel));
+                timelineEl.append(buildTimelineItem({
+                    dateStr:   formatVisitDate(travel.visit_date),
+                    title:     travel.title,
+                    location:  travel.location,
+                    notes:     travel.notes,
+                    mediaUrl:  travel.media_url || travel.mediaUrl,
+                    mediaType: travel.media_type || travel.mediaType,
+                }));
             });
 
+            // Cards and timeline must both be populated before initViewToggle wires the buttons.
             initTravelMap(memories);
             initViewToggle();
         })
