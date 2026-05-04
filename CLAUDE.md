@@ -1,4 +1,6 @@
-# Claude Agent Instructions
+# AI Pair Programmer Instructions
+
+Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
 
 ## Branching Strategy
 
@@ -28,8 +30,10 @@ Short imperative summary (50 chars max)
 
 Optional explanation if the why isn't obvious.
 
-Co-Authored-By: Claude Haiku <noreply@anthropic.com>
+Co-Authored-By: AI Model Name <noreply@ai-provider.com>
 ```
+
+Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexity Sonar`, `GPT-4`).
 
 **Examples:**
 - ✅ `fix(#81): use /api as API_BASE in blog-post.js`
@@ -100,9 +104,22 @@ var name = user.name; // Get the user's name
 - Validate user input at system boundaries only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
 
+## Context for AI Models
+
+When working with this project:
+
+- **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
+- **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
+- **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
+- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
+- **Deployment:** Smart deploy script detects changes and restarts only what's needed
+
+See README.md for full details, scripts, and local dev setup.
+
 ## When in Doubt
 
 1. Check the README.md for architecture and deployment info
 2. Review recent commits to match code style
 3. Ask: "Is this change isolated, testable, and reversible?"
 4. If a task is too large, break it into smaller PRs
+5. Test locally before proposing changes (use Docker Compose or manual setup)
