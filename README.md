@@ -127,21 +127,25 @@ docker-compose down -v && docker-compose up
 
 ```
 main  ←── dev  ←── feature/issue-N-description
+              ←── fix/issue-N-description
 ```
 
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production — always deployable, mirrors what's live |
-| `dev` | Integration branch — features merge here first |
-| `feature/*` | One branch per GitHub Issue |
+| `dev` | Integration branch — features and fixes merge here first |
+| `feature/issue-N-*` | Feature per GitHub Issue |
+| `fix/issue-N-*` | Bug fix per GitHub Issue |
 
 ### Workflow
 
 ```bash
-# Start a new feature
+# Start a new feature or fix
 git checkout dev
 git pull origin dev
 git checkout -b feature/issue-N-short-description
+# or
+git checkout -b fix/issue-N-short-description
 
 # Work and commit
 git add <files>

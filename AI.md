@@ -11,15 +11,69 @@ main (production)
  ↑
 dev (integration)
  ↑
-feature/* (per GitHub issue)
+feature/* or fix/* (per GitHub issue)
 ```
+
+**Branch naming:**
+- `feature/issue-N-short-description` — for new features
+- `fix/issue-N-short-description` — for bug fixes
+- One branch per GitHub issue only
 
 **Critical guardrails:**
 
-- **Always develop on the feature branch** (`feature/issue-N-*`). Never commit directly to `dev` or `main`.
-- **Feature branches** must be created from `dev` and named `feature/issue-N-short-description`.
-- **Pull requests** go `feature/* → dev`, then `dev → main` for production.
+- **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
+- **Pull requests** go `feature|fix/* → dev` for integration testing, then `dev → main` for production.
 - **Never force-push** to shared branches (`dev`, `main`). Only force-push to your own feature branch if absolutely necessary.
+
+## Expected AI Workflow
+
+This is the standard workflow for AI-assisted work on this project:
+
+### 1. Issue Creation
+If the issue doesn't exist yet, create it on GitHub with:
+- Clear title and description
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- Any relevant context (related PRs, design docs, etc.)
+
+### 2. Planning
+Before writing code:
+- Read the issue and any linked context
+- Examine existing code patterns and architecture
+- Draft a plan (can be brief: "I'll update X file, add Y function, then test Z")
+- Ask for clarification if requirements are ambiguous
+
+### 3. Implementation
+- Create a feature or fix branch from `dev`
+- Commit regularly with clear messages
+- Keep changes focused — one issue per branch
+- Test locally with Docker Compose or manual setup
+- Push commits as you go (don't wait until done)
+
+### 4. PR to Dev
+Once implementation is complete:
+- Create a PR from your branch → `dev`
+- Include a summary of what changed and why
+- Link the issue number (`Closes #N`)
+- Self-review the diff for obvious issues
+- Wait for your review and testing
+
+**You** will:
+- Review the PR
+- Test the changes locally
+- Approve or request changes
+- Merge when ready
+
+### 5. Release to Main
+After testing on `dev`:
+- Create a PR from `dev` → `main`
+- Include release notes or changelog
+- Merge to deploy to production
+
+**Do not:**
+- Create or merge PRs without being asked
+- Force-push to `dev` or `main`
+- Skip testing before asking you to review
 
 ## Commit Conventions
 
@@ -103,6 +157,22 @@ var name = user.name; // Get the user's name
 - Use parameterized queries for SQL
 - Validate user input at system boundaries only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
+
+## Release Branches (Optional)
+
+Currently, the workflow is `feature/fix → dev → main`, but consider adding intermediate branches for:
+
+- **`release/X.X.X`** — Staging branch before production release
+  - Allows final testing and fixes without blocking ongoing dev work
+  - Useful if you need to hotfix live issues separately from new features
+  - Pattern: `release/1.2.0 ← dev`, test, then `release/1.2.0 → main`
+
+- **`hotfix/issue-N-*`** — Emergency fixes for production issues
+  - Branch from `main`, not `dev`
+  - Merged back to both `main` and `dev`
+  - Pattern: `hotfix/issue-X-critical-bug → main` (immediately), then cherry-pick to `dev`
+
+**Current recommendation:** Keep the simple three-tier model (`main ← dev ← feature/fix`) until you need concurrent releases or frequent production hotfixes. This file can be updated when/if that's needed.
 
 ## Context for AI Models
 
