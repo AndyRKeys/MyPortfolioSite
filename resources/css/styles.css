@@ -4,6 +4,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* ── Prevent horizontal overflow on all screen sizes ────────────────────── */
+html {
+    overflow-x: hidden;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 /* ── CSS custom properties (colour tokens) ──────────────────────────────────── */
 
 :root {
@@ -32,6 +41,18 @@
     --color-timeline-line: #ddd;
     --color-timeline-marker: #333;
     --color-timeline-marker-current: #0ea5e9;
+    /* Spacing tokens */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    /* Type tokens */
+    --text-sm: 0.875rem;
+    --text-xs: 0.8rem;
+    /* Radius tokens */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
 }
 
 [data-theme="dark"] {
@@ -64,7 +85,8 @@
 
 body {
     font-family: 'Inter', system-ui, sans-serif;
-    margin: 0 10%;
+    /* cap side margins so mid-tablet content isn't over-indented */
+    margin: 0 min(10%, 140px);
     background-color: var(--color-bg);
     color: var(--color-text);
     transition: background-color 0.3s ease, color 0.3s ease;
@@ -150,13 +172,40 @@ strong {
 
 nav {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     width: 100%;
     position: -webkit-sticky;
-    position: sticky;    
+    position: sticky;
     top: 0;
-    overflow: hidden;
     z-index: 99;
+    background-color: var(--color-nav-bg);
+}
+
+/* Hamburger toggle — hidden on desktop, visible on mobile */
+.nav-toggle {
+    display: none;
+    width: 100%;
+    background: var(--color-nav-bg);
+    color: var(--color-nav-text);
+    border: none;
+    border-radius: 0;
+    padding: 14px 1.25rem;
+    font-size: 0.95rem;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    align-items: center;
+    justify-content: space-between;
+    height: auto;
+}
+
+.nav-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-toggle-icon {
+    font-size: 1.25rem;
+    line-height: 1;
 }
 
 ul.nav {
@@ -164,7 +213,7 @@ ul.nav {
     flex-wrap: wrap;
     justify-content: center;
     width: 100%;
-    margin: 0 auto;
+    margin: 0;
     padding: 0;
     list-style: none;
     background-color: var(--color-nav-bg);
@@ -186,21 +235,19 @@ ul.nav {
     display: block;
     font-size: 0.95rem;
     transition: background-color 0.2s ease;
+    white-space: nowrap;
 }
 
-li.nav a:hover {
-    background-color: #111;
-}
-
-li a:hover {
-    background-color: #111;
+.nav a:hover,
+.nav li a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .sec-cont {
     width: 100%;
-    display: flexbox;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    align-content: center;
     text-align: center;
 }
 
@@ -288,8 +335,8 @@ li a:hover {
 }
 
 img {
-    height: 100%;
-    width: 100%;
+    max-width: 100%;
+    height: auto;
 }
 
 .hs-wrap {
@@ -434,6 +481,59 @@ footer a:hover {
     display: block;
 }
 
+.media-thumb-wrap {
+    position: relative;
+    display: block;
+}
+
+.media-extra-badge {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.media-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.media-list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.media-list-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+}
+
+.media-remove-btn {
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
 .travel-content h3 {
     margin: 0 0 0.35rem 0;
     font-size: 1.1rem;
@@ -569,6 +669,36 @@ footer a:hover {
     margin-bottom: 1rem;
     line-height: 1.7;
     color: var(--color-text);
+}
+
+.about-actions {
+    margin-top: 1.5rem;
+}
+
+.btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1.4rem;
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 8px;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.btn-download:hover {
+    background: var(--color-accent-hover);
+    transform: translateY(-1px);
+}
+
+.btn-download::before {
+    content: '↓';
+    font-size: 1.1em;
+    line-height: 1;
 }
 
 /* Projects Grid */
@@ -736,12 +866,174 @@ footer {
     font-size: 0.9rem;
 }
 
+.footer-visits {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+.stat-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-page {
+    flex: 1;
+    font-weight: 600;
+    text-transform: capitalize;
+    color: var(--color-text);
+}
+
+.stat-count {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-accent);
+    min-width: 3rem;
+    text-align: right;
+}
+
+.stat-last {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    min-width: 8rem;
+    text-align: right;
+}
+
 /* Travel empty state */
 .travel-empty {
     text-align: center;
     padding: 3rem 1rem;
     color: var(--color-text-muted);
     font-style: italic;
+}
+
+/* ── Travel gallery lightbox (#30) ─────────────────────────────────────────── */
+
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.lightbox.hidden {
+    display: none;
+}
+
+.lightbox-media {
+    max-width: min(90vw, 900px);
+    max-height: 75vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-media img,
+.lightbox-media video {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.lightbox-caption {
+    margin-top: 0.75rem;
+    color: #ddd;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.lightbox-counter {
+    color: #aaa;
+    font-size: 0.82rem;
+}
+
+.lightbox-close,
+.lightbox-prev,
+.lightbox-next {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: #fff;
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover,
+.lightbox-prev:hover,
+.lightbox-next:hover {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.lightbox-close {
+    top: 1rem;
+    right: 1rem;
+    font-size: 1.4rem;
+}
+
+.lightbox-prev {
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox-next {
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox-prev.hidden,
+.lightbox-next.hidden {
+    display: none;
+}
+
+/* Make cards with multiple media look clickable */
+.travel-card.has-gallery {
+    cursor: pointer;
+}
+
+.travel-card.has-gallery .media-thumb-wrap::after {
+    content: 'View gallery';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0);
+    color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background 0.2s, color 0.2s;
+    border-radius: 10px 10px 0 0;
+}
+
+.travel-card.has-gallery:hover .media-thumb-wrap::after {
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
 }
 
 /* AI Dev section */
@@ -843,6 +1135,50 @@ footer {
 }
 
 @media screen and (max-width: 768px) {
+    /* ── Hamburger nav ───────────────────────────────────────────────────── */
+    .nav-toggle {
+        display: flex;
+    }
+
+    ul.nav {
+        display: none;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    ul.nav.nav-open {
+        display: flex;
+    }
+
+    .nav li {
+        width: 100%;
+        display: flex;
+    }
+
+    .nav a {
+        text-align: left;
+        padding: 13px 1.5rem;
+        width: 100%;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* dark mode toggle in collapsed nav */
+    .nav li #dark-mode-toggle {
+        width: 100%;
+        text-align: left;
+        border-radius: 0;
+        padding: 13px 1.5rem;
+        height: auto;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 0.95rem;
+        background: transparent;
+        border-top: none;
+        border-left: none;
+        border-right: none;
+    }
+
+    /* ── General mobile layout ──────────────────────────────────────────── */
     .cert-card {
         flex-direction: column;
         align-items: flex-start;
@@ -1038,6 +1374,29 @@ footer {
 .timeline-link:hover {
     color: var(--color-accent-hover);
     text-decoration: underline;
+}
+
+/* Timeline location pin — uses project tokens instead of raw values */
+.timeline-location {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+}
+
+/* Timeline thumbnail — max-height is a content constraint, radius/spacing use tokens */
+.timeline-thumb {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-top: var(--space-3);
+}
+
+/* Travel timeline container */
+#travel-timeline {
+    width: 100%;
+    padding-top: var(--space-4);
 }
 
 @media (max-width: 768px) {
@@ -1286,6 +1645,12 @@ footer {
     display: grid;
     gap: 1.25rem;
     text-align: left;
+}
+
+/* Specificity fix: .posts-list { display: grid } beats .hidden { display: none }
+   because it appears later in the file. Double-class selector restores correct behaviour. */
+.posts-list.hidden {
+    display: none;
 }
 
 .post-card {
@@ -1598,6 +1963,23 @@ footer {
 }
 
 /* ── Admin coord row (Issue #8) ─────────────────────────────────────────────── */
+
+.location-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.location-row input {
+    flex: 1;
+}
+
+.location-row .btn-secondary {
+    flex-shrink: 0;
+    padding: 0 0.75rem;
+    height: 38px;
+    font-size: 0.85rem;
+}
 
 .coord-row {
     display: grid;

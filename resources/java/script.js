@@ -1,5 +1,5 @@
-// API base — /api in production (Nginx proxy strips prefix), empty string in dev
-var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? '' : '/api';
+// API base — always /api, nginx strips prefix before forwarding to backend
+var API_BASE = '/api';
 
 // duration of scroll animation
 var scrollDuration = 300;
@@ -96,7 +96,122 @@ function setHeight(div, height) {
     div.style.height = height + "px";
 }
 
-// ── Travel memories ───────────────────────────────────────────────────────────
+// ── Shared timeline builder ────────────────────────────────────────────────────
+// Used by both travel (script.js) and blog (blog.js via window.buildTimelineItem).
+// opts: { dateStr, title, location, notes, mediaUrl, mediaType, linkHref }
+//
+// - All text fields are set via .text() to prevent XSS.
+// - location and mediaUrl are optional.
+// - linkHref wraps the title in an <a> if provided (e.g. blog post slug).
+
+function buildTimelineItem(opts) {
+    var item = $('<div class="timeline-item"></div>');
+    item.append('<div class="timeline-marker"></div>');
+    var content = $('<div class="timeline-content"></div>');
+
+    if (opts.dateStr) {
+        $('<span class="timeline-date"></span>').text(opts.dateStr).appendTo(content);
+    }
+
+    if (opts.linkHref) {
+        var link = $('<a></a>').attr('href', opts.linkHref);
+        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(link);
+        content.append(link);
+    } else {
+        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(content);
+    }
+
+    if (opts.location) {
+        $('<p class="timeline-location"></p>').text('\uD83D\uDCCD ' + opts.location).appendTo(content);
+    }
+
+    if (opts.notes) {
+        $('<p></p>').text(opts.notes).appendTo(content);
+    }
+
+    if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
+        var img = $('<img class="timeline-thumb" alt="">').attr('src', opts.mediaUrl);
+        img.on('error', function () { $(this).remove(); });
+        mediaWrap.append(img);
+
+        // Show "+N more" badge if multiple media items exist
+        if (opts.mediaCount && opts.mediaCount > 1) {
+            var extraCount = opts.mediaCount - 1;
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+        }
+
+        content.append(mediaWrap);
+    }
+
+    item.append(content);
+    return item;
+}
+
+// Expose for blog.js (loaded separately on blog.html)
+window.buildTimelineItem = buildTimelineItem;
+
+// ── Shared post card builder ───────────────────────────────────────────────────
+// buildPostCard(type, data) — single source of truth for card markup used by both
+// blog and travel sections, preventing the two from drifting apart.
+//
+// type: 'blog' | 'travel'
+// data (blog):   { slug, title, date, excerpt }
+// data (travel): { id, title, location, date, notes, mediaUrl, mediaType }
+//
+// All user-supplied strings are set via .text() / .attr() — no XSS risk.
+
+function buildPostCard(type, data) {
+    if (type === 'blog') {
+        var card = $('<a class="post-card"></a>');
+        card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(data.slug));
+        $('<h3 class="post-card-title"></h3>').text(data.title || 'Untitled').appendTo(card);
+        if (data.date) {
+            $('<p class="post-card-date"></p>').text(data.date).appendTo(card);
+        }
+        if (data.excerpt) {
+            $('<p class="post-card-excerpt"></p>').text(data.excerpt).appendTo(card);
+        }
+        return card;
+    }
+
+    // type === 'travel'
+    var placeholder = './resources/img/placeholder-transparent.png';
+    var card = $('<article class="travel-card box draft-card"></article>');
+    card.attr('data-memory-id', data.id);
+
+    var media = $('<div class="media"></div>');
+    if (data.mediaUrl) {
+        if (data.mediaType && data.mediaType.indexOf('video') === 0) {
+            $('<video controls></video>').attr('src', data.mediaUrl).appendTo(media);
+        } else {
+            var img = $('<img alt="Travel snapshot">').attr('src', data.mediaUrl);
+            img.on('error', function () { $(this).attr('src', placeholder); });
+            media.append(img);
+        }
+    } else {
+        $('<img alt="Travel snapshot">').attr('src', placeholder).appendTo(media);
+    }
+
+    var content = $('<div class="travel-content"></div>');
+    $('<h3></h3>').text(data.title || 'Untitled memory').appendTo(content);
+
+    var meta = $('<p class="meta"></p>');
+    $('<span class="travel-location"></span>').text(data.location || 'Location not set').appendTo(meta);
+    if (data.date) {
+        $('<span class="travel-date"></span>').text(data.date).appendTo(meta);
+    }
+    meta.appendTo(content);
+    $('<p></p>').text(data.notes || 'No notes yet.').appendTo(content);
+
+    card.append(media).append(content);
+    return card;
+}
+
+// Expose for blog.js (loaded separately on blog.html)
+window.buildPostCard = buildPostCard;
+
+// ── Travel memories ────────────────────────────────────────────────────────────
 
 function formatVisitDate(dateStr) {
     if (!dateStr) return null;
@@ -107,29 +222,122 @@ function formatVisitDate(dateStr) {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// ── Gallery lightbox ─────────────────────────────────────────────────────────
+
+var lightboxItems = [];
+var lightboxIndex = 0;
+
+function openLightbox(items, startIndex, title) {
+    lightboxItems = items;
+    lightboxIndex = startIndex || 0;
+    $('#travel-lightbox .lightbox-title').text(title || '');
+    renderLightboxItem();
+    $('#travel-lightbox').removeClass('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+    $('#travel-lightbox').addClass('hidden');
+    document.body.style.overflow = '';
+    // Stop any playing video
+    $('#travel-lightbox video').each(function () { this.pause(); });
+}
+
+function renderLightboxItem() {
+    var item = lightboxItems[lightboxIndex];
+    var mediaEl;
+    if (item.type && item.type.indexOf('video') === 0) {
+        mediaEl = $('<video controls playsinline></video>').attr('src', item.url);
+    } else {
+        mediaEl = $('<img alt="Gallery image">').attr('src', item.url);
+    }
+    $('#travel-lightbox .lightbox-media').empty().append(mediaEl);
+    $('#travel-lightbox .lightbox-counter').text((lightboxIndex + 1) + ' / ' + lightboxItems.length);
+    $('#travel-lightbox .lightbox-prev').toggleClass('hidden', lightboxIndex === 0);
+    $('#travel-lightbox .lightbox-next').toggleClass('hidden', lightboxIndex === lightboxItems.length - 1);
+}
+
+function initLightbox() {
+    $(document).on('click', '.lightbox-close', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
+    });
+    $(document).on('click', '#travel-lightbox', function (e) {
+        if ($(e.target).attr('id') === 'travel-lightbox') {
+            closeLightbox();
+        }
+    });
+    $(document).on('click', '.lightbox-prev', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); }
+    });
+    $(document).on('click', '.lightbox-next', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); }
+    });
+    $(document).on('keydown', function (e) {
+        var lightbox = document.getElementById('travel-lightbox');
+        if (!lightbox || lightbox.classList.contains('hidden')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeLightbox();
+        }
+        if (e.key === 'ArrowLeft' && lightboxIndex > 0) { e.preventDefault(); lightboxIndex--; renderLightboxItem(); }
+        if (e.key === 'ArrowRight' && lightboxIndex < lightboxItems.length - 1) { e.preventDefault(); lightboxIndex++; renderLightboxItem(); }
+    });
+}
+
+// ── Travel cards ─────────────────────────────────────────────────────────────
+
 function buildPublicTravelCard(travel) {
     var card = $('<article class="travel-card box draft-card"></article>');
     card.attr('data-memory-id', travel.id);
     var media = $('<div class="media"></div>');
-    var mediaUrl = travel.media_url || travel.mediaUrl;
-    var mediaType = travel.media_type || travel.mediaType;
+
+    // Prefer post_media array; fall back to legacy media_url field
+    var allMedia = Array.isArray(travel.media) && travel.media.length
+        ? travel.media
+        : (travel.media_url ? [{ url: travel.media_url, type: travel.media_type }] : null);
+    var firstMedia = allMedia ? allMedia[0] : null;
+    var mediaUrl = firstMedia ? firstMedia.url : null;
+    var mediaType = firstMedia ? firstMedia.type : null;
+    var extraCount = allMedia ? allMedia.length - 1 : 0;
+
     var placeholder = './resources/img/placeholder-transparent.png';
     if (mediaUrl) {
+        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         if (mediaType && mediaType.indexOf('video') === 0) {
-            media.append('<video controls src="' + mediaUrl + '"></video>');
+            mediaWrap.append('<video controls src="' + mediaUrl + '"></video>');
         } else {
             var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
             img.on('error', function () { $(this).attr('src', placeholder); });
-            media.append(img);
+            mediaWrap.append(img);
         }
+        if (extraCount > 0) {
+            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+            card.addClass('has-gallery');
+        }
+        media.append(mediaWrap);
     } else {
         media.append('<img src="' + placeholder + '" alt="Travel snapshot">');
     }
+
+    // Click on card media opens lightbox when multiple items exist
+    if (allMedia && allMedia.length > 1) {
+        media.on('click', function () {
+            openLightbox(allMedia, 0, travel.title);
+        });
+    }
+
     var content = $('<div class="travel-content"></div>');
     content.append('<h3>' + (travel.title || 'Untitled memory') + '</h3>');
     var formattedDate = formatVisitDate(travel.visit_date);
     var locationText = travel.location || 'Location not set';
-    var metaHtml = '<span class="travel-location">' + locationText + '</span>';
+    var locationPrefix = travel.location_estimated ? '~ ' : '';
+    var metaHtml = '<span class="travel-location">' + locationPrefix + locationText + '</span>';
     if (formattedDate) {
         metaHtml += '<span class="travel-date">' + formattedDate + '</span>';
     }
@@ -139,7 +347,7 @@ function buildPublicTravelCard(travel) {
     return card;
 }
 
-// ── Travel map (Leaflet) ──────────────────────────────────────────────────────
+// ── Travel map (Leaflet) ───────────────────────────────────────────────────────
 
 var travelMap = null;
 
@@ -184,7 +392,7 @@ function initTravelMap(memories) {
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(travelMap);
 
     var markers = [];
@@ -204,29 +412,47 @@ function initTravelMap(memories) {
     }
 }
 
+function applyTravelView(view) {
+    var mapEl   = $('#travel-map');
+    var grid    = $('#travel-grid');
+    var timeline = $('#travel-timeline');
+
+    // Hide all first, then reveal only what this view needs
+    mapEl.addClass('hidden');
+    grid.addClass('hidden');
+    timeline.addClass('hidden');
+
+    if (view === 'map-timeline') {
+        mapEl.removeClass('hidden');
+        timeline.removeClass('hidden');
+    } else if (view === 'both') {
+        mapEl.removeClass('hidden');
+        grid.removeClass('hidden');
+    } else if (view === 'map') {
+        mapEl.removeClass('hidden');
+    } else if (view === 'cards') {
+        grid.removeClass('hidden');
+    } else if (view === 'timeline') {
+        timeline.removeClass('hidden');
+    }
+
+    if (travelMap && (view === 'map-timeline' || view === 'map' || view === 'both')) {
+        setTimeout(function () { travelMap.invalidateSize(); }, 50);
+    }
+}
+
 function initViewToggle() {
-    $('.view-toggle-btn').on('click', function () {
+    // Scoped to .travel-view-toggle to avoid colliding with .blog-view-toggle
+    // when both script.js and blog.js are loaded on blog.html.
+    // All containers must be populated before this is called.
+    var activeView = $('.travel-view-toggle .view-toggle-btn.active').data('view') || 'map-timeline';
+    applyTravelView(activeView);
+
+    $('.travel-view-toggle .view-toggle-btn').on('click', function () {
         var view = $(this).data('view');
-        $('.view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
+        $('.travel-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
         $(this).addClass('active').attr('aria-selected', 'true');
-
-        var mapEl = $('#travel-map');
-        var grid = $('#travel-grid');
-
-        if (view === 'map') {
-            mapEl.removeClass('hidden');
-            grid.addClass('hidden');
-        } else if (view === 'cards') {
-            mapEl.addClass('hidden');
-            grid.removeClass('hidden');
-        } else {
-            mapEl.removeClass('hidden');
-            grid.removeClass('hidden');
-        }
-
-        if (travelMap && view !== 'cards') {
-            setTimeout(function () { travelMap.invalidateSize(); }, 50);
-        }
+        applyTravelView(view);
     });
 }
 
@@ -248,9 +474,47 @@ function loadPublicTravelPosts() {
                 $('.travel-view-toggle').addClass('hidden');
                 return;
             }
+
             memories.forEach(function(travel) {
                 travelGrid.append(buildPublicTravelCard(travel));
             });
+
+            var sorted = memories.slice().sort(function(a, b) {
+                var da = a.visit_date ? String(a.visit_date).slice(0, 10) : '';
+                var db = b.visit_date ? String(b.visit_date).slice(0, 10) : '';
+                return db < da ? -1 : db > da ? 1 : 0;
+            });
+            var timelineEl = $('#travel-timeline');
+            sorted.forEach(function(travel) {
+                // Use first image from media array if available, fall back to legacy media_url
+                var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+                var firstMedia = allMedia ? allMedia[0] : null;
+                var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
+                var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+
+                var item = buildTimelineItem({
+                    dateStr:   formatVisitDate(travel.visit_date),
+                    title:     travel.title,
+                    location:  travel.location,
+                    notes:     travel.notes,
+                    mediaUrl:  mediaUrl,
+                    mediaType: mediaType,
+                    mediaCount: allMedia ? allMedia.length : 0,
+                });
+
+                // Wire up lightbox for timeline image if media array exists
+                if (allMedia && allMedia.length > 0) {
+                    item.find('.timeline-thumb').css('cursor', 'pointer').on('click', function(e) {
+                        e.preventDefault();
+                        var mediaItems = allMedia.map(function(m) { return { url: m.url, type: m.type }; });
+                        openLightbox(mediaItems, 0, travel.title);
+                    });
+                }
+
+                timelineEl.append(item);
+            });
+
+            // All containers must be populated before initViewToggle wires the buttons.
             initTravelMap(memories);
             initViewToggle();
         })
@@ -261,7 +525,7 @@ function loadPublicTravelPosts() {
         });
 }
 
-// ── GitHub activity widget ────────────────────────────────────────────────────
+// ── GitHub activity widget ─────────────────────────────────────────────────────
 
 function buildRepoCard(repo) {
     var card = $('<a class="github-repo-card" target="_blank" rel="noopener noreferrer"></a>');
@@ -314,7 +578,7 @@ function loadGithubWidget() {
         });
 }
 
-// ── Contact form ──────────────────────────────────────────────────────────────
+// ── Contact form ───────────────────────────────────────────────────────────────
 
 function initContactForm() {
     var form = document.getElementById('contact-form');
@@ -326,7 +590,7 @@ function initContactForm() {
         var submitBtn = form.querySelector('button[type="submit"]');
 
         submitBtn.disabled = true;
-        msgEl.textContent = 'Sending…';
+        msgEl.textContent = 'Sending\u2026';
         msgEl.className = 'contact-form-message';
 
         var payload = {
@@ -344,7 +608,7 @@ function initContactForm() {
             .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
             .then(function(result) {
                 if (result.ok) {
-                    msgEl.textContent = 'Message sent — I\'ll be in touch soon.';
+                    msgEl.textContent = 'Message sent \u2014 I\'ll be in touch soon.';
                     msgEl.className = 'contact-form-message success';
                     form.reset();
                 } else {
@@ -362,10 +626,32 @@ function initContactForm() {
     });
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
+// ── Visit counter ──────────────────────────────────────────────────────────────
+
+function recordVisit(page) {
+    if (isAdminSession()) return;
+
+    var counterLine = document.getElementById('visit-counter-line');
+    var countEl = document.getElementById('visit-count');
+    if (!counterLine || !countEl) return;
+
+    fetch(API_BASE + '/stats/visit?page=' + encodeURIComponent(page), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.count) {
+                countEl.textContent = data.count.toLocaleString();
+                counterLine.style.display = '';
+            }
+        })
+        .catch(function() {});
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
 
 $(document).ready(function() {
     loadPublicTravelPosts();
     loadGithubWidget();
     initContactForm();
+    recordVisit('home');
+    if (document.getElementById('travel-lightbox')) initLightbox();
 });

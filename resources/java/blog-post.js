@@ -1,4 +1,19 @@
-var API_BASE = '';
+var API_BASE = (function() {
+    var isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDev ? 'http://' + window.location.hostname + ':8080' : '/api';
+})();
+
+function sanitizeHtml(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var remove = temp.querySelectorAll('script, iframe, object, embed, [onclick], [onload], [onerror]');
+    remove.forEach(function(el) { el.remove(); });
+    temp.querySelectorAll('[href*="javascript:"], [src*="javascript:"]').forEach(function(el) {
+        el.removeAttribute('href');
+        el.removeAttribute('src');
+    });
+    return temp.innerHTML;
+}
 
 function getSlug() {
     var params = new URLSearchParams(window.location.search);
@@ -29,10 +44,9 @@ function loadPost() {
                 : '';
 
             var md = post.body_markdown || '';
-            // Handle both sync and async versions of marked
             var result = marked.parse(md);
             Promise.resolve(result).then(function (html) {
-                document.getElementById('post-markdown').innerHTML = html;
+                document.getElementById('post-markdown').innerHTML = sanitizeHtml(html);
             });
 
             document.getElementById('post-loading').classList.add('hidden');

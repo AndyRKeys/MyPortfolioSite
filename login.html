@@ -18,6 +18,10 @@
         <h2>Admin Login</h2>
     </header>
     <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
         <ul class="nav">
             <li><a href="index.html">🏠 Home</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
@@ -52,6 +56,7 @@
     <script type="module">
         import { startAuthentication } from 'https://esm.sh/@simplewebauthn/browser@7';
         import { API } from './resources/java/config.js';
+        import { isAdminSession } from './resources/java/auth-utils.js';
 
         function setMessage(msg, isError = false) {
             const el = document.getElementById('login-message');
@@ -59,18 +64,7 @@
             el.style.color = isError ? '#c0392b' : '#27ae60';
         }
 
-        function isAuthenticated() {
-            const token = localStorage.getItem('adminToken');
-            if (!token) return false;
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                return payload.exp * 1000 > Date.now();
-            } catch {
-                return false;
-            }
-        }
-
-        if (isAuthenticated()) {
+        if (isAdminSession()) {
             location.replace('admin.html');
         }
 
@@ -162,5 +156,6 @@
         });
     </script>
     <script src="./resources/java/darkmode.js"></script>
+    <script src="./resources/java/nav.js"></script>
 </body>
 </html>

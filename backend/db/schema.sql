@@ -110,3 +110,30 @@ BEGIN
     DROP TABLE travel_memories;
   END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS page_visits (
+  page VARCHAR(100) PRIMARY KEY,
+  count BIGINT NOT NULL DEFAULT 0,
+  last_visited_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- One-to-many media for travel posts (#30)
+CREATE TABLE IF NOT EXISTS post_media (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  media_url TEXT NOT NULL,
+  media_type VARCHAR(100),
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Migrate existing single-media travel posts into post_media (idempotent)
+INSERT INTO post_media (post_id, media_url, media_type, order_index)
+SELECT id, media_url, media_type, 0
+FROM posts
+WHERE post_type = 'travel'
+  AND media_url IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM post_media pm WHERE pm.post_id = posts.id
+  );
+
