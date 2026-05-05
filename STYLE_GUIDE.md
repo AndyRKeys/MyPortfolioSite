@@ -325,6 +325,7 @@ Use section header comments to divide a long file into named regions. The canoni
 // ── Travel memories ───────────────────────────────────────────────
 ```
 
+
 ### Block summary comments
 
 Add a short summary comment above each distinct logical block within a function or file. This is the **primary use of comments** — acting as section headers that let a reader scan the shape of the code before reading the detail.
@@ -430,6 +431,7 @@ Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (
 - Scripts use `docker compose exec` directly — no bash or WSL dependency
 
 ---
+
 
 ## Git & Commits
 

@@ -44,6 +44,7 @@ The rule: **if the repo structure changes, the docs that describe that structure
 
 ---
 
+
 ## Markdown List Conventions
 
 Use this rule consistently throughout this file and in all docs written by the AI:
