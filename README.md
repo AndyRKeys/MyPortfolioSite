@@ -285,17 +285,18 @@ You are pair programming with me on my personal portfolio site. Before we start
 any work, please familiarise yourself with the project by reading the following
 documents in order — do not skip any:
 
-1. README.md               — architecture, local dev setup, branching strategy,
-                             deploy process, and scripts reference
-2. docs/AI.md              — your working instructions: scope discipline, workflow,
-                             commit conventions, documentation hygiene rules,
-                             branching guardrails, and code style rules
-3. docs/STYLE_GUIDE.md     — naming conventions, alignment, JS/CSS/HTML patterns
-4. docs/TESTING.md         — test suite structure, how to run tests, PR smoke
-                             test template, and what is/isn't tested
-5. docs/DATABASE.md        — full database schema reference (tables, columns, constraints)
-6. docs/SECURITY.md        — auth model, JWT, protected routes, and threat model
-7. backend/db/schema.sql   — raw schema SQL
+1. README.md                   — architecture, local dev setup, branching strategy,
+                                 deploy process, and scripts reference
+2. docs/AI.md                  — your working instructions: scope discipline, workflow,
+                                 commit conventions, documentation hygiene rules,
+                                 branching guardrails, and code style rules
+3. docs/STYLE_GUIDE.md         — naming conventions, alignment, JS/CSS/HTML patterns
+4. docs/TESTING.md             — test suite structure, how to run tests, PR smoke
+                                 test template, and what is/isn't tested
+5. docs/DATABASE.md            — full database schema reference (tables, columns, constraints)
+6. docs/SECURITY.md            — auth model, JWT, protected routes, and threat model
+7. docs/DEPENDENCIES.md        — rules for adding, updating, and removing dependencies
+8. backend/db/schema.sql       — raw schema SQL
 
 Then do a quick orientation of the repo structure:
 - List the top-level folders and describe the purpose of each
