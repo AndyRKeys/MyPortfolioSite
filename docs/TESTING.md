@@ -55,12 +55,14 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 
 ### PR validation scripts — use `Start-Transcript` (built in)
 
-All `scripts/tests/Test-PR*.ps1` scripts use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
+All scripts in `scripts/tests/` use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
 
 ```powershell
-# Output goes to console AND test-results\PR104-<timestamp>.txt automatically
-# JWT is auto-generated from the container — no -Token flag required
-.\scripts\tests\Test-PR104.ps1
+# Output goes to console AND test-results\Regression-<timestamp>.txt automatically
+.\scripts\tests\Test-Regression.ps1
+
+# Output goes to console AND test-results\PR<N>-<timestamp>.txt automatically
+.\scripts\tests\Test-PR<N>.ps1
 ```
 
 The log file path is printed in the script header and footer so you always know where to find it.
@@ -75,12 +77,36 @@ New-Item -ItemType Directory -Force -Path test-results
 
 ---
 
-## PR Validation Script Template
+## PR Smoke Tests — Two-Tier Process
+
+Every PR that touches backend code requires **two scripts** to be run before requesting review:
+
+```powershell
+# Step 1 — always run the regression baseline first
+. scripts\tests\Test-Regression.ps1
+
+# Step 2 — run the PR-specific tests on top
+. scripts\tests\Test-PR<N>.ps1
+```
+
+Both must pass. The regression script ensures that existing stable behaviour has not regressed. The PR-specific script covers the new or changed endpoints introduced by the PR.
+
+The PR template's **Smoke Test** section requires both to be ticked before requesting review.
+
+### What each script covers
+
+| Script | Purpose |
+|---|---|
+| `Test-Regression.ps1` | Stable always-run baseline: Vitest suite, core public endpoints, key auth checks, 404 handler |
+| `Test-PR<N>.ps1` | Endpoints and behaviour introduced or changed by PR #N only |
+
+### Script template — Test-PR\<N\>.ps1
 
 When creating a `Test-PR<N>.ps1` script for a new PR, place it in `scripts/tests/` and use this as the starting point. The key requirements are:
 1. **`Start-Transcript` / `Stop-Transcript`** — output always captured without the caller needing flags
 2. **Auto-generate JWT** from the container — no hardcoded secrets, no manual token passing
 3. **`$PSScriptRoot '../..' 'test-results'`** path — resolves correctly from `scripts/tests/`
+4. **All POST bodies** use `@{} | ConvertTo-Json -Compress` — avoids PowerShell/curl escaping failures on Windows
 
 ```powershell
 #Requires -Version 5.1
@@ -153,21 +179,22 @@ function Test-Endpoint {
 }
 
 Write-Host ""
-Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host ("═" * 54) -ForegroundColor Cyan
 Write-Host "  PR #<N> Test Run — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
 Write-Host "  Base URL : $BaseUrl"
 Write-Host "  Token    : $(if ($Token) { 'auto-generated from container' } else { 'not available (auth tests skipped)' })"
 Write-Host "  Log file : $logFile"
-Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host ("═" * 54) -ForegroundColor Cyan
 
-# --- add Test-Endpoint calls here ---
+# --- add Test-Endpoint calls here (new/changed endpoints for this PR only) ---
+# Do NOT duplicate checks already covered by Test-Regression.ps1
 
 Write-Host ""
-Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host ("═" * 54) -ForegroundColor Cyan
 Write-Host "  PASSED : $pass" -ForegroundColor Green
 if ($skip -gt 0) { Write-Host "  SKIPPED: $skip" -ForegroundColor DarkYellow }
 Write-Host "  FAILED : $fail" -ForegroundColor $(if ($fail -gt 0) { 'Red' } else { 'Green' })
-Write-Host "═" * 54 -ForegroundColor Cyan
+Write-Host ("═" * 54) -ForegroundColor Cyan
 Write-Host "  Full log: $logFile" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -231,6 +258,7 @@ Mounts each router against the full Express app via Supertest with the `pg` pool
 |---|---|
 | WebAuthn passkey registration/login | Requires a real browser authenticator; the `@simplewebauthn/server` library call is mocked at the boundary |
 | Email delivery (nodemailer) | Requires real SMTP credentials; nodemailer is mocked — the send path is covered by the contact route tests |
+| Contact form in local dev | When `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` are not set, the route logs the submission to the backend console and returns `{ success: true }` — no email is sent. This is the expected behaviour in the Docker dev environment; the form UI will appear to succeed. Check the backend container logs (`docker compose logs backend`) to see the submitted values. |
 | Database queries | Integration tests mock the pg pool; real DB behaviour is covered by manual smoke testing against the dev Docker DB |
 | Frontend JavaScript | Out of scope for the backend suite; covered by manual browser testing |
 

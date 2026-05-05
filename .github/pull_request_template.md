@@ -40,6 +40,23 @@ Closes #<!-- issue number -->
 
 - None
 
+## Smoke Test
+
+<!-- PRs that touch backend code must run both scripts before requesting review.
+     See docs/TESTING.md for full instructions. -->
+
+- [ ] `scripts/tests/Test-Regression.ps1` run and passing
+- [ ] `scripts/tests/Test-PR<!-- N -->.ps1` created and passing
+- [ ] N/A — no backend changes in this PR
+
+## Documentation
+
+<!-- Tick all that apply. If a box is not relevant, mark N/A. -->
+
+- [ ] `docs/CHANGELOG.md` updated with a entry under `[Unreleased]`
+- [ ] Relevant doc updated (`docs/AI.md` / `docs/STYLE_GUIDE.md` / `docs/DATABASE.md` / `docs/SECURITY.md` / `docs/TESTING.md`)
+- [ ] N/A — no doc changes needed
+
 ## Notes for Reviewer
 
 <!-- Anything unusual, a known limitation, or a decision that warrants explanation -->

@@ -31,7 +31,7 @@ Guidelines for AI-assisted development on this project (Claude, Perplexity, or o
 Whenever a file is added, moved, renamed, or removed, update all relevant documentation in the **same commit**:
 
 - `README.md` — update any script reference tables, command examples, or directory trees
-- `AI.md` — update any paths or workflow steps that reference the changed files
+- `docs/AI.md` — update any paths or workflow steps that reference the changed files
 - `docs/TESTING.md` — update script paths, PR template examples, or test commands
 - Any other doc that contains the old path or filename
 
@@ -43,7 +43,6 @@ This applies to:
 The rule: **if the repo structure changes, the docs that describe that structure change in the same commit.**
 
 ---
-
 
 ## Markdown List Conventions
 
@@ -90,6 +89,8 @@ If the issue doesn't exist yet, create it on GitHub with:
 - Expected vs actual behaviour
 - Any relevant context (related PRs, design docs, etc.)
 
+Use the appropriate issue template from `.github/ISSUE_TEMPLATE/` — `bug_report.md` for bugs, `feature_request.md` for new functionality.
+
 ### 2. Planning
 Before writing code:
 1. Read the issue and any linked context
@@ -108,7 +109,7 @@ Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
 3. Include a clear summary of what changed and why
-4. Include a detailed test plan (see PR template at `.github/pull_request_template.md`)
+4. Fill in the PR template at `.github/pull_request_template.md` in full — summary, changes, test plan, smoke test checkbox, and documentation checklist
 5. Wait for review, testing, and approval before merging
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
@@ -118,7 +119,8 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - Edge cases to check (e.g. empty state, error handling, mobile view)
 - Regression checks for related features that could have been affected
 - Any manual setup needed before testing (e.g. seed data, env vars)
-- A reference to `scripts/tests/Test-PRN.ps1` if one exists for the PR
+- The smoke test checkbox: a reference to `scripts/tests/Test-PRN.ps1` if backend code was touched, or an explicit N/A if not
+- The documentation checklist: confirm `docs/CHANGELOG.md` updated and any relevant doc updated, or N/A
 
 ### 5. Release to Production
 
@@ -253,7 +255,7 @@ curl.exe -s -X POST http://localhost/api/contact `
 
 ## Code Style
 
-**See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full coding style guide** — naming conventions, alignment & whitespace rules, JavaScript, CSS, HTML, and Express patterns.
+**See [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) for the full coding style guide** — naming conventions, alignment & whitespace rules, JavaScript, CSS, HTML, and Express patterns.
 
 Key points summarised here:
 
@@ -319,7 +321,7 @@ var name = user.name; // Get the user's name
 
 > ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.** The canonical test environment is the backend container.
 
-**See [docs/TESTING.md](./docs/TESTING.md) for the full testing guide**, including test structure, what is/isn't tested, a template for new test files, and CI notes.
+**See [docs/TESTING.md](docs/TESTING.md) for the full testing guide**, including test structure, what is/isn't tested, a template for new test files, and CI notes.
 
 ### Running the test suite
 
@@ -338,18 +340,19 @@ var name = user.name; // Get the user's name
 
 Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
 
-- The PR description **must** reference the script in its Testing Checklist section
+- The PR template's **Smoke Test** section must be ticked before requesting review
 - The script runs `docker compose exec` directly — it does not require bash or WSL
 - Run it after `. scripts\dev\dev-local.ps1 up` with: `.\scripts\tests\Test-PRN.ps1`
 
 ### What to verify
 
-- Run `.\scripts\tests\Test-PRN.ps1` — all checks must pass
+- Run `.\scripts\tests\Test-Regression.ps1` first — all baseline checks must pass
+- Run `.\scripts\tests\Test-PRN.ps1` — all PR-specific checks must pass
 - Verify the golden path and edge cases manually for UI changes
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
 - When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
-- **See [docs/TESTING.md](./docs/TESTING.md)** for the full testing guide, including how to capture verbose test output to a file while keeping live terminal feedback
+- **See [docs/TESTING.md](docs/TESTING.md)** for the full testing guide, including how to capture verbose test output to a file while keeping live terminal feedback
 
 ## Database
 
@@ -362,7 +365,7 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 
 - Sanitize HTML output to prevent XSS
 - Use parameterized queries for SQL
-- Validate user input at system boundaries only
+- Validate user input at system entry points only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
 
 ## Hotfixes
@@ -393,11 +396,14 @@ See README.md for full details, scripts, and local dev setup.
 ## When in Doubt
 
 1. Check README.md for architecture and deployment info
-2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
-3. Check docs/TESTING.md before adding or modifying tests
-4. Check DATABASE.md before adding or changing any routes, migrations, or queries
-5. Check SECURITY.md before touching auth, sessions, or input handling
-6. Review recent commits to match code style
-7. Ask: "Is this change isolated, testable, and reversible?"
-8. If a task is too large, break it into smaller PRs
-9. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
+2. Check [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) for naming, formatting, and code organisation rules
+3. Check [docs/TESTING.md](docs/TESTING.md) before adding or modifying tests
+4. Check [docs/DATABASE.md](docs/DATABASE.md) before adding or changing any routes, migrations, or queries
+5. Check [docs/SECURITY.md](docs/SECURITY.md) before touching auth, sessions, or input handling
+6. Check [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) before adding, updating, or removing a dependency
+7. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
+8. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
+9. Review recent commits to match code style
+10. Ask: "Is this change isolated, testable, and reversible?"
+11. If a task is too large, break it into smaller PRs
+12. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
