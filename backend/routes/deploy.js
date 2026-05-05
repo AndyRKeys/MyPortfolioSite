@@ -43,7 +43,7 @@ async function streamToSSE(res, iter) {
   res.end();
 }
 
-// ── GET /api/deploy/status ───────────────────────────────────────────────────
+// ── GET /api/deploy/status ────────────────────────────────────────────────────────────
 
 router.get('/status', authenticate, async (req, res) => {
   try {
@@ -69,4 +69,84 @@ router.get('/status', authenticate, async (req, res) => {
   } catch (err) {
     // Git commands failing in dev is expected — return read-only status
     res.status(200).json({
-     
+      branch:    'unknown',
+      head:      { sha: '?', fullSha: '?', message: 'Git unavailable', date: '' },
+      behind:    0,
+      upToDate:  false,
+      canDeploy: false,
+      gitError:  err.message,
+    });
+  }
+});
+
+// ── GET /api/deploy/history ───────────────────────────────────────────────────────────
+
+router.get('/history', authenticate, async (req, res) => {
+  try {
+    const gitOut = await spawnPromise(
+      'git', ['log', '--format=%H|%h|%s|%ci', '-10', 'origin/main'],
+      { cwd: REPO_DIR }
+    ).catch(() => '');
+
+    const commits = gitOut.trim().split('\n').filter(Boolean).map(line => {
+      const [sha, shortSha, message, date] = line.split('|');
+      return { sha, shortSha, message, date };
+    });
+
+    let deployLog = [];
+    try {
+      const raw = await fs.readFile(DEPLOY_LOG, 'utf8');
+      deployLog = raw.trim().split('\n').filter(Boolean)
+        .slice(-20).reverse()
+        .map(l => {
+          const parts = l.split(' ');
+          return { ts: parts[0], action: parts[1], detail: parts.slice(2).join(' ') };
+        });
+    } catch { /* log file may not exist yet */ }
+
+    res.json({ commits, deployLog });
+  } catch (err) {
+    // Git not available in dev — return empty history gracefully
+    res.json({ commits: [], deployLog: [] });
+  }
+});
+
+// ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
+
+router.post('/fetch', authenticate, async (req, res) => {
+  await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
+});
+
+// ── POST /api/deploy ─────────────────────────────────────────────────────────────────────
+
+router.post('/', authenticate, async (req, res) => {
+  if (!await scriptExists()) {
+    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+  }
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT], { cwd: REPO_DIR }));
+});
+
+// ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
+
+router.post('/rollback', authenticate, async (req, res) => {
+  const { sha } = req.body || {};
+
+  if (!sha || !SHA_RE.test(sha)) {
+    return res.status(400).json({ error: 'Invalid SHA format' });
+  }
+
+  // Validate SHA exists in recent history before touching anything
+  const known = await recentSHAs().catch(() => []);
+  const valid = known.some(s => s === sha || s.startsWith(sha) || sha === s.slice(0, sha.length));
+  if (!valid) {
+    return res.status(400).json({ error: 'SHA not found in recent commit history — rollback rejected' });
+  }
+
+  if (!await scriptExists()) {
+    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+  }
+
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--rollback', sha], { cwd: REPO_DIR }));
+});
+
+export default router;
