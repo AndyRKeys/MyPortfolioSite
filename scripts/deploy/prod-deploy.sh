@@ -1,7 +1,7 @@
 #!/bin/bash
 # Smart deploy script for andykeys.me
 # Detects what changed and only applies what's needed:
-#   - Always pulls latest code
+#   - Always fetches and hard-resets to origin/main (discards any local changes)
 #   - Always runs npm install (ensures no missing packages)
 #   - Renders nginx config from template if changed/missing (SSL-aware)
 #   - Applies DB schema if changed OR if DB is empty (fresh server)
@@ -57,8 +57,9 @@ echo "Changes incoming:"
 echo "$CHANGES"
 echo ""
 
-echo "=== Pulling ==="
-git pull origin main
+echo "=== Resetting to origin/main ==="
+git reset --hard origin/main
+echo "  Reset to $(git rev-parse --short HEAD)."
 
 mkdir -p "$REPO_DIR/uploads"
 

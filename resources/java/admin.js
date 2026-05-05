@@ -965,11 +965,10 @@ async function loadStats() {
     }
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────────────────────
-
-// ── Deployment (#98 / #117) ─────────────────────────────────────────────────
+// ── Deployment (#98 / #117 / #129) ──────────────────────────────────────────
 
 function initDeploySection() {
+    const fetchBtn        = document.getElementById('fetch-btn');
     const deployBtn       = document.getElementById('deploy-btn');
     const rollbackBtn     = document.getElementById('rollback-btn');
     const rollbackPicker  = document.getElementById('rollback-picker');
@@ -987,6 +986,7 @@ function initDeploySection() {
     }
 
     function setBusy(busy) {
+        fetchBtn.disabled        = busy;
         deployBtn.disabled       = busy;
         rollbackBtn.disabled     = busy;
         rollbackConfirm.disabled = busy;
@@ -999,6 +999,7 @@ function initDeploySection() {
         statusRow.innerHTML =
             `<strong>${escapeHtml(s.head.sha)}</strong> — ${escapeHtml(s.head.message)}&nbsp;&nbsp;${badge}`;
         if (s.canDeploy) {
+            fetchBtn.disabled    = false;
             deployBtn.disabled   = false;
             rollbackBtn.disabled = false;
         } else {
@@ -1101,6 +1102,19 @@ function initDeploySection() {
             logList.innerHTML = '<p class="hint">Could not load history.</p>';
         }
     }
+
+    fetchBtn.addEventListener('click', async () => {
+        setMessage('');
+        try {
+            await runStream('POST', '/deploy/fetch');
+            setMessage('Fetch complete.');
+            await loadStatus();
+        } catch (e) {
+            setMessage(e.message, true);
+        } finally {
+            setBusy(false);
+        }
+    });
 
     deployBtn.addEventListener('click', async () => {
         if (!confirm('Deploy latest main to production?\n\nThe backend will restart briefly.')) return;
