@@ -595,7 +595,12 @@ function initTravelForm() {
     });
 
     $('#travel-cancel-btn').on('click', clearTravelForm);
-    $('#travel-clear').on('click', clearTravelForm);
+    $('#travel-clear').on('click', function () {
+        if ($('#travel-edit-id').val() || $('#travel-title').val() || $('#travel-location').val() || $('#travel-notes').val() || pendingFiles.length) {
+            if (!confirm('Clear all fields and start a new memory?')) return;
+        }
+        clearTravelForm();
+    });
 }
 
 // ── Blog posts ─────────────────────────────────────────────────────────────────────────────────
@@ -846,7 +851,7 @@ async function uploadCv(file) {
                 `The scan found potential private information in this PDF:\n\u2022 ${warningList}\n\nDo you still want to publish it?`
             );
             if (!proceed) {
-                // Delete the file we just uploaded so it isn’t accidentally served
+                // Delete the file we just uploaded so it isn't accidentally served
                 await authFetch('/cv', { method: 'DELETE' });
                 setCvMessage('Upload cancelled — CV removed from server.', true);
                 await loadCvStatus();
