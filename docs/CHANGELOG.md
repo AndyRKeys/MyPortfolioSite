@@ -25,10 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `stats` route `GET /api/stats` for admin page visit counts (#79)
 - ES module migration for all frontend JavaScript (#79)
 - Local Nginx dev template without SSL (`scripts/nginx-local.conf.template`) (#77)
-- AI.md — AI pair programmer instructions and workflow (#90)
-- STYLE_GUIDE.md — coding style and naming conventions
-- DATABASE.md — schema reference (this release)
-- SECURITY.md — auth model and threat model (this release)
+- docs/AI.md — AI pair programmer instructions and workflow (#90)
+- docs/STYLE_GUIDE.md — coding style and naming conventions
+- docs/DATABASE.md — schema reference (this release)
+- docs/SECURITY.md — auth model and threat model (this release)
 - GitHub issue and PR templates (this release)
 
 ### Fixed
