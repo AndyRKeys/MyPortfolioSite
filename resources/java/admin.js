@@ -278,7 +278,8 @@ async function toggleTravelPublish(memory) {
                 title: memory.title,
                 location: memory.location || '',
                 notes: memory.notes || '',
-                visitDate: memory.visit_date || null,
+                // Slice to YYYY-MM-DD — list response returns full ISO timestamp (#93)
+                visitDate: memory.visit_date ? String(memory.visit_date).slice(0, 10) : null,
                 lat: memory.lat,
                 lng: memory.lng,
                 publish: !memory.published_at,
@@ -711,6 +712,8 @@ async function togglePublish(post) {
             body: JSON.stringify({
                 title: post.title,
                 body_markdown: post.body_markdown || '',
+                // Slice to YYYY-MM-DD — list response returns full ISO timestamp (#93)
+                post_date: post.post_date ? String(post.post_date).slice(0, 10) : null,
                 publish: !post.published_at,
             }),
         });
@@ -840,7 +843,7 @@ async function uploadCv(file) {
                 `The scan found potential private information in this PDF:\n\u2022 ${warningList}\n\nDo you still want to publish it?`
             );
             if (!proceed) {
-                // Delete the file we just uploaded so it isn’t accidentally served
+                // Delete the file we just uploaded so it isn't accidentally served
                 await authFetch('/cv', { method: 'DELETE' });
                 setCvMessage('Upload cancelled — CV removed from server.', true);
                 await loadCvStatus();
