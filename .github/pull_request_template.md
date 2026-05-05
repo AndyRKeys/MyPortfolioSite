@@ -42,10 +42,10 @@ Closes #<!-- issue number -->
 
 ## Smoke Test
 
-<!-- PRs that touch backend code must include a smoke test script.
-     Create scripts/tests/Test-PR<N>.ps1 and run it before requesting review.
-     See docs/TESTING.md for the template and instructions. -->
+<!-- PRs that touch backend code must run both scripts before requesting review.
+     See docs/TESTING.md for full instructions. -->
 
+- [ ] `scripts/tests/Test-Regression.ps1` run and passing
 - [ ] `scripts/tests/Test-PR<!-- N -->.ps1` created and passing
 - [ ] N/A — no backend changes in this PR
 
