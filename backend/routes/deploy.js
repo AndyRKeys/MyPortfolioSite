@@ -67,7 +67,15 @@ router.get('/status', authenticate, async (req, res) => {
       canDeploy: await scriptExists(),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Git commands failing in dev is expected — return read-only status
+    res.status(200).json({
+      branch:    'unknown',
+      head:      { sha: '?', fullSha: '?', message: 'Git unavailable', date: '' },
+      behind:    0,
+      upToDate:  false,
+      canDeploy: false,
+      gitError:  err.message,
+    });
   }
 });
 
@@ -98,7 +106,8 @@ router.get('/history', authenticate, async (req, res) => {
 
     res.json({ commits, deployLog });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Git not available in dev — return empty history gracefully
+    res.json({ commits: [], deployLog: [] });
   }
 });
 
