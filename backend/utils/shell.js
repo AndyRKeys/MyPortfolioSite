@@ -8,6 +8,7 @@ export async function* spawnStream(cmd, args, { cwd } = {}) {
   const pending = [];
   let notify = null;
   let closed = false;
+  let error = null;
 
   const push = (line) => {
     if (notify) { const r = notify; notify = null; r(line); }
@@ -16,12 +17,15 @@ export async function* spawnStream(cmd, args, { cwd } = {}) {
 
   const onData  = (chunk) => chunk.toString().split('\n').filter(Boolean).forEach(push);
   const onClose = ()      => { closed = true; if (notify) { const r = notify; notify = null; r(null); } };
+  const onError = (err)   => { error = err; closed = true; if (notify) { const r = notify; notify = null; r(null); } };
 
   proc.stdout.on('data', onData);
   proc.stderr.on('data', onData);
   proc.on('close', onClose);
+  proc.on('error', onError);
 
   while (true) {
+    if (error) throw error;
     if (pending.length) { yield pending.shift(); continue; }
     if (closed) break;
     const line = await new Promise(r => { notify = r; });
@@ -41,6 +45,9 @@ export function spawnPromise(cmd, args, { cwd } = {}) {
       const text = out.join('');
       if (code === 0) resolve(text);
       else reject(new Error(text || `exit code ${code}`));
+    });
+    proc.on('error', (err) => {
+      reject(Object.assign(new Error(`Failed to spawn ${cmd}: ${err.message}`), { code: err.code }));
     });
   });
 }
