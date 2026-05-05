@@ -773,6 +773,12 @@ function initPostForm() {
     });
 
     $('#post-cancel-btn').on('click', clearPostForm);
+    $('#post-clear-btn').on('click', function () {
+        if ($('#post-edit-id').val() || $('#post-title').val() || $('#post-body').val()) {
+            if (!confirm('Clear all fields and start a new post?')) return;
+        }
+        clearPostForm();
+    });
 
     $('#post-template-btn').on('click', function () {
         const body = $('#post-body');
