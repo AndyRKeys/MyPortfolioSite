@@ -11,7 +11,32 @@
 set -e
 
 REPO_DIR="$HOME/MyPortfolioSite"
+DEPLOY_LOG="$HOME/deploy.log"
+
+# Parse optional --rollback <sha> flag
+ROLLBACK_SHA=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rollback) ROLLBACK_SHA="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
 cd "$REPO_DIR"
+
+PRE_DEPLOY_SHA=$(git rev-parse HEAD)
+
+# ── Rollback path ────────────────────────────────────────────────────────────
+if [ -n "$ROLLBACK_SHA" ]; then
+    echo "=== Rolling back to $ROLLBACK_SHA ==="
+    git reset --hard "$ROLLBACK_SHA"
+    cd "$REPO_DIR/backend" && npm install --omit=dev --silent && cd "$REPO_DIR"
+    pm2 restart portfolio-backend
+    echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_DEPLOY_SHA → $ROLLBACK_SHA" >> "$DEPLOY_LOG"
+    echo "=== Rollback complete ==="
+    pm2 status portfolio-backend
+    exit 0
+fi
 
 echo "=== Fetching latest ==="
 git fetch origin main
@@ -187,5 +212,8 @@ fi
 echo ""
 echo "=== PM2 Status ==="
 pm2 status portfolio-backend
+POST_SHA=$(git rev-parse HEAD)
+echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') deploy $POST_SHA" >> "$DEPLOY_LOG"
+
 echo ""
 echo "Done! https://$DOMAIN"

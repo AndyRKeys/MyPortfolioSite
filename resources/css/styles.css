@@ -943,6 +943,36 @@ footer {
     text-align: right;
 }
 
+/* ── Deployment panel (#98 / #117) ─────────────────────────────────────────── */
+
+.deploy-status-row {
+    padding: 0.6rem 0.75rem;
+    background: var(--color-bg-alt);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    border: 1px solid var(--color-border);
+}
+
+.deploy-output {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    border-radius: var(--radius-md);
+    max-height: 320px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+[data-theme="dark"] .deploy-output {
+    background: #010409;
+    color: #c9d1d9;
+}
+
 /* Travel empty state */
 .travel-empty {
     text-align: center;
