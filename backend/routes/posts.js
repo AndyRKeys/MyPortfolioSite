@@ -6,6 +6,8 @@ import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/vali
 
 const router = Router();
 
+// ── Helpers
+
 async function tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt = 0, maxAttempts = 100) {
   const baseSlug = slugify(title);
   const slug     = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
@@ -33,6 +35,8 @@ async function tryInsertPost(post_type, title, body_markdown, post_date, publish
     throw err;
   }
 }
+
+// ── Routes
 
 // Public: list published blog posts
 router.get('/', async (req, res) => {
