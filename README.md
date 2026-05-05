@@ -287,20 +287,20 @@ documents in order — do not skip any:
 
 1. README.md               — architecture, local dev setup, branching strategy,
                              deploy process, and scripts reference
-2. AI.md                   — your working instructions: scope discipline, workflow,
+2. docs/AI.md              — your working instructions: scope discipline, workflow,
                              commit conventions, documentation hygiene rules,
                              branching guardrails, and code style rules
-3. STYLE_GUIDE.md          — naming conventions, alignment, JS/CSS/HTML patterns
+3. docs/STYLE_GUIDE.md     — naming conventions, alignment, JS/CSS/HTML patterns
 4. docs/TESTING.md         — test suite structure, how to run tests, PR smoke
-                             test template, and what is/isn’t tested
-5. docs/DEPENDENCIES.md    — dependency management: adding, updating, version
-                             pinning strategy, and security practices
-6. backend/db/schema.sql   — full database schema (tables, columns, constraints)
+                             test template, and what is/isn't tested
+5. docs/DATABASE.md        — full database schema reference (tables, columns, constraints)
+6. docs/SECURITY.md        — auth model, JWT, protected routes, and threat model
+7. backend/db/schema.sql   — raw schema SQL
 
 Then do a quick orientation of the repo structure:
 - List the top-level folders and describe the purpose of each
 - Skim backend/app.js and backend/routes/ to understand the API surface
-- Note any open GitHub Issues that are relevant to the work we’re about to do
+- Note any open GitHub Issues that are relevant to the work we're about to do
 
 Once you have read all of the above and completed the orientation, confirm with
 a short summary covering:
