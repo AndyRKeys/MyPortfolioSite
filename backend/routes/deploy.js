@@ -43,7 +43,7 @@ async function streamToSSE(res, iter) {
   res.end();
 }
 
-// ── GET /api/deploy/status ───────────────────────────────────────────────────
+// ── GET /api/deploy/status ────────────────────────────────────────────────────────────
 
 router.get('/status', authenticate, async (req, res) => {
   try {
@@ -79,7 +79,7 @@ router.get('/status', authenticate, async (req, res) => {
   }
 });
 
-// ── GET /api/deploy/history ──────────────────────────────────────────────────
+// ── GET /api/deploy/history ───────────────────────────────────────────────────────────
 
 router.get('/history', authenticate, async (req, res) => {
   try {
@@ -111,7 +111,13 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
-// ── POST /api/deploy ─────────────────────────────────────────────────────────
+// ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
+
+router.post('/fetch', authenticate, async (req, res) => {
+  await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
+});
+
+// ── POST /api/deploy ─────────────────────────────────────────────────────────────────────
 
 router.post('/', authenticate, async (req, res) => {
   if (!await scriptExists()) {
@@ -120,7 +126,7 @@ router.post('/', authenticate, async (req, res) => {
   await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT], { cwd: REPO_DIR }));
 });
 
-// ── POST /api/deploy/rollback ────────────────────────────────────────────────
+// ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
 
 router.post('/rollback', authenticate, async (req, res) => {
   const { sha } = req.body || {};
