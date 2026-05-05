@@ -84,7 +84,6 @@ Write-Host ""
 if (-not $SkipVitest) {
     Write-Host "--- Vitest unit + integration suite ---" -ForegroundColor Yellow
     Write-Host "  Running inside backend container..."
-    $vitestExit = 0
     docker compose exec -T backend npm test 2>&1 | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [PASS] Vitest suite" -ForegroundColor Green
@@ -135,22 +134,43 @@ Test-Endpoint -Name "GET /api/posts returns 200" `
     -Method "GET" -Url "$BaseUrl/api/posts" `
     -ExpectStatus 200
 
+# Build JSON body via ConvertTo-Json to avoid PowerShell/curl escaping issues
+$createPostBody = @{
+    title         = 'PR122 test post'
+    body_markdown = 'test'
+    post_date     = (Get-Date -Format 'yyyy-MM-dd')
+    post_type     = 'blog'
+} | ConvertTo-Json -Compress
+
 Test-Endpoint -Name "POST /api/posts with valid body creates post" `
     -Method "POST" -Url "$BaseUrl/api/posts" `
     -Headers @("Authorization: Bearer $Token", "Content-Type: application/json") `
-    -Body "{\"title\":\"PR122 test post\",\"body_markdown\":\"test\",\"post_date\":\"$(Get-Date -Format 'yyyy-MM-dd')\",\"post_type\":\"blog\"}" `
+    -Body $createPostBody `
     -ExpectStatus 201 -RequiresAuth $true
+
+$missingTitleBody = @{
+    body_markdown = 'test'
+    post_date     = '2026-05-05'
+    post_type     = 'blog'
+} | ConvertTo-Json -Compress
 
 Test-Endpoint -Name "POST /api/posts missing title returns 400" `
     -Method "POST" -Url "$BaseUrl/api/posts" `
     -Headers @("Authorization: Bearer $Token", "Content-Type: application/json") `
-    -Body '{"body_markdown":"test","post_date":"2026-05-05","post_type":"blog"}' `
+    -Body $missingTitleBody `
     -ExpectStatus 400 -RequiresAuth $true
+
+$badDateBody = @{
+    title         = 'test'
+    body_markdown = 'test'
+    post_date     = 'not-a-date'
+    post_type     = 'blog'
+} | ConvertTo-Json -Compress
 
 Test-Endpoint -Name "POST /api/posts invalid date format returns 400" `
     -Method "POST" -Url "$BaseUrl/api/posts" `
     -Headers @("Authorization: Bearer $Token", "Content-Type: application/json") `
-    -Body '{"title":"test","body_markdown":"test","post_date":"not-a-date","post_type":"blog"}' `
+    -Body $badDateBody `
     -ExpectStatus 400 -RequiresAuth $true
 
 Write-Host ""
