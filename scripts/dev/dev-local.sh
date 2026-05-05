@@ -12,10 +12,10 @@
 #   test           — run the automated test suite inside the backend container
 #   test:coverage  — run tests with coverage report inside the backend container
 #
-# Run from the repo root: bash scripts/dev-local.sh <command>
+# Run from the repo root: bash scripts/dev/dev-local.sh <command>
 set -e
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_DIR"
 
 case "$1" in
@@ -24,15 +24,11 @@ case "$1" in
     echo "=== Starting containers ==="
     docker compose up --build -d
 
-    # Wait for Postgres to be healthy before attempting migration
     echo "=== Waiting for Postgres to be ready ==="
     until docker compose exec -T postgres pg_isready -U "${DB_USER:-postgres}" > /dev/null 2>&1; do
       sleep 1
     done
 
-    # Determine whether the DB is fresh (no tables yet) or already populated.
-    # On a fresh clone or after `reset`, TABLE_COUNT will be 0 and we always
-    # apply the full schema regardless of git-diff status.
     TABLE_COUNT=$(docker compose exec -T postgres psql \
       -U "${DB_USER:-postgres}" \
       -d "${DB_NAME:-portfolio_dev}" \
@@ -124,7 +120,7 @@ case "$1" in
     ;;
 
   *)
-    echo "Usage: bash scripts/dev-local.sh [up|down|reset|logs|db|test|test:coverage]"
+    echo "Usage: bash scripts/dev/dev-local.sh [up|down|reset|logs|db|test|test:coverage]"
     echo ""
     echo "  up             Build & start all containers; auto-migrates schema"
     echo "  down           Stop containers (DB volume preserved)"

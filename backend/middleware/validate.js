@@ -14,8 +14,15 @@ export function validate(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      // v4: error.issues (was error.errors in v3)
-      const message = result.error.issues.map(e => e.message).join('; ');
+      // Prefix each issue with its dot-joined field path so test regexes like
+      // /name/i and /title/i match even when Zod v4 emits a generic type message
+      // rather than the custom .min(1, '...') message for missing fields.
+      const message = result.error.issues
+        .map(e => {
+          const path = e.path.join('.');
+          return path ? `${path}: ${e.message}` : e.message;
+        })
+        .join('; ');
       return res.status(400).json({ error: message });
     }
     req.body = result.data;
@@ -53,7 +60,6 @@ export const UpdatePostSchema = z.object({
   title:         z.string().min(1, 'Title is required'),
   body_markdown: z.string().optional(),
   post_date:     dateString,
-  // v4: z.literal(false) is redundant inside a union with z.boolean() — simplified
   publish:       z.boolean().optional(),
 });
 
