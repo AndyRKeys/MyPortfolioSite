@@ -40,6 +40,10 @@ async function checkRateLimit(ip) {
   }
 }
 
+function isSmtpConfigured() {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
 function getTransporter() {
   return nodemailer.createTransport({
     host:   process.env.SMTP_HOST,
@@ -65,6 +69,18 @@ router.post('/', validate(ContactSchema), async (req, res) => {
 
   const { name, email, message } = req.body;
   // Field presence and email format are now guaranteed by validate(ContactSchema)
+
+  // Dev stub: when SMTP is not configured, log to console so the form is testable locally
+  if (!isSmtpConfigured()) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Email service is not configured on this server.' });
+    }
+    console.log('[DEV] Contact form submission (SMTP not configured — not sent):');
+    console.log(`  Name:    ${name}`);
+    console.log(`  Email:   ${email}`);
+    console.log(`  Message: ${message}`);
+    return res.json({ success: true });
+  }
 
   try {
     await getTransporter().sendMail({
