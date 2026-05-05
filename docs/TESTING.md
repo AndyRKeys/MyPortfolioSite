@@ -75,7 +75,15 @@ New-Item -ItemType Directory -Force -Path test-results
 
 ---
 
-## PR Validation Script Template
+## PR Smoke Test Scripts
+
+Every PR that touches backend code must include a `scripts/tests/Test-PR<N>.ps1` script (where N is the PR number). The PR template's **Smoke Test** section (`.github/pull_request_template.md`) requires this to be ticked before requesting review.
+
+- Run after `dev-local.ps1 up`: `.\scripts\tests\Test-PRN.ps1`
+- Scripts use `docker compose exec` directly — no bash or WSL dependency
+- Output is captured automatically via `Start-Transcript` — no extra flags needed
+
+### Script template
 
 When creating a `Test-PR<N>.ps1` script for a new PR, place it in `scripts/tests/` and use this as the starting point. The key requirements are:
 1. **`Start-Transcript` / `Stop-Transcript`** — output always captured without the caller needing flags

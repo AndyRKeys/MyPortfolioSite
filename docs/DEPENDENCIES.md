@@ -26,19 +26,19 @@ Guidelines for adding, updating, and maintaining project dependencies.
 
 ### Adding the package
 
-\`\`\`powershell
+```powershell
 npm install package@latest      # Install latest stable version
 npm audit                       # Verify no vulnerabilities
 git add package.json package-lock.json
 git commit -m "chore(deps): add package@latest
 
 Justification: [brief explanation of why this dependency is needed]"
-\`\`\`
+```
 
 **Always use caret ranges** in package.json:
-- ✅ \`^1.2.3\` — Allows minor and patch updates (safe for breaking changes)
-- ❌ \`1.2.3\` — Pinned to exact version (prevents updates)
-- ❌ \`*\` — Any version (unpredictable)
+- ✅ `^1.2.3` — Allows minor and patch updates (safe for breaking changes)
+- ❌ `1.2.3` — Pinned to exact version (prevents updates)
+- ❌ `*` — Any version (unpredictable)
 
 ---
 
@@ -48,20 +48,22 @@ Justification: [brief explanation of why this dependency is needed]"
 
 When updating a dependency:
 
-\`\`\`powershell
+```powershell
 npm update package              # Update to latest compatible version
 npm audit                       # Check for vulnerabilities
-npm test                        # Run full test suite
+. scripts\dev\dev-local.ps1 test  # Run full test suite inside Docker container
 git add package.json package-lock.json
 git commit -m "chore(deps): update package to X.Y.Z"
-\`\`\`
+```
+
+> ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine. Use `. scripts\dev\dev-local.ps1 test` instead.
 
 ### Dependabot PRs
 
 Dependabot automatically suggests dependency updates:
 
 1. **Review the PR** — Check the changelog for breaking changes
-2. **Run tests** — Ensure all tests pass
+2. **Run tests** — Ensure all tests pass: `. scripts\dev\dev-local.ps1 test`
 3. **Merge when ready** — Use auto-merge or manual merge
 
 **Major version updates** require:
@@ -81,10 +83,10 @@ Dependabot automatically suggests dependency updates:
 
 | Scenario | Strategy | Example |
 |----------|----------|---------|
-| Production dependency | Caret range | \`^4.1.5\` (allows 4.1.6, 4.2.0, etc.) |
-| Dev/test tool | Caret range | \`^2.1.0\` |
-| Experimental package | Pin major only | \`^0.5.0\` (0.x versions are unstable) |
-| Security patch critical | Consider pinning | \`4.1.5\` (after major update stability issues) |
+| Production dependency | Caret range | `^4.1.5` (allows 4.1.6, 4.2.0, etc.) |
+| Dev/test tool | Caret range | `^2.1.0` |
+| Experimental package | Pin major only | `^0.5.0` (0.x versions are unstable) |
+| Security patch critical | Consider pinning | `4.1.5` (after major update stability issues) |
 
 ---
 
@@ -92,18 +94,18 @@ Dependabot automatically suggests dependency updates:
 
 When removing a dependency:
 
-\`\`\`powershell
+```powershell
 npm uninstall package
 npm audit                       # Ensure no orphaned deps
 git add package.json package-lock.json
 git commit -m "chore(deps): remove unused package"
-\`\`\`
+```
 
 ---
 
 ## Security
 
-- Run \`npm audit\` regularly — treat vulnerabilities as blockers
+- Run `npm audit` regularly — treat vulnerabilities as blockers
 - Enable Dependabot alerts in GitHub settings
 - High-severity vulnerabilities must be patched within 24 hours
-- Never commit \`.npmrc\` or credentials files
+- Never commit `.npmrc` or credentials files
