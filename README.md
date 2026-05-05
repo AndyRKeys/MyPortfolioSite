@@ -293,7 +293,9 @@ documents in order — do not skip any:
 3. STYLE_GUIDE.md          — naming conventions, alignment, JS/CSS/HTML patterns
 4. docs/TESTING.md         — test suite structure, how to run tests, PR smoke
                              test template, and what is/isn’t tested
-5. backend/db/schema.sql   — full database schema (tables, columns, constraints)
+5. docs/DEPENDENCIES.md    — dependency management: adding, updating, version
+                             pinning strategy, and security practices
+6. backend/db/schema.sql   — full database schema (tables, columns, constraints)
 
 Then do a quick orientation of the repo structure:
 - List the top-level folders and describe the purpose of each
