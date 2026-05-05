@@ -30,6 +30,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - docs/DATABASE.md — schema reference (this release)
 - docs/SECURITY.md — auth model and threat model (this release)
 - GitHub issue and PR templates (this release)
+- All root-level docs consolidated under `docs/` — `AI.md`, `CHANGELOG.md`, `DATABASE.md`, `SECURITY.md`, `STYLE_GUIDE.md` moved from repo root (#130)
+- `docs/DEPENDENCIES.md` added to AI onboarding prompt in README and When in Doubt list in `docs/AI.md` (#130)
+- `.github/pull_request_template.md` — Smoke Test and Documentation checklist sections added (#130)
 
 ### Fixed
 - Blog post 404 errors — corrected `API_BASE` in `blog-post.js` to always use `/api` (#81)
@@ -38,10 +41,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Travel card and timeline click targets now navigate to detail page instead of opening lightbox (#78)
 - Duplicate `isAdminSession` function removed, extracted to shared `auth-utils.js` (#79)
 - `header` CSS selector scoped to `body > header` to prevent gradient bleeding into post article headers (#91)
+- `npm test` in `docs/DEPENDENCIES.md` replaced with Docker wrapper command — aligns with project-wide rule (#130)
 
 ### Changed
 - Blog and travel post detail pages unified with consistent `.post-meta` date styling
 - Travel post section order changed to: map → gallery → notes
+- All cross-references in docs updated to new `docs/` paths (#130)
 
 ---
 
