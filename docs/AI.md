@@ -365,7 +365,7 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 
 - Sanitize HTML output to prevent XSS
 - Use parameterized queries for SQL
-- Validate user input at system boundaries only
+- Validate user input at system entry points only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
 
 ## Hotfixes
@@ -400,9 +400,10 @@ See README.md for full details, scripts, and local dev setup.
 3. Check [docs/TESTING.md](docs/TESTING.md) before adding or modifying tests
 4. Check [docs/DATABASE.md](docs/DATABASE.md) before adding or changing any routes, migrations, or queries
 5. Check [docs/SECURITY.md](docs/SECURITY.md) before touching auth, sessions, or input handling
-6. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
-7. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
-8. Review recent commits to match code style
-9. Ask: "Is this change isolated, testable, and reversible?"
-10. If a task is too large, break it into smaller PRs
-11. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
+6. Check [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) before adding, updating, or removing a dependency
+7. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
+8. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
+9. Review recent commits to match code style
+10. Ask: "Is this change isolated, testable, and reversible?"
+11. If a task is too large, break it into smaller PRs
+12. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
