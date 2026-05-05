@@ -596,7 +596,12 @@ function initTravelForm() {
     });
 
     $('#travel-cancel-btn').on('click', clearTravelForm);
-    $('#travel-clear').on('click', clearTravelForm);
+    $('#travel-clear').on('click', function () {
+        if ($('#travel-edit-id').val() || $('#travel-title').val() || $('#travel-location').val() || $('#travel-notes').val() || pendingFiles.length) {
+            if (!confirm('Clear all fields and start a new memory?')) return;
+        }
+        clearTravelForm();
+    });
 }
 
 // ── Blog posts ─────────────────────────────────────────────────────────────────────────────────
@@ -776,6 +781,12 @@ function initPostForm() {
     });
 
     $('#post-cancel-btn').on('click', clearPostForm);
+    $('#post-clear-btn').on('click', function () {
+        if ($('#post-edit-id').val() || $('#post-title').val() || $('#post-body').val()) {
+            if (!confirm('Clear all fields and start a new post?')) return;
+        }
+        clearPostForm();
+    });
 
     $('#post-template-btn').on('click', function () {
         const body = $('#post-body');
