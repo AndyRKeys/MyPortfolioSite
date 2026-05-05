@@ -39,31 +39,48 @@ In production `config.js` exports `API = ''` so `/auth/*` calls are same-origin 
 ## Local Development
 
 ### Prerequisites
-- Node.js 20+ **OR** Docker Desktop (for containerized dev)
-- PostgreSQL (not needed if using Docker)
+- Docker Desktop (recommended)
 - A passkey-capable browser (Chrome, Safari, Edge)
+- Node.js 20+ only needed if running without Docker
 
-### Quick Start with Docker (Recommended)
+### Quick Start (Docker — Recommended)
 
-```bash
+```powershell
 # 1. Clone
 git clone https://github.com/AndyRKeys/MyPortfolioSite.git
 cd MyPortfolioSite
 
-# 2. Copy Docker env
+# 2. Copy env
 cp docker/.env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
-docker-compose up
+. scripts\dev\dev-local.ps1 up
 
 # 4. Open in browser
-# Frontend: http://localhost (served by Nginx)
-# or directly: http://localhost:3000 with Live Server
+# http://localhost
 ```
 
-Services start in ~30s. PostgreSQL schema auto-initializes. Backend auto-reloads on code changes via volume mount.
+Services start in ~30s. PostgreSQL schema auto-initializes on first run. Backend source is volume-mounted so file changes are reflected without rebuilding.
 
 Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
+
+### dev-local.ps1 Reference
+
+```powershell
+. scripts\dev\dev-local.ps1 up             # Build & start all containers
+. scripts\dev\dev-local.ps1 down           # Stop containers (DB volume preserved)
+. scripts\dev\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
+. scripts\dev\dev-local.ps1 logs           # Tail backend container logs
+. scripts\dev\dev-local.ps1 db             # Open a psql shell into the dev DB
+. scripts\dev\dev-local.ps1 test           # Run automated test suite in container
+. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report
+```
+
+**Troubleshooting:**
+- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
+- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
+- **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
+- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email; the contact handler will return 500 in dev but validation tests will still pass
 
 ### Setup (Manual without Docker)
 
@@ -89,51 +106,43 @@ npm run dev
 
 Serve the frontend with VS Code Live Server and open **http://localhost:3000** (not 127.0.0.1 — WebAuthn requires `localhost` or HTTPS).
 
-Visit `http://localhost:3000/setup.html` to create the admin account and register your first passkey.
+---
 
-### Docker Reference
+## Testing
 
-**Useful commands:**
-```bash
-# Start services in background
-docker-compose up -d
+> ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine.
 
-# View logs
-docker-compose logs -f backend
-docker-compose logs -f postgres
-
-# Stop services
-docker-compose down
-
-# Rebuild backend image (after dependencies change)
-docker-compose build --no-cache backend
-
-# Access PostgreSQL shell
-docker-compose exec postgres psql -U postgres -d portfolio_dev
-
-# Fresh start (delete data)
-docker-compose down -v && docker-compose up
+```powershell
+. scripts\dev\dev-local.ps1 up
+. scripts\dev\dev-local.ps1 test
 ```
 
-**Troubleshooting:**
-- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
-- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy (check `docker-compose logs postgres`)
-- **Schema not initialized**: Manually run `docker-compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
-- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email
+For per-PR smoke tests, run the relevant script from `scripts/tests/`:
+
+```powershell
+.\scripts\tests\Test-PR104.ps1
+```
+
+No `-Token` flag needed — the script auto-generates a JWT from the container. See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide.
 
 ---
 
 ## Branching Strategy
 
 ```
-main  ←── dev  ←── feature/issue-N-description
+main  ←── release/YYYY-MM-DD ←── dev ←── feature/issue-N-description
+                                     ←── fix/issue-N-description
+main  ←── hotfix/issue-N-description (emergency fixes only)
 ```
 
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production — always deployable, mirrors what's live |
-| `dev` | Integration branch — features merge here first |
-| `feature/*` | One branch per GitHub Issue |
+| `release/YYYY-MM-DD` | Release staging — branched from `dev`, PR'd to `main` |
+| `dev` | Integration branch — features and fixes merge here first |
+| `feature/issue-N-*` | Feature per GitHub Issue |
+| `fix/issue-N-*` | Bug fix per GitHub Issue |
+| `hotfix/issue-N-*` | Emergency production fix — branched from `main` |
 
 ### Workflow
 
@@ -172,15 +181,15 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ### Deploy latest changes (from Windows)
 
 ```powershell
-.\scripts\deploy.ps1
+.\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the Pi and runs `scripts/deploy.sh`, which:
+This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
 3. Runs `npm install` only if `backend/package.json` changed
-4. Re-runs `backend/db/schema.sql` only if it changed (idempotent migrations)
-5. Re-renders and reloads Nginx only if `scripts/nginx-portfolio.conf.template` changed (`nginx -t` is run before reload — a syntax error aborts the deploy)
+4. Re-runs `backend/db/schema.sql` only if it changed or DB is empty (idempotent)
+5. Re-renders and reloads Nginx only if `scripts/deploy/nginx-portfolio.conf.template` changed
 6. Restarts PM2 only if backend files changed
 7. Reports PM2 status
 
@@ -192,7 +201,7 @@ This SSHs into the Pi and runs `scripts/deploy.sh`, which:
 | Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
 | `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
 | `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
-| `scripts/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
+| `scripts/deploy/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
 | `.env` | Edit on server manually + `pm2 restart` |
 
 ### Useful server commands
@@ -218,14 +227,28 @@ ssh <pi-hostname> "sudo certbot renew"
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/pi-setup.sh` | Full server setup from scratch (Node, PostgreSQL, Nginx, PM2) |
-| `scripts/fix-apache.ps1` | Disable Apache, enable Nginx |
-| `scripts/setup-ssl.ps1` | Install certbot and obtain Let's Encrypt cert |
-| `scripts/setup-nginx-ssl.ps1` | Configure Nginx for HTTPS + update backend `.env` |
-| `scripts/deploy.sh` | Smart deploy — runs on server, detects what changed |
-| `scripts/deploy.ps1` | Trigger deploy from Windows via SSH |
+```
+scripts/
+├── dev/
+│   ├── dev-local.ps1       Windows wrapper for all local dev commands
+│   ├── dev-local.sh        Bash equivalent (Linux/Mac/WSL)
+│   ├── debug-network.sh    Network diagnostics helper
+│   └── watch-logs.sh       Tail multiple log streams
+├── deploy/
+│   ├── prod-deploy.sh      Smart deploy — runs on Pi, detects what changed
+│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
+│   ├── pi-setup.sh         Full server setup from scratch
+│   ├── install-monitor.sh  Install monitoring tooling
+│   ├── monitor.sh          Runtime monitoring script
+│   ├── fix-apache.ps1      Disable Apache, enable Nginx
+│   ├── setup-ssl.ps1       Install certbot and obtain SSL cert
+│   ├── setup-nginx-ssl.ps1 Configure Nginx for HTTPS
+│   ├── nginx-local.conf.template
+│   └── nginx-portfolio.conf.template
+└── tests/
+    ├── Test-PR96.ps1       Smoke tests for PR #96
+    └── Test-PR104.ps1      Smoke tests for PR #104
+```
 
 ---
 
@@ -250,3 +273,40 @@ Copy `backend/.env.example` and fill in values. **Never commit `.env`.**
 ## Outstanding Issues
 
 Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPortfolioSite/issues).
+
+---
+
+## AI Onboarding Prompt
+
+Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
+
+```
+You are pair programming with me on my personal portfolio site. Before we start
+any work, please familiarise yourself with the project by reading the following
+documents in order — do not skip any:
+
+1. README.md               — architecture, local dev setup, branching strategy,
+                             deploy process, and scripts reference
+2. AI.md                   — your working instructions: scope discipline, workflow,
+                             commit conventions, documentation hygiene rules,
+                             branching guardrails, and code style rules
+3. STYLE_GUIDE.md          — naming conventions, alignment, JS/CSS/HTML patterns
+4. docs/TESTING.md         — test suite structure, how to run tests, PR smoke
+                             test template, and what is/isn’t tested
+5. backend/db/schema.sql   — full database schema (tables, columns, constraints)
+
+Then do a quick orientation of the repo structure:
+- List the top-level folders and describe the purpose of each
+- Skim backend/app.js and backend/routes/ to understand the API surface
+- Note any open GitHub Issues that are relevant to the work we’re about to do
+
+Once you have read all of the above and completed the orientation, confirm with
+a short summary covering:
+- The tech stack and how the pieces fit together
+- The branching model and where new work should be branched from
+- The test approach and how to run the suite
+- Any documentation hygiene rules I should know you have internalised
+- Any open issues or anything that looks incomplete or worth flagging
+
+Do not write any code or propose any changes until I give you a task.
+```

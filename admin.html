@@ -136,6 +136,32 @@
                 </div>
             </div>
 
+            <!-- ── CV management (#101) ──────────────────────────────────────────── -->
+            <div class="admin-card">
+                <h2 class="admin-card-title">CV</h2>
+                <p class="hint" style="margin-bottom:1rem">
+                    Upload a PDF CV to make it available for download on the site.
+                    The file will be scanned for obvious private information before publishing.
+                </p>
+                <div style="margin-bottom:1rem">
+                    <span id="cv-status-badge" class="cv-status-badge not-uploaded">Checking…</span>
+                </div>
+                <div class="file-input-wrap" style="margin-bottom:0.25rem">
+                    <button type="button" id="cv-file-btn" class="btn-secondary" aria-label="Choose CV PDF">Choose PDF…</button>
+                    <span id="cv-file-label" class="file-input-label">No file chosen</span>
+                    <input id="cv-file-input" type="file" accept="application/pdf" class="file-input-hidden" />
+                </div>
+                <!-- Rename notice: shown when selected file is not already named cv.pdf (#110) -->
+                <p id="cv-rename-notice" class="hint" style="display:none;margin-bottom:0.75rem;color:var(--color-text-secondary)">
+                    ℹ Your file will be saved as <strong>cv.pdf</strong>
+                </p>
+                <div class="form-actions">
+                    <button type="button" id="cv-upload-btn" class="btn-primary" disabled>Upload CV</button>
+                    <button type="button" id="cv-delete-btn" class="travel-delete-btn" disabled>Delete CV</button>
+                </div>
+                <p id="cv-message" class="admin-message"></p>
+            </div>
+
             <!-- ── Private notes ─────────────────────────────────────────────────── -->
             <div class="admin-card private-card">
                 <h2 class="admin-card-title">Private coding projects</h2>
@@ -246,6 +272,29 @@
                 btn.addEventListener('mouseleave', stopHold);
                 btn.addEventListener('touchend', stopHold);
                 btn.addEventListener('touchcancel', stopHold);
+            });
+        })();
+
+        // Issue #110: CV file input — wire button, show rename notice if not cv.pdf
+        (function () {
+            var fileBtn    = document.getElementById('cv-file-btn');
+            var fileInput  = document.getElementById('cv-file-input');
+            var fileLabel  = document.getElementById('cv-file-label');
+            var renameNote = document.getElementById('cv-rename-notice');
+            if (!fileBtn || !fileInput || !fileLabel || !renameNote) return;
+
+            fileBtn.addEventListener('click', function () { fileInput.click(); });
+
+            fileInput.addEventListener('change', function () {
+                if (fileInput.files.length > 0) {
+                    var name = fileInput.files[0].name;
+                    fileLabel.textContent = name;
+                    // Show rename notice only when the chosen file isn't already cv.pdf
+                    renameNote.style.display = (name.toLowerCase() !== 'cv.pdf') ? '' : 'none';
+                } else {
+                    fileLabel.textContent = 'No file chosen';
+                    renameNote.style.display = 'none';
+                }
             });
         })();
     </script>

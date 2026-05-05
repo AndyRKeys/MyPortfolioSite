@@ -1,42 +1,22 @@
-var API_BASE = API_BASE || '/api';
-
-function escapeHtml(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+import { API_BASE } from './config.js';
+import { formatPostDate } from './utils/date.js';
+import { buildPostCard, buildTimelineItem } from './utils/dom.js';
 
 function truncate(str, len) {
     if (!str) return '';
     return str.length > len ? str.slice(0, len).trimEnd() + '\u2026' : str;
 }
 
-function formatPostDate(post) {
-    // post_date may arrive as a full ISO timestamp ("2026-05-04T00:00:00.000Z")
-    // or as a bare date string ("2026-05-04"). Always slice to YYYY-MM-DD first
-    // so we never produce an unparseable string like "2026-05-04T00:00:00.000ZT00:00:00".
-    var rawDate = post.post_date
-        ? String(post.post_date).slice(0, 10) + 'T00:00:00'
-        : post.published_at;
-    if (!rawDate) return '';
-    return new Date(rawDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-// Renamed from buildPostCard to avoid shadowing window.buildPostCard (defined in
-// script.js) which would cause infinite recursion — every global function is a
-// property of window, so a local buildPostCard() calling window.buildPostCard()
-// was calling itself.
 function buildBlogPostCard(post) {
-    return window.buildPostCard('blog', {
-        slug:    post.slug,
-        title:   post.title,
-        date:    formatPostDate(post),
+    return buildPostCard('blog', {
+        slug: post.slug,
+        title: post.title,
+        date: formatPostDate(post),
         excerpt: post.excerpt ? truncate(post.excerpt, 150) : null,
     });
 }
 
-// ── Blog view toggle ──────────────────────────────────────────────────────────────
-
+// ── Blog view toggle ────────────────────────────────────────────────────────────────
 function applyBlogView(view) {
     if (view === 'timeline') {
         $('#posts-list').addClass('hidden');
@@ -48,9 +28,6 @@ function applyBlogView(view) {
 }
 
 function initBlogViewToggle() {
-    // Scoped to .blog-view-toggle to avoid colliding with .travel-view-toggle
-    // when both script.js and blog.js are loaded on blog.html.
-    // Cards and timeline must both be populated before this is called.
     var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
     applyBlogView(activeView);
 
@@ -63,8 +40,6 @@ function initBlogViewToggle() {
 }
 
 function loadPosts() {
-    // Enforce the active view immediately so containers are correctly
-    // hidden/shown from the very start of the load — before any data arrives.
     var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
     applyBlogView(activeView);
 
@@ -81,10 +56,8 @@ function loadPosts() {
                 return;
             }
 
-            // Cards view
             posts.forEach(function (post) { list.append(buildBlogPostCard(post)); });
 
-            // Timeline view — sorted descending by post_date / published_at
             var sorted = posts.slice().sort(function (a, b) {
                 var da = a.post_date ? String(a.post_date).slice(0, 10) : (a.published_at ? a.published_at.slice(0, 10) : '');
                 var db = b.post_date ? String(b.post_date).slice(0, 10) : (b.published_at ? b.published_at.slice(0, 10) : '');
@@ -92,16 +65,15 @@ function loadPosts() {
             });
             var timelineEl = $('#blog-timeline');
             sorted.forEach(function (post) {
-                // buildTimelineItem is defined in script.js and exposed on window
-                timelineEl.append(window.buildTimelineItem({
-                    dateStr:  formatPostDate(post),
-                    title:    post.title,
-                    notes:    post.excerpt ? truncate(post.excerpt, 200) : null,
+                timelineEl.append(buildTimelineItem({
+                    dateStr: formatPostDate(post),
+                    title: post.title,
+                    notes: post.excerpt ? truncate(post.excerpt, 200) : null,
                     linkHref: 'blog-post.html?slug=' + encodeURIComponent(post.slug),
                 }));
             });
 
-            // Wire toggle buttons — cards and timeline must both be populated first.
+            // Cards and timeline must both be populated before toggle is wired.
             initBlogViewToggle();
         })
         .catch(function (err) {
@@ -110,6 +82,5 @@ function loadPosts() {
         });
 }
 
-$(document).ready(function () {
-    loadPosts();
-});
+// Modules are deferred by default — DOM is ready and jQuery is available.
+loadPosts();
