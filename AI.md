@@ -394,7 +394,8 @@ See README.md for full details, scripts, and local dev setup.
 1. Check README.md for architecture and deployment info
 2. Check STYLE_GUIDE.md for naming, formatting, and code organisation rules
 3. Check docs/TESTING.md before adding or modifying tests
-4. Check DATABASE.md before adding or changing any routes, migrations, or queries
+4. Check docs/DEPENDENCIES.md before adding or updating packages
+5. Check DATABASE.md before adding or changing any routes, migrations, or queries
 5. Check SECURITY.md before touching auth, sessions, or input handling
 6. Review recent commits to match code style
 7. Ask: "Is this change isolated, testable, and reversible?"
