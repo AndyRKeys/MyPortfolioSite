@@ -231,6 +231,7 @@ Mounts each router against the full Express app via Supertest with the `pg` pool
 |---|---|
 | WebAuthn passkey registration/login | Requires a real browser authenticator; the `@simplewebauthn/server` library call is mocked at the boundary |
 | Email delivery (nodemailer) | Requires real SMTP credentials; nodemailer is mocked — the send path is covered by the contact route tests |
+| Contact form in local dev | When `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` are not set, the route logs the submission to the backend console and returns `{ success: true }` — no email is sent. This is the expected behaviour in the Docker dev environment; the form UI will appear to succeed. Check the backend container logs (`docker compose logs backend`) to see the submitted values. |
 | Database queries | Integration tests mock the pg pool; real DB behaviour is covered by manual smoke testing against the dev Docker DB |
 | Frontend JavaScript | Out of scope for the backend suite; covered by manual browser testing |
 
