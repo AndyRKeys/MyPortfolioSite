@@ -183,6 +183,33 @@
                 </div>
             </div>
 
+            <!-- ── Deployment (#98 / #117) ──────────────────────────────────────── -->
+            <div class="admin-card" id="deploy-section">
+                <h2 class="admin-card-title">Deployment</h2>
+                <div id="deploy-status-row" class="deploy-status-row">
+                    <span class="hint">Loading…</span>
+                </div>
+                <div class="form-actions" style="margin-top:1rem">
+                    <button type="button" id="deploy-btn" class="btn-primary" disabled>Deploy latest</button>
+                    <button type="button" id="rollback-btn" class="btn-secondary" disabled>Rollback…</button>
+                </div>
+                <div id="rollback-picker" class="hidden" style="margin-top:0.75rem">
+                    <label>Roll back to
+                        <select id="rollback-sha-select"></select>
+                    </label>
+                    <div class="form-actions" style="margin-top:0.5rem">
+                        <button type="button" id="rollback-confirm-btn" class="travel-delete-btn">Confirm rollback</button>
+                        <button type="button" id="rollback-cancel-btn" class="btn-secondary">Cancel</button>
+                    </div>
+                </div>
+                <pre id="deploy-output" class="deploy-output hidden"></pre>
+                <p id="deploy-message" class="admin-message"></p>
+                <div id="deploy-log-section" style="margin-top:1.5rem">
+                    <h3 style="font-size:0.9rem;color:var(--color-text-muted);margin-bottom:0.5rem">Deploy history</h3>
+                    <div id="deploy-log-list"><p class="hint">Loading…</p></div>
+                </div>
+            </div>
+
             <!-- ── Passkeys ─────────────────────────────────────────────────────── -->
             <div class="admin-card">
                 <h2 class="admin-card-title">Manage passkeys</h2>
