@@ -432,6 +432,36 @@ Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (
 
 ---
 
+## Dependencies & Packages
+
+### Adding new dependencies
+
+When adding a new package to the project:
+
+1. **Use latest stable versions** — Always use the latest stable release, not pre-release or outdated versions.
+   - Run `npm outdated` before adding to check the latest available version
+   - Use exact or caret ranges: `^1.2.3` (allows minor/patch updates) not `1.2.3` (pinned) or `*` (any version)
+
+2. **Justify the addition** — Before adding a dependency:
+   - Check if functionality already exists in a current dependency
+   - Consider the package size and maintenance status
+   - Verify it has no known security vulnerabilities (`npm audit`)
+
+3. **Update package.json deliberately** — Do not let automated tools pin outdated versions:
+   - Dependabot will suggest updates; review and approve them
+   - Major version bumps require testing before merge
+   - Keep `package-lock.json` in sync by running `npm install` if manually edited
+
+4. **Example workflow:**
+   ```powershell
+   npm outdated                    # Check latest versions
+   npm install package@latest      # Install latest stable
+   npm audit                       # Verify no vulnerabilities
+   git add package.json package-lock.json
+   git commit -m "chore(deps): add package@latest"
+   ```
+
+---
 
 ## Git & Commits
 
