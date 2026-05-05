@@ -89,6 +89,8 @@ If the issue doesn't exist yet, create it on GitHub with:
 - Expected vs actual behaviour
 - Any relevant context (related PRs, design docs, etc.)
 
+Use the appropriate issue template from `.github/ISSUE_TEMPLATE/` — `bug_report.md` for bugs, `feature_request.md` for new functionality.
+
 ### 2. Planning
 Before writing code:
 1. Read the issue and any linked context
@@ -107,7 +109,7 @@ Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
 3. Include a clear summary of what changed and why
-4. Include a detailed test plan (see PR template at `.github/pull_request_template.md`)
+4. Fill in the PR template at `.github/pull_request_template.md` in full — summary, changes, test plan, smoke test checkbox, and documentation checklist
 5. Wait for review, testing, and approval before merging
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
@@ -117,7 +119,8 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - Edge cases to check (e.g. empty state, error handling, mobile view)
 - Regression checks for related features that could have been affected
 - Any manual setup needed before testing (e.g. seed data, env vars)
-- A reference to `scripts/tests/Test-PRN.ps1` if one exists for the PR
+- The smoke test checkbox: a reference to `scripts/tests/Test-PRN.ps1` if backend code was touched, or an explicit N/A if not
+- The documentation checklist: confirm `docs/CHANGELOG.md` updated and any relevant doc updated, or N/A
 
 ### 5. Release to Production
 
@@ -337,7 +340,7 @@ var name = user.name; // Get the user's name
 
 Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
 
-- The PR description **must** reference the script in its Testing Checklist section
+- The PR template's **Smoke Test** section must be ticked before requesting review
 - The script runs `docker compose exec` directly — it does not require bash or WSL
 - Run it after `. scripts\dev\dev-local.ps1 up` with: `.\scripts\tests\Test-PRN.ps1`
 
@@ -397,7 +400,9 @@ See README.md for full details, scripts, and local dev setup.
 3. Check [docs/TESTING.md](docs/TESTING.md) before adding or modifying tests
 4. Check [docs/DATABASE.md](docs/DATABASE.md) before adding or changing any routes, migrations, or queries
 5. Check [docs/SECURITY.md](docs/SECURITY.md) before touching auth, sessions, or input handling
-6. Review recent commits to match code style
-7. Ask: "Is this change isolated, testable, and reversible?"
-8. If a task is too large, break it into smaller PRs
-9. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
+6. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
+7. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
+8. Review recent commits to match code style
+9. Ask: "Is this change isolated, testable, and reversible?"
+10. If a task is too large, break it into smaller PRs
+11. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
