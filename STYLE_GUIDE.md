@@ -79,6 +79,7 @@ Align colons and values in logically grouped CSS declarations:
 | DB tables    | snake_case       | `blog_posts`, `travel_posts`   |
 | Constants    | SCREAMING_SNAKE  | `MAX_RETRIES`, `API_BASE`      |
 | Env vars     | SCREAMING_SNAKE  | `JWT_SECRET`, `DATABASE_URL`   |
+| Test files   | Mirror source path, `.test.js` suffix | `tests/routes/posts.test.js` |
 
 ---
 
@@ -300,6 +301,31 @@ Comments communicate **intent and structure** — not a running narration of wha
 
 Logical flow does not need to be described in comments. If a sequence of steps is hard to follow without explanation, that is a signal to extract a well-named function, not to add prose. Well-named functions, early returns, and clear variable names are the primary tools for communicating flow.
 
+### Section header comments
+
+Use section header comments to divide a long file into named regions. The canonical format is:
+
+```javascript
+// ── Section name
+```
+
+- Two em-dashes (`──`), a space, then the label — **no trailing fill, no padding to a fixed column width**
+- Use sentence case, no trailing punctuation
+- Apply consistently: if one section in a file gets a header, all top-level sections in that file get one
+- Do not use section headers inside short functions — they are for file-level or module-level regions only
+
+```javascript
+// ✅ Correct
+// ── Auth helpers
+// ── Travel memories
+// ── CV management
+
+// ❌ Trailing fill — length varies unpredictably, causes noisy diffs
+// ── Auth helpers ──────────────────────────────────────────────────
+// ── Travel memories ───────────────────────────────────────────────
+```
+
+
 ### Block summary comments
 
 Add a short summary comment above each distinct logical block within a function or file. This is the **primary use of comments** — acting as section headers that let a reader scan the shape of the code before reading the detail.
@@ -355,6 +381,57 @@ var name = user.name; // Get the user's name
 ```
 
 ---
+
+## Testing
+
+> ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.**
+
+See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide. Key conventions:
+
+### File structure
+
+Test files mirror the source tree under `backend/tests/`:
+
+```
+backend/tests/
+  middleware/validate.test.js
+  middleware/errorHandler.test.js
+  routes/contact.test.js
+  routes/posts.test.js
+```
+
+File naming: `<source-filename>.test.js` in a mirrored path.
+
+### Naming
+
+- `describe` block: matches the route or module name (`'POST /posts'`, `'validate middleware'`)
+- `it` block: plain English description of behaviour (`'returns 400 when title is missing'`)
+
+### Mocking conventions
+
+- Mock `pg` at the **module level** with `vi.mock('pg', ...)` — never mock it inside a test
+- Mock `nodemailer` the same way for routes that send email
+- Never use a live database or live network in unit/integration tests
+- Use `vi.fn().mockResolvedValue({ rows: [] })` as the default pg query stub; override per-test when needed
+
+### Running tests
+
+```powershell
+. scripts\dev\dev-local.ps1 up             # ensure dev environment is running
+. scripts\dev\dev-local.ps1 test           # run full suite
+. scripts\dev\dev-local.ps1 test:coverage  # run with coverage report
+```
+
+### PR smoke test scripts
+
+Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (where N is the PR number).
+
+- Run after `dev-local.ps1 up`: `.\scripts\tests\Test-PRN.ps1`
+- The PR description Testing Checklist must reference it as the primary verification step
+- Scripts use `docker compose exec` directly — no bash or WSL dependency
+
+---
+
 
 ## Git & Commits
 
