@@ -55,6 +55,12 @@ function scanForPrivateInfo(buffer) {
     { re: /\bpassword[:\s]/i,                              label: 'possible password' },
     { re: /\bsort\s*code[:\s]/i,                          label: 'possible sort code' },
     { re: /\bni\s*number[:\s]/i,                          label: 'possible NI number' },
+    // Phone numbers — UK mobile, +44 international prefix, UK landline area codes
+    { re: /\b07\d{3}[\s-]?\d{3}[\s-]?\d{3}\b/,           label: 'possible UK mobile number' },
+    { re: /\+44[\s.-]?\(?\d/,                             label: 'possible +44 phone number' },
+    { re: /\b0[1-9]\d{2,4}[\s-]\d{4,7}\b/,               label: 'possible UK phone number' },
+    // UK postcodes — standard format (e.g. SW1A 1AA, GY1 1AA)
+    { re: /\b[A-Z]{1,2}\d[0-9A-Z]?\s?\d[A-Z]{2}\b/,      label: 'possible UK postcode / home address' },
   ];
 
   patterns.forEach(({ re, label }) => {
