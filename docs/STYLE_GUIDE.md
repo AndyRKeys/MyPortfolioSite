@@ -385,7 +385,7 @@ var name = user.name; // Get the user's name
 
 > ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.**
 
-See **[docs/TESTING.md](docs/TESTING.md)** for the full guide. Key conventions:
+See **[docs/TESTING.md](docs/TESTING.md)** for the full guide, including the smoke test script template. Key conventions:
 
 ### File structure
 
@@ -423,11 +423,11 @@ File naming: `<source-filename>.test.js` in a mirrored path.
 
 ### PR smoke test scripts
 
-Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (where N is the PR number).
+Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (where N is the PR number). The **Smoke Test** section of `.github/pull_request_template.md` must be ticked before requesting review — use the script template in [docs/TESTING.md](docs/TESTING.md) as your starting point.
 
 - Run after `dev-local.ps1 up`: `.\scripts\tests\Test-PRN.ps1`
-- The PR description Testing Checklist must reference it as the primary verification step
 - Scripts use `docker compose exec` directly — no bash or WSL dependency
+- Output is captured automatically via `Start-Transcript` — no extra flags needed
 
 ---
 
