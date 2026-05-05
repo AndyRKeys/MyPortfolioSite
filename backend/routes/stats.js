@@ -4,11 +4,13 @@ import { authenticate } from '../middleware/authenticate.js';
 
 const router = Router();
 
-// Increment visit count for a page and return the new total.
-// Public — no auth required. Page names are whitelisted to prevent injection.
+// Page names are whitelisted to prevent arbitrary values being written to the DB
 const ALLOWED_PAGES = new Set(['home', 'blog', 'travel']);
 
-router.post('/visit', async (req, res) => {
+// ── Routes
+
+// Public: increment visit count for a page and return the new total
+router.post('/visit', async (req, res, next) => {
   const page = req.query.page;
   if (!page || !ALLOWED_PAGES.has(page)) {
     return res.status(400).json({ error: 'Invalid page' });
@@ -25,21 +27,19 @@ router.post('/visit', async (req, res) => {
     );
     res.json({ page, count: Number(result.rows[0].count) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
+    next(Object.assign(new Error('Database error'), { status: 500, cause: err }));
   }
 });
 
-// Return all page visit counts — admin only.
-router.get('/visits', authenticate, async (_req, res) => {
+// Admin: return all page visit counts
+router.get('/visits', authenticate, async (_req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT page, count, last_visited_at FROM page_visits ORDER BY count DESC'
     );
     res.json(result.rows.map(r => ({ ...r, count: Number(r.count) })));
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
+    next(Object.assign(new Error('Database error'), { status: 500, cause: err }));
   }
 });
 
