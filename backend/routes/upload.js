@@ -22,9 +22,11 @@ const ALLOWED_MIME = new Set([
   'video/mp4', 'video/webm', 'video/quicktime',
 ]);
 
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     ALLOWED_MIME.has(file.mimetype)
       ? cb(null, true)
