@@ -16,7 +16,7 @@ function buildBlogPostCard(post) {
     });
 }
 
-// ── Blog view toggle ────────────────────────────────────────────────────────────────
+// ── Blog view toggle ──────────────────────────────────────────────────────────────────────────
 function applyBlogView(view) {
     if (view === 'timeline') {
         $('#posts-list').addClass('hidden');
@@ -81,6 +81,9 @@ function loadPosts() {
             $('#posts-list').html('<p class="hint" style="color:var(--color-error)">Could not load posts.</p>');
         });
 }
+
+// Fire-and-forget visit counter — swallow errors so stats never break the page
+fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
 
 // Modules are deferred by default — DOM is ready and jQuery is available.
 loadPosts();

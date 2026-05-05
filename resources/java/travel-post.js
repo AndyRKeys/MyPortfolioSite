@@ -1,6 +1,6 @@
 import { API_BASE } from './config.js';
 
-// ── Lightbox state ────────────────────────────────────────────────────────────
+// ── Lightbox state ──────────────────────────────────────────────────────────────────────────────
 var lightboxItems = [];
 var lightboxIndex = 0;
 
@@ -85,7 +85,7 @@ function initLightbox() {
     });
 }
 
-// ── Page loader ───────────────────────────────────────────────────────────────
+// ── Page loader ─────────────────────────────────────────────────────────────────────────────
 function getId() {
     var params = new URLSearchParams(window.location.search);
     return params.get('id');
@@ -110,7 +110,12 @@ function loadTravelPost() {
             if (!res.ok) throw new Error('not found');
             return res.json();
         })
-        .then(renderTravelPost)
+        .then(function (travel) {
+            renderTravelPost(travel);
+            // Fire-and-forget visit counter — only on a successful post load,
+            // not on 404s or network errors. Swallow errors so stats never break the page.
+            fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
+        })
         .catch(function () { showError(); });
 }
 
@@ -175,7 +180,7 @@ function showError() {
     document.getElementById('post-error').classList.remove('hidden');
 }
 
-// Modules are deferred by default — DOM is ready and jQuery/$  is available
+// Modules are deferred by default — DOM is ready and jQuery/$ is available
 // because the jQuery <script> tag runs before this module.
 initLightbox();
 loadTravelPost();
