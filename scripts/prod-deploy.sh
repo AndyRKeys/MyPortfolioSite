@@ -4,7 +4,7 @@
 #   - Always pulls latest code
 #   - Always runs npm install (ensures no missing packages)
 #   - Renders nginx config from template if changed/missing (SSL-aware)
-#   - Applies DB schema if changed
+#   - Applies DB schema if changed OR if DB is empty (fresh server)
 #   - Restarts PM2 if backend changed
 #   - Post-deploy health check: verifies HTTP, HTTPS, and backend
 # Run on the Pi: bash ~/MyPortfolioSite/scripts/prod-deploy.sh
@@ -46,21 +46,38 @@ npm install --omit=dev --silent
 cd "$REPO_DIR"
 
 # ── DB schema migration ────────────────────────────────────────────────
-if [ "$SCHEMA_CHANGED" -gt 0 ]; then
-    echo "=== schema.sql changed — applying migration ==="
-    if [ -f backend/.env ]; then
-        DB_NAME=$(grep "^DB_NAME=" backend/.env | cut -d= -f2)
-        DB_USER=$(grep "^DB_USER=" backend/.env | cut -d= -f2)
-        if [ -n "$DB_NAME" ]; then
+# Apply schema if:
+#   a) schema.sql changed in this deployment, OR
+#   b) the DB is empty / fresh server (TABLE_COUNT = 0)
+if [ -f backend/.env ]; then
+    DB_NAME=$(grep "^DB_NAME=" backend/.env | cut -d= -f2)
+    DB_USER=$(grep "^DB_USER=" backend/.env | cut -d= -f2)
+    if [ -n "$DB_NAME" ]; then
+        TABLE_COUNT=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" \
+            2>/dev/null || echo "0")
+        TABLE_COUNT=$(echo "$TABLE_COUNT" | tr -d '[:space:]')
+
+        if [ "$TABLE_COUNT" -eq 0 ]; then
+            echo "=== Fresh DB detected — applying full schema ==="
             sudo -u postgres psql -d "$DB_NAME" -f backend/db/schema.sql
             sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $DB_USER;"
             sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;"
+            echo "  Schema applied."
+        elif [ "$SCHEMA_CHANGED" -gt 0 ]; then
+            echo "=== schema.sql changed — applying migration ==="
+            sudo -u postgres psql -d "$DB_NAME" -f backend/db/schema.sql
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $DB_USER;"
+            sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;"
+            echo "  Schema applied."
         else
-            echo "  WARN: DB_NAME not set in backend/.env — skipping schema apply"
+            echo "=== DB already populated and schema.sql unchanged — skipping migration ==="
         fi
     else
-        echo "  WARN: backend/.env missing — skipping schema apply"
+        echo "  WARN: DB_NAME not set in backend/.env — skipping schema apply"
     fi
+else
+    echo "  WARN: backend/.env missing — skipping schema apply"
 fi
 
 # ── Nginx config ──────────────────────────────────────────────────────

@@ -1,14 +1,11 @@
-var API_BASE = (function() {
-    var isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isDev ? 'http://' + window.location.hostname + ':8080' : '/api';
-})();
+import { API_BASE } from './config.js';
 
 function sanitizeHtml(html) {
     var temp = document.createElement('div');
     temp.innerHTML = html;
     var remove = temp.querySelectorAll('script, iframe, object, embed, [onclick], [onload], [onerror]');
-    remove.forEach(function(el) { el.remove(); });
-    temp.querySelectorAll('[href*="javascript:"], [src*="javascript:"]').forEach(function(el) {
+    remove.forEach(function (el) { el.remove(); });
+    temp.querySelectorAll('[href*="javascript:"], [src*="javascript:"]').forEach(function (el) {
         el.removeAttribute('href');
         el.removeAttribute('src');
     });
@@ -37,11 +34,14 @@ function loadPost() {
             document.getElementById('post-header-title').textContent = post.title;
             document.getElementById('post-title').textContent = post.title;
 
-            var rawDate = post.post_date ? String(post.post_date).slice(0, 10) + 'T00:00:00' : post.published_at;
+            var rawDate = post.post_date
+                ? String(post.post_date).slice(0, 10) + 'T00:00:00'
+                : post.published_at;
             var dateObj = rawDate ? new Date(rawDate) : null;
-            document.getElementById('post-date').textContent = (dateObj && !isNaN(dateObj))
-                ? dateObj.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
-                : '';
+            document.getElementById('post-date').textContent =
+                (dateObj && !isNaN(dateObj))
+                    ? dateObj.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : '';
 
             var md = post.body_markdown || '';
             var result = marked.parse(md);
@@ -60,6 +60,5 @@ function showError() {
     document.getElementById('post-error').classList.remove('hidden');
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-    loadPost();
-});
+// Modules are deferred by default — DOM is ready when this executes.
+loadPost();
