@@ -1691,19 +1691,6 @@ footer {
     color: var(--color-text-muted);
 }
 
-.travel-delete-btn {
-    background: var(--color-error) !important;
-    color: white !important;
-    border: none;
-    padding: 0.35rem 0.85rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    height: auto;
-    width: auto;
-    flex-shrink: 0;
-}
-
 /* ── Blog (Issue #7) ──────────────────────────────────────────────────────── */
 
 .posts-list {
@@ -1954,6 +1941,20 @@ footer {
 }
 
 .btn-small:hover { opacity: 0.85; }
+
+.btn-danger {
+    background: var(--color-error);
+    color: #fff;
+    border: none;
+    padding: 0.35rem 0.85rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    height: auto;
+    width: auto;
+}
+
+.btn-danger:hover { opacity: 0.85; }
 
 /* ── Travel map (Issue #8) ───────────────────────────────────────────────────── */
 
@@ -2262,7 +2263,7 @@ footer {
     }
 
     .post-admin-actions .btn-small,
-    .post-admin-actions .travel-delete-btn {
+    .post-admin-actions .btn-danger {
         flex: 1;
         min-height: 38px;
         padding: 0.5rem;
