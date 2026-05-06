@@ -1,0 +1,61 @@
+**********************
+PowerShell transcript start
+Start time: 20260505130423
+Username: AK-GAMING-PC\keysa
+RunAs User: AK-GAMING-PC\keysa
+Configuration Name: 
+Machine: AK-GAMING-PC (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.1.0_x64__8wekyb3d8bbwe\pwsh.dll -NoProfile -ExecutionPolicy Bypass -Command Import-Module 'c:\Users\keysa\.vscode\extensions\ms-vscode.powershell-2025.4.0\modules\PowerShellEditorServices\PowerShellEditorServices.psd1'; Start-EditorServices -HostName 'Visual Studio Code Host' -HostProfileId 'Microsoft.VSCode' -HostVersion '2025.4.0' -BundledModulesPath 'c:\Users\keysa\.vscode\extensions\ms-vscode.powershell-2025.4.0\modules' -EnableConsoleRepl -StartupBanner "PowerShell Extension v2025.4.0
+Copyright (c) Microsoft Corporation.
+
+https://aka.ms/vscode-powershell
+Type 'help' to get help.
+" -LogLevel 'Warning' -LogPath 'c:\Users\keysa\AppData\Roaming\Code\logs\20260505T122808\window1\exthost\ms-vscode.powershell' -SessionDetailsPath 'c:\Users\keysa\AppData\Roaming\Code\User\globalStorage\ms-vscode.powershell\sessions\PSES-VSCode-18648-174048.json' -FeatureFlags @() 
+Process ID: 28488
+PSVersion: 7.6.1
+PSEdition: Core
+GitCommitId: 7.6.1
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+═ * 54
+  PR #118 Test Run — 2026-05-05 13:04:23
+  Base URL : http://localhost
+  Token    : auto-generated from container
+  Log file : C:\Users\keysa\Proton Drive\andy.r.keys\My files\Coding\MyPortfolioSite\scripts\tests\..\..\test-results\PR118-20260505-130423.txt
+═ * 54
+
+Checking backend health...
+  [PASS] Backend health check
+
+Testing deployment endpoints (auth required):
+  [PASS] GET /api/deploy/status
+  [PASS] GET /api/deploy/history
+
+Testing auth protection:
+  [PASS] GET /api/deploy/status without auth (expect 401)
+  [PASS] POST /api/deploy without auth (expect 401)
+
+Testing deploy/rollback endpoints exist:
+  [PASS] POST /api/deploy requires auth
+  [PASS] POST /api/deploy/rollback requires auth
+
+Testing rollback SHA validation:
+  [PASS] POST /api/deploy/rollback with invalid SHA format
+  [PASS] POST /api/deploy/rollback with unknown SHA
+
+═ * 54
+  PASSED : 9
+  FAILED : 0
+═ * 54
+  Full log: C:\Users\keysa\Proton Drive\andy.r.keys\My files\Coding\MyPortfolioSite\scripts\tests\..\..\test-results\PR118-20260505-130423.txt
+
+**********************
+PowerShell transcript end
+End time: 20260505130423
+**********************

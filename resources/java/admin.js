@@ -629,7 +629,7 @@ function example() { return 'hello'; }
 
 ## Wrap-up
 
-End with a takeaway, a question, or a link to what\'s next.
+End with a takeaway, a question, or a link to what\’s next.
 `;
 
 function setPostMessage(msg, isError = false) {
@@ -1157,7 +1157,6 @@ function initDeploySection() {
     loadHistory();
 }
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
 
 requireAuth();
 setLogout();
