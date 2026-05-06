@@ -57,6 +57,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## [Unreleased] — on `dev`, not yet in production
 
+### Fixed
+- Delete button size/shape inconsistency — add `.btn-danger` variant to button system; `.travel-delete-btn` now composes from it, removing `!important` overrides (#137)
+
 ### Added
 - Travel post detail page (`travel-post.html`) with media gallery, Leaflet map, and lightbox (#78)
 - Public `GET /api/travel/:id` route for individual travel memories (#78)
