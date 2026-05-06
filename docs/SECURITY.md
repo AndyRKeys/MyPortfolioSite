@@ -35,13 +35,14 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 ### 2. Email Magic Links (fallback)
 
 1. Admin requests a magic link at `/auth/magic-link/request` with their registered email
-2. A secure random token is generated, stored in `email_tokens` with a short expiry, and emailed
-3. Admin clicks the link; `/auth/magic-link/verify` validates the token
+2. A secure random token (UUID) is generated, its bcrypt hash is stored in `email_tokens` via `crypt(token, gen_salt('bf'))`, and the raw token is emailed
+3. Admin clicks the link; `/auth/magic-link/verify` validates the token by re-hashing (`crypt($1, et.token) = et.token`)
 4. Token is marked `used = TRUE` (single-use)
 5. On success, a signed JWT is returned
 
 **Expiry:** Tokens expire based on `expires_at`. Expired tokens are rejected regardless of `used` status.
 **Single-use:** Once a token is used, `used = TRUE` and any subsequent attempt with the same token is rejected.
+**At-rest protection:** Only the bcrypt hash of the token is persisted, so a stolen DB dump cannot be replayed to forge magic-link logins (#134).
 
 ---
 

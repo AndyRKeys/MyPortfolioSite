@@ -83,6 +83,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `docs/DEPENDENCIES.md` added to AI onboarding prompt in README and When in Doubt list in `docs/AI.md` (#130)
 - `.github/pull_request_template.md` — Smoke Test and Documentation checklist sections added (#130)
 
+### Security
+- Hash `email_tokens.token` with bcrypt via pgcrypto — raw token sent in email only; DB dump cannot be replayed (#134)
+
 ### Fixed
 - Blog post 404 errors — corrected `API_BASE` in `blog-post.js` to always use `/api` (#81)
 - Lightbox close/escape/arrow key handlers rewritten using native `addEventListener` (#82)

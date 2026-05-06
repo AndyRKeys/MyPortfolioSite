@@ -295,7 +295,7 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
       const token = uuidv4();
       await pool.query(
         `INSERT INTO email_tokens (user_id, token, expires_at)
-         VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
+         VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
       await sendMagicLink(email.toLowerCase().trim(), token).catch(err => {
@@ -317,16 +317,16 @@ router.get('/email/verify', async (req, res) => {
     if (!token) return res.status(400).json({ error: 'Token required' });
 
     const result = await pool.query(
-      `SELECT et.user_id, et.token, u.email, u.username
+      `SELECT et.id, et.user_id, u.email, u.username
        FROM email_tokens et JOIN users u ON et.user_id = u.id
-       WHERE et.token = $1 AND et.used = FALSE AND et.expires_at > NOW()`,
+       WHERE crypt($1, et.token) = et.token AND et.used = FALSE AND et.expires_at > NOW()`,
       [token]
     );
     if (!result.rows.length) {
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
-    await pool.query('UPDATE email_tokens SET used = TRUE WHERE token = $1', [token]);
+    await pool.query('UPDATE email_tokens SET used = TRUE WHERE id = $1', [result.rows[0].id]);
 
     const row = result.rows[0];
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
