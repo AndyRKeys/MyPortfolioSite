@@ -21,6 +21,12 @@
         "eamodio.gitlens",
         "mhutchie.git-graph",
 
+        // GitHub
+        "github.vscode-pull-request-github",
+        "github.vscode-github-actions",
+        "github.copilot",
+        "github.copilot-chat",
+
         // Docker & backend
         "ms-azuretools.vscode-docker",
         "ckolkman.vscode-postgres",
