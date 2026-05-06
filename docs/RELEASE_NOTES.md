@@ -1,5 +1,70 @@
 # Release Notes
 
+## 🔥 Hotfix 2026-05-06
+
+**Released:** 2026-05-06
+**Branch:** hotfix/duplicate-initDeploySection
+**PR:** #144
+
+### Bug Fixes
+- fix(#144): remove duplicate `initDeploySection()` declaration in `admin.js` — caused a fatal `SyntaxError` in ES module strict mode, breaking every admin panel section on page load
+- Root cause: bad merge conflict resolution in `release/2026-05-05-2` kept both the old and new versions of the function
+
+### Breaking Changes / Deployment Notes
+- None — frontend-only fix; no backend restart or DB changes required
+
+---
+
+## 2026-05-05-2
+
+**Released:** 2026-05-05
+**Branch:** release/2026-05-05-2
+**PR:** #126
+
+### Features
+- feat(#129): git fetch button in deployment panel — retrieves latest commits from remote before deploying
+- feat(#129): `POST /api/deploy/fetch` endpoint with SSE streaming output
+- feat(#100): contact form dev stub — returns `{ success: true }` in local dev when SMTP not configured; returns 503 in production
+- chore: `Seed-DevData.ps1` development database seeding script
+- chore(#130): `docs/DEPENDENCIES.md` — architectural guidance for adding, updating, and removing packages
+- chore(#130): `Test-Regression.ps1` — baseline regression test script extracted from per-PR test harnesses
+- chore(#130): all root-level docs consolidated under `docs/`
+
+### Bug Fixes
+- fix(#123): deploy script uses `git reset --hard` instead of `git pull` to prevent local change conflicts
+- fix(#94): blog and travel admin clear buttons now show confirmation prompt before resetting
+- fix(#93, #95): date slicing — travel and blog edit forms now correctly populate date fields
+- fix(#108): visit counters missing on admin stats panel
+- fix: `$Host` reserved variable error in `prod-deploy.ps1` — renamed to `$Hostname`
+
+### Breaking Changes / Deployment Notes
+- None — `npm install` runs automatically in the deploy script if `package.json` changed
+
+---
+
+## 2026-05-05
+
+**Released:** 2026-05-05
+**Branch:** release/2026-05-05
+**PR:** #113
+
+### Features
+- feat(#98, #117): admin deployment panel with live status, deploy history, and rollback capability
+- feat(#98): `POST /api/deploy/` — SSE-streaming deploy endpoint
+- feat(#98): `POST /api/deploy/rollback` — rollback to a previous commit
+- feat(#98): `GET /api/deploy/status` — current HEAD vs remote comparison
+- feat(#98): `GET /api/deploy/history` — deploy log and recent commits
+- chore: `backend/utils/shell.js` — shared spawn utilities for streaming child processes
+
+### Bug Fixes
+- fix(#118): unhandled `spawn` error (`ENOENT`) when git not available in dev — backend no longer crashes
+- fix(#118): deploy endpoints gracefully degrade when git unavailable rather than returning 500
+
+### Breaking Changes / Deployment Notes
+- None — deploy script handles `npm install` automatically
+
+---
+
 ## 2026-05-04-2
 
 **Released:** 2026-05-04  
