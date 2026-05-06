@@ -6,6 +6,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
+## Hotfix 2026-05-06
+
+### Fixed
+- Admin page completely non-functional — `initDeploySection()` declared twice in `admin.js` causing a `SyntaxError` that prevented the entire file from parsing (#144)
+- Root cause: bad merge conflict resolution in `release/2026-05-05-2` kept both the old and new versions of the function; `type="module"` strict mode made this fatal in browsers
+
+---
+
+## Release 2026-05-05-2
+
+### Added
+- Git fetch button in deployment panel — retrieves latest commits from remote before deploying (#129)
+- `POST /api/deploy/fetch` endpoint with SSE streaming output (#129)
+- Contact form dev stub — returns success in local dev when SMTP not configured; returns 503 in production with no SMTP (#100)
+- Seed-DevData.ps1 — development database seeding script with realistic test data
+- docs/DEPENDENCIES.md — architectural guidance for adding, updating and removing packages
+- Test-Regression.ps1 — baseline regression test script extracted from per-PR test harnesses (#130)
+- All root-level docs consolidated under `docs/` (#130)
+
+### Fixed
+- Deploy script uses `git reset --hard` instead of `git pull` to prevent local change conflicts (#123)
+- Blog and travel admin clear buttons now show confirmation prompt before resetting (#94)
+- Date slicing — travel and blog edit forms now correctly populate date fields (#93, #95)
+- Visit counters missing on stats panel (#108)
+- `$Host` reserved variable error in `prod-deploy.ps1` — renamed to `$Hostname`
+
+### Changed
+- Scripts reorganised into logical subdirectories: `deploy/`, `dev/`, `infra/`, `monitoring/`, `config/`, `tests/`
+- All cross-references in docs updated to new `docs/` paths (#130)
+- PR template updated with smoke test and documentation checklist (#130)
+
+---
+
+## Release 2026-05-05
+
+### Added
+- Admin deployment panel with live status, deploy history, and rollback capability (#98, #117)
+- `POST /api/deploy/` — SSE-streaming deploy endpoint
+- `POST /api/deploy/rollback` — rollback to a previous commit
+- `GET /api/deploy/status` — current HEAD vs remote comparison
+- `GET /api/deploy/history` — deploy log and recent commits
+- `backend/utils/shell.js` — shared spawn utilities for streaming child processes
+
+### Fixed
+- Unhandled `spawn` error (`ENOENT`) when git not available in dev — backend no longer crashes (#118)
+- Deploy endpoints gracefully degrade when git unavailable rather than returning 500
+
+---
+
 ## [Unreleased] — on `dev`, not yet in production
 
 ### Added
