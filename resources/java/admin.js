@@ -208,7 +208,7 @@ function buildSavedMemoryRow(memory) {
     const toggleBtn = $('<button type="button" class="btn-small">' + (memory.published_at ? 'Unpublish' : 'Publish') + '</button>');
     toggleBtn.on('click', () => toggleTravelPublish(memory));
 
-    const delBtn = $('<button type="button" class="travel-delete-btn">Delete</button>');
+    const delBtn = $('<button type="button" class="btn-small btn-danger">Delete</button>');
     delBtn.on('click', () => deleteTravelMemory(memory.id));
 
     actions.append(editBtn).append(toggleBtn).append(delBtn);
@@ -665,7 +665,7 @@ function buildPostAdminRow(post) {
     const toggleBtn = $('<button type="button" class="btn-small">' + (post.published_at ? 'Unpublish' : 'Publish') + '</button>');
     toggleBtn.on('click', () => togglePublish(post));
 
-    const delBtn = $('<button type="button" class="travel-delete-btn">Delete</button>');
+    const delBtn = $('<button type="button" class="btn-small btn-danger">Delete</button>');
     delBtn.on('click', () => deletePost(post.id));
 
     actions.append(editBtn).append(toggleBtn).append(delBtn);
