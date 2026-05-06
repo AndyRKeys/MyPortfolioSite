@@ -1691,10 +1691,6 @@ footer {
     color: var(--color-text-muted);
 }
 
-.travel-delete-btn {
-    flex-shrink: 0;
-}
-
 /* ── Blog (Issue #7) ──────────────────────────────────────────────────────── */
 
 .posts-list {
