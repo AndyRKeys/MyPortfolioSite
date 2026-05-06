@@ -96,6 +96,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Blog and travel post detail pages unified with consistent `.post-meta` date styling
 - Travel post section order changed to: map → gallery → notes
 - All cross-references in docs updated to new `docs/` paths (#130)
+- Extract travel listing logic from `script.js` into dedicated `travel.js` (#133); fixes travel page visit counter not firing
 
 ---
 
