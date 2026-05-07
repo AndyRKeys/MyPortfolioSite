@@ -110,9 +110,12 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 # Push and create PR
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
+# Apply 'awaiting review' tag to the issue once PR is raised
 
 # After review, merge to dev (user does this, not you)
+# Apply 'awaiting release' tag to the issue once merged to dev
 # User will then create a release PR: dev → main for deploy
+# 'awaiting release' tag is removed when the release PR merges to main (GitHub closes issue via Closes #N)
 ```
 
 ### Deployment (From Windows)
@@ -315,5 +318,8 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 4. Make changes, test: `. scripts\dev\dev-local.ps1 test`
 5. Commit: `git commit -m "imperative summary" && git add Co-Authored-By line`
 6. Push and PR: `git push -u origin fix/issue-N-...` then `gh pr create --base dev`
+   - Add `Closes #N` in PR body
+   - Apply `awaiting review` tag to the issue
+   - After merge to dev: apply `awaiting release` tag to the issue
 
 Ask if anything is unclear.
