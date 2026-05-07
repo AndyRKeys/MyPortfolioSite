@@ -137,11 +137,12 @@ When the server boots, the encrypted root filesystem is locked. Before the main 
 # From Windows — connect to Dropbear on port 2222
 ssh -p 2222 root@<server-hostname>
 
-# Inside Dropbear shell, type:
+# Inside Dropbear shell, type (do NOT copy-paste):
 cryptroot-unlock
 
 # Dropbear will prompt for the disk encryption passphrase
-# Enter it, then the system boots (wait 10-15 seconds)
+# TYPE the passphrase manually — do not copy/paste (Dropbear's terminal mangles clipboard input)
+# System boots after you enter it (wait 10-15 seconds)
 
 # Once booted, you can deploy normally:
 .\scripts\deploy\prod-deploy.ps1
@@ -170,6 +171,7 @@ It's separate from:
 **Wrong passphrase error:**
 - Ensure you're entering the **disk encryption passphrase** (set during Ubuntu install), not your user login password
 - Passwords are case-sensitive
+- **TYPE the passphrase manually** — do NOT copy-paste, as Dropbear's minimal terminal mangles clipboard input
 
 ---
 
