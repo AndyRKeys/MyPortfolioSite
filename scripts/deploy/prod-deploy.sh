@@ -1,8 +1,12 @@
 #!/bin/bash
 # Production deploy script for andykeys.me (Docker Compose).
 # Fetches latest main, rebuilds images, and restarts containers.
-# Run on the server: bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh
-# Rollback: bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh --rollback <sha>
+#
+# IMPORTANT: Server must be decrypted first (if encrypted with LUKS + Dropbear):
+# From another machine: ssh -p 2222 root@ak-home-server; cryptroot-unlock <passphrase>
+# Then once booted: bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh
+#
+# Rollback syntax: bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh --rollback <sha>
 set -e
 
 REPO_DIR="$HOME/MyPortfolioSite"

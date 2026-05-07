@@ -113,6 +113,64 @@ The setup script handles:
 
 ---
 
+## Disk Decryption (Dropbear SSH Agent)
+
+The server uses **LUKS full-disk encryption** with **Dropbear SSH** in the initramfs. This allows remote decryption without physical keyboard access.
+
+### How it works
+
+When the server boots, the encrypted root filesystem is locked. Before the main OS starts:
+
+1. **Dropbear SSH server** listens on port 2222 (minimal environment)
+2. You SSH in and run `cryptroot-unlock`
+3. Enter your disk encryption passphrase
+4. System decrypts and boots normally
+5. Main SSH (port 22) becomes available once booted
+
+### Decrypt before deploying
+
+**If the server rebooted** (scheduled reboot, power cycle, etc.), you must decrypt before deploying:
+
+```powershell
+# From Windows — connect to Dropbear on port 2222
+ssh -p 2222 root@<server-hostname>
+
+# Inside Dropbear shell, type:
+cryptroot-unlock
+
+# Dropbear will prompt for the disk encryption passphrase
+# Enter it, then the system boots (wait 10-15 seconds)
+
+# Once booted, you can deploy normally:
+.\scripts\deploy\prod-deploy.ps1
+```
+
+### Decryption passphrase
+
+**IMPORTANT:** The disk encryption passphrase is **NOT** stored anywhere in the repo or `.env`. You must remember it or store it securely (password manager, not in code).
+
+It's separate from:
+- Your user login password (`<username>`)
+- The `JWT_SECRET` in `.env`
+- Any other credentials
+
+### Troubleshooting Dropbear
+
+**Can't SSH to port 2222:**
+- Server might not be booting at all (check power, lights)
+- Firewall might be blocking port 2222 (unlikely on home network)
+- Dropbear might not be installed — reinstall with: `sudo apt install dropbear-initramfs && sudo update-initramfs -u`
+
+**`cryptroot-unlock` command not found:**
+- Type it manually, don't copy-paste (Dropbear's terminal can mangle special characters)
+- Correct command: `cryptroot-unlock` (with dash, not underscore)
+
+**Wrong passphrase error:**
+- Ensure you're entering the **disk encryption passphrase** (set during Ubuntu install), not your user login password
+- Passwords are case-sensitive
+
+---
+
 ## Deployment Process
 
 ### Deploy from Windows
