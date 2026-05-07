@@ -329,10 +329,21 @@ Instead of attempting everything at once, deploy incrementally:
 
 ## Documentation Updates
 
-1. **README.md:** Add "Pre-Deployment Checklist" section
-2. **docs/INFRASTRUCTURE.md:** Add "Deployment Sequence" with phase-by-phase steps
-3. **scripts/deploy/server-setup.sh:** Add comments explaining each phase
-4. **docs/TROUBLESHOOTING.md** (new): Common issues and fixes
+1. **docs/PRE_DEPLOYMENT_CHECKLIST.md** (new): Comprehensive checklist covering:
+   - Router port forwarding configuration (step-by-step)
+   - Network/DNS verification
+   - Server prerequisites
+   - Environment variable preparation
+   - Pre-flight validation
+   - Troubleshooting guide
+
+2. **README.md:** Reference pre-deployment checklist
+3. **docs/INFRASTRUCTURE.md:** Add "Deployment Sequence" with phase-by-phase steps
+4. **scripts/deploy/server-setup.sh:** 
+   - Add `--check-only` flag for pre-flight validation
+   - Add external port accessibility test
+   - Add comments explaining each phase
+5. **docs/TROUBLESHOOTING.md** (new): Common issues and fixes
 
 ---
 
