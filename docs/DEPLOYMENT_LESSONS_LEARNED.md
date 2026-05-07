@@ -394,6 +394,161 @@ If Docker gets into a bad state during setup:
 
 ---
 
+## Environment & Infrastructure Notes
+
+### Server Configuration
+- **OS:** Ubuntu Server 22.04 LTS (fresh installation recommended)
+- **Architecture:** Moved from Raspberry Pi (initial Pi setup) to Ubuntu Server (production deployment)
+- **Docker:** Single docker-compose.yml for both local dev and production
+- **Database:** PostgreSQL in Docker container with health checks
+- **Reverse Proxy:** Nginx in Docker container (production) or direct backend (local dev)
+
+### Environment Variables Handling
+- **Critical:** JWT_SECRET and DB_PASSWORD must be set before `docker compose up`
+- **File:** `.env.prod` contains production values; not checked into git
+- **Timing:** Environment vars needed at docker-compose startup, not during setup script runtime
+- **Secrets:** Keep passwords in `.env.prod` and `~/.env` files, never in docker-compose.yml
+
+### Docker Compose Differences
+- **Local Dev:** docker-compose.yml with explicit bind mounts
+- **Production:** Same compose file with `.env.prod` overrides (BACKEND_HOST=127.0.0.1 instead of 'backend')
+- **Volume Mounts:** Use explicit `type: bind` for Windows path compatibility (MSYS translation issues)
+- **Health Checks:** Backend waits for postgres health, not just service startup
+
+---
+
+## Troubleshooting Commands & Tools Used
+
+### Most Useful Commands During Deployment
+
+```bash
+# Check port availability (most important pre-flight check)
+sudo lsof -i :80 -i :443
+sudo netstat -tlnp | grep -E ':80|:443'
+
+# Find processes using ports
+lsof -i :443
+ps aux | grep <process-name>
+
+# Kill stubborn processes
+sudo killall -9 httpd
+sudo killall -9 apache2
+
+# Check service status
+systemctl status <service-name>
+sudo systemctl list-units --type=service
+
+# Docker diagnostics
+docker ps
+docker compose ps
+docker compose logs <service>
+docker compose logs --tail=50 backend
+docker system prune -f
+
+# Network diagnostics
+curl http://localhost/health
+curl https://yourdomain.com/health
+nslookup yourdomain.com
+curl ifconfig.me  # Check public IP
+
+# Disk space
+df -h /
+du -sh ~/*
+
+# Time sync (critical for SSL)
+timedatectl status
+date
+
+# Certbot diagnostics
+sudo certbot certificates
+ls -la /etc/letsencrypt/live/yourdomain.com/
+```
+
+### What Did NOT Help
+- ❌ Adding `sleep` delays to database checks — timing was not the issue
+- ❌ Restarting Docker daemon incrementally — kernel state issues require reboot
+- ❌ Manually creating certbot helper files — should have re-run certbot instead
+- ❌ Health check retries and timeouts — masked Docker state problem
+- ❌ Incremental docker-compose down/up cycles — didn't clear stale containers
+
+### What Solved Problems
+- ✅ Full system reboot — immediately cleared Docker state issues
+- ✅ Checking port availability BEFORE anything else — prevented cascading failures
+- ✅ Re-running certbot after fixing port forwarding — created missing SSL files automatically
+- ✅ `docker compose logs` — showed actual error messages (better than health check status)
+- ✅ Fresh OS install — eliminated surprise pre-installed conflicting software
+
+---
+
+## Timing Breakdown (Actual Deployment)
+
+| Phase | Estimated | Actual | Notes |
+|-------|-----------|--------|-------|
+| Server OS setup | 5 min | 5 min | ✓ Straightforward |
+| Pre-flight checks | 5 min | 15 min | ⚠ Found Apache/Nextcloud issues |
+| Remove Apache/Nextcloud | 5 min | 15 min | ⚠ Had to kill processes |
+| Docker installation | 5 min | 10 min | ✓ Straightforward, applied user to docker group |
+| Git clone repository | 2 min | 2 min | ✓ Straightforward |
+| Environment setup | 5 min | 20 min | ⚠ Generating secrets, creating .env.prod |
+| docker compose up | 3 min | 25 min | ⚠ Docker permission issues (reboot fixed) |
+| Certbot SSL setup | 5 min | 45 min | ⚠ Port forwarding not configured initially |
+| Backend health checks | 3 min | 25 min | ⚠ Docker state issue (reboot fixed) |
+| Final verification | 5 min | 10 min | ✓ All endpoints working |
+| **Total** | **43 min** | **4 hours** | Most time on troubleshooting |
+
+**Key insight:** 75% of actual time was troubleshooting (mostly Docker state + port forwarding). With proper pre-flight checks and fresh OS, could be 40-45 minutes.
+
+---
+
+## What Worked Well
+
+Things that went right and should be preserved:
+
+1. **Docker Compose Approach** — Single compose file for both local and production is elegant; minimal differences via .env overrides
+2. **Nginx as Reverse Proxy** — Clean separation; easy to understand; handles static files and SSL termination well
+3. **Let's Encrypt Integration** — Certbot setup is straightforward once port forwarding is configured
+4. **Backend Health Checks** — Even with timing issues initially, health checks correctly identify when backend isn't ready
+5. **Database Idempotent Schema** — schema.sql with IF NOT EXISTS makes it safe to reapply; no migration tool needed
+6. **Modular Route Structure** — Easy to understand what each route does; test coverage sufficient
+7. **Static HTML/CSS/JS** — No build step means no webpack/babel issues; Nginx serves directly
+8. **WebAuthn Auth** — FIDO2 passkeys work well; better than passwords; email magic links as fallback
+
+---
+
+## Post-Deployment Verification Checklist
+
+After deployment, verify these manually:
+
+```bash
+# Check site accessibility
+curl https://yourdomain.com/health           # Backend health
+curl https://yourdomain.com/api/posts        # Public API
+curl https://yourdomain.com/login.html       # Admin login page
+curl https://yourdomain.com/admin.html       # Admin console (after login)
+
+# Check SSL certificate
+openssl s_client -connect yourdomain.com:443 </dev/null | grep -E "subject|issuer|dates"
+
+# Check database connectivity
+docker compose exec backend npm run db:check  # (If this command exists)
+
+# Check disk usage
+df -h /
+
+# Check container status
+docker compose ps
+docker compose logs --tail=20
+
+# Verify uploads directory exists and is writable
+ls -la uploads/
+touch uploads/.test && rm uploads/.test
+
+# Check Nginx logs for errors
+docker compose logs nginx | grep -i error
+```
+
+---
+
 ## Testing & Validation
 
 After implementing improvements, test the revised setup script:
