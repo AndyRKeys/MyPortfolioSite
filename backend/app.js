@@ -18,6 +18,7 @@ import postsRoutes   from './routes/posts.js';
 import statsRoutes   from './routes/stats.js';
 import cvRoutes      from './routes/cv.js';
 import deployRoutes  from './routes/deploy.js';
+import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -53,7 +54,8 @@ export function createApp() {
   app.use('/cv',      cvRoutes);
   app.use('/deploy',  deployRoutes);
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  // Health check endpoint — no auth required, lightweight DB verification
+  app.get('/health', healthRouter);
 
   // Centralised error handler — must be last
   app.use(errorHandler);

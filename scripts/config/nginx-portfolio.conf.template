@@ -32,6 +32,18 @@ server {
     # Allow larger file uploads (matches multer 20 MB limit + headroom)
     client_max_body_size 25M;
 
+    # ── Security headers
+    # CSP: content-src self only; external resources (CDNs) whitelisted below
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self'; frame-ancestors 'none';" always;
+    # Prevent MIME-type sniffing (forces content-type header respect)
+    add_header X-Content-Type-Options "nosniff" always;
+    # Prevent clickjacking / frame embedding
+    add_header X-Frame-Options "DENY" always;
+    # Referrer policy for privacy
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # Disable unused browser APIs
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
     # Proxy all API traffic to Node backend.
     # The /api prefix is stripped before forwarding (trailing slash on proxy_pass).
     location /api/ {
