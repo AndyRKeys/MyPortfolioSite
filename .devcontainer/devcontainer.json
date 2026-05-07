@@ -1,0 +1,66 @@
+{
+  "name": "MyPortfolioSite",
+  // ClaudeBox mounts the project at /workspace
+  "workspaceFolder": "/workspace",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Claude
+        "anthropic.claude-code",
+
+        // JavaScript & Node
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "christian-kohler.path-intellisense",
+        "formulahendry.auto-rename-tag",
+        "ms-vscode.js-debug",
+
+        // HTML & CSS
+        "ecmel.vscode-html-css",
+        "zignd.html-css-class-completion",
+
+        // Git
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+
+        // GitHub
+        "github.vscode-pull-request-github",
+        "github.vscode-github-actions",
+        "github.copilot",
+        "github.copilot-chat",
+
+        // Docker & backend
+        "ms-azuretools.vscode-docker",
+        "ckolkman.vscode-postgres",
+        "rangav.vscode-thunder-client",
+
+        // General productivity
+        "streetsidesoftware.code-spell-checker",
+        "usernamehw.errorlens",
+        "wayou.vscode-todo-highlight",
+        "gruntfuggly.todo-tree"
+      ],
+      "settings": {
+        // Match your existing .prettierrc setup
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        // Terminal inside container
+        "terminal.integrated.defaultProfile.linux": "bash",
+        // File associations
+        "files.associations": {
+          "*.html": "html",
+          "nginx*.conf*": "nginx",
+          "nginx*.template": "nginx"
+        },
+        // Exclude noise from explorer
+        "files.exclude": {
+          "**/node_modules": true,
+          "**/.git": false
+        }
+      }
+    }
+  }
+}

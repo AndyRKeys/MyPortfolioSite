@@ -8,3 +8,4 @@ __MACOSX/
 .claude/settings.local.json
 uploads/*
 !uploads/.gitkeep
+test-results/
