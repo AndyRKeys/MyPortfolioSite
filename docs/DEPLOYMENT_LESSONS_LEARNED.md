@@ -51,18 +51,31 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 
 **Symptom:** Nginx crashed with `unable to load /etc/letsencrypt/options-ssl-nginx.conf` and `/etc/letsencrypt/ssl-dhparams.pem`.
 
-**Root Cause:** Certbot didn't create these files during certificate request. These are normally created during initial certbot setup.
+**Root Cause:** Initial certbot run failed due to port forwarding not being configured (see Issue #4). When port forwarding was fixed, we manually created the missing files instead of re-running certbot.
 
-**Impact:** Nginx failed to start even though SSL certificates existed. Docker container restarted continuously.
+**Impact:** Unnecessary manual file creation. Wasted time on workarounds.
 
-**Resolution:** 
-- Created `options-ssl-nginx.conf` manually with standard TLS config
-- Generated `ssl-dhparams.pem` manually: `sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048`
+**What Actually Happened:**
+1. Certbot failed (no port forwarding) → we created files manually
+2. Could have simply: Fixed port forwarding → Re-run certbot → Files created automatically
 
-**Lesson Learned:** The server-setup.sh script should:
-- Detect missing certbot helper files and create them if absent
-- Generate DH parameters during initial setup, not just during cert request
-- Validate all SSL file paths before nginx startup
+**Resolution (Correct Approach):**
+```bash
+# After fixing port forwarding on router:
+sudo certbot certonly --standalone -d yourdomain.com
+# This creates options-ssl-nginx.conf and ssl-dhparams.pem automatically
+```
+
+**Lesson Learned:** 
+- **When certbot fails, re-run it after fixing the root cause — don't manually create files**
+- Certbot handles all file creation automatically on successful runs
+- The root causes (port forwarding, DNS resolution) matter more than file creation
+- Manual file creation should only be used if certbot repeatedly fails for unrelated reasons
+
+**For server-setup.sh:**
+- Don't pre-create certbot files
+- Verify port forwarding works before running certbot
+- Let certbot create all necessary files on first successful run
 
 ---
 

@@ -216,10 +216,24 @@ bash scripts/deploy/server-setup.sh yourdomain.com
 - [ ] Flush DNS cache: `ipconfig /flushdns` (Windows) or `sudo dscacheutil -flushcache` (Mac)
 
 ### "Certbot Fails"
-- [ ] Port forwarding must be working (test with curl above)
-- [ ] Domain must resolve to your IP
-- [ ] Ports 80 must be externally accessible
-- [ ] Check firewall isn't blocking outbound connections
+- [ ] **First, identify the root cause:**
+  - Port forwarding must be working (test with curl above)
+  - Domain must resolve to your IP
+  - Ports 80 must be externally accessible
+  - Check firewall isn't blocking outbound connections
+
+- [ ] **Fix the root cause, then re-run certbot**
+  ```bash
+  sudo certbot certonly --standalone -d yourdomain.com
+  ```
+  Don't manually create SSL files — certbot creates them automatically
+
+- [ ] **Certbot creates these automatically:**
+  - `/etc/letsencrypt/live/yourdomain.com/` (certificates)
+  - `/etc/letsencrypt/options-ssl-nginx.conf`
+  - `/etc/letsencrypt/ssl-dhparams.pem`
+
+- [ ] Only if certbot repeatedly fails: check `/var/log/letsencrypt/letsencrypt.log` for details
 
 ### "Docker Permission Denied"
 - [ ] User must be in docker group: `groups $USER`
