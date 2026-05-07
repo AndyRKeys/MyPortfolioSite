@@ -131,20 +131,23 @@ fi
 
 ---
 
-### 6. Database Initialization Timing Issues
+### 6. Database Connection Errors (Resolved by Reboot)
 
-**Symptom:** Backend health check failed repeatedly with "Health check failed: connect ETIMEDOUT 172.18.0.2:5432" even though postgres container showed healthy.
+**Symptom:** Backend health check failed with "Health check failed: connect ETIMEDOUT 172.18.0.2:5432" even though postgres container showed healthy.
 
-**Root Cause:** Backend started before postgres fully initialized. Initial system state was inconsistent.
+**Root Cause:** Part of the same Docker state issue (Issue #5). Not actually a database timing problem.
 
-**Impact:** Containers failed health checks on first startup attempt.
+**What We Tried:**
+- Added `sleep 15` waiting for postgres ❌ (didn't help)
+- Added health check retries ❌ (didn't help)
+- Increased timeouts ❌ (didn't help)
 
-**Resolution:** Full system reboot. After reboot, everything succeeded on first try.
+**Actual Resolution:** Full system reboot (which also fixed the Docker permission issues).
 
 **Lesson Learned:** 
-- Add configurable health check retries and delays
-- Implement explicit wait-for-database logic in server-setup.sh
-- Document that first startup may require extra time/retries
+- **Don't add delays and retries hoping they'll fix database issues** — if the backend can't connect after postgres is healthy, it's usually a Docker/OS state problem, not timing
+- The symptom looked like a timing issue but wasn't
+- System reboot fixes the underlying issue immediately, no delays needed
 
 ---
 
@@ -338,17 +341,11 @@ Instead of attempting everything at once, deploy incrementally:
      openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
    ```
 
-4. **Database Health Waiting:**
-   ```bash
-   # Wait longer for database to be truly ready
-   MAX_WAIT=60
-   ELAPSED=0
-   until docker compose exec -T postgres pg_isready ...; do
-     if [ $ELAPSED -ge $MAX_WAIT ]; then exit 1; fi
-     sleep 2
-     ELAPSED=$((ELAPSED + 2))
-   done
-   ```
+4. **Don't add excessive waiting/retries for database issues**
+   - If postgres is healthy but backend can't connect, it's a Docker state issue
+   - Extra delays and retries won't fix underlying state problems
+   - A system reboot fixes the issue immediately
+   - Focus on preventing Docker state issues instead (see Issue #5)
 
 5. **Better Error Reporting:**
    ```bash
