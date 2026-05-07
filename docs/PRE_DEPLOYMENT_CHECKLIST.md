@@ -8,6 +8,11 @@ Complete this checklist **before** running `server-setup.sh`. Each section must 
 
 ### Domain Setup
 - [ ] Domain registered and you have access to DNS settings
+- [ ] **DDNS provider configured** (for dynamic IP addresses):
+  - [ ] Provider chosen (Namecheap, No-IP, DuckDNS, etc.)
+  - [ ] DDNS credentials obtained from provider
+  - [ ] DDNS client installed and configured on server (if not using docker-compose)
+  - Example: Namecheap DDNS password saved for server-setup.sh
 - [ ] Domain configured to point to your server's public IP
   ```bash
   # Verify: Run this on any machine
@@ -123,30 +128,41 @@ timedatectl status
 
 ---
 
-## 4. Environment Variables
+## 4. Passwords & Secrets (Prepare Before Starting)
 
-### Prepare Configuration
-Before running setup script, gather these values:
+**⚠️ Have these ready BEFORE starting deployment — the setup script will ask for them:**
 
+### Domain & DDNS
 - [ ] **Domain name:** `andykeys.me` (or your domain)
-- [ ] **Database password:** Generate random string
-  ```bash
-  openssl rand -base64 32
-  ```
-  Save as: `DB_PASSWORD=`____________
-  
-- [ ] **JWT secret:** Generate random string
-  ```bash
-  openssl rand -base64 32
-  ```
-  Save as: `JWT_SECRET=`____________
+- [ ] **DDNS provider configured** (if using dynamic IP):
+  - [ ] Provider chosen and account created (Namecheap, No-IP, DuckDNS, etc.)
+  - [ ] DDNS username/domain
+  - [ ] DDNS password
+  - Keep these safe — server-setup.sh will need them
 
-- [ ] **Email settings** (optional, can configure later):
-  - SMTP Host: `smtp-mail.outlook.com` (or your provider)
-  - SMTP Port: `587`
-  - SMTP User: your-email@outlook.com
-  - SMTP Pass: app-specific-password
-  - Admin Email: your-email@outlook.com
+### Application Secrets
+Generate these strong random strings before starting:
+
+- [ ] **Database password** — Generate with:
+  ```bash
+  openssl rand -base64 32
+  ```
+  Save as: `DB_PASSWORD=`________________
+
+- [ ] **JWT secret** — Generate with:
+  ```bash
+  openssl rand -base64 32
+  ```
+  Save as: `JWT_SECRET=`________________
+
+### Email Configuration (Optional)
+Can be configured later if needed:
+
+- [ ] SMTP Host: `smtp-mail.outlook.com` (or your provider)
+- [ ] SMTP Port: `587`
+- [ ] SMTP Username: your-email@outlook.com
+- [ ] SMTP App-Specific Password (not your regular password)
+- [ ] Admin Email Address
 
 ---
 
