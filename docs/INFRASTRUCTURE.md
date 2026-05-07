@@ -179,7 +179,7 @@ It's separate from:
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-SSHes into `portfolio-server` and runs `prod-deploy.sh`. Pass `-Rollback <sha>` to roll back.
+SSHes into `<server-hostname>` and runs `prod-deploy.sh`. Pass `-Rollback <sha>` to roll back.
 
 ### Deploy on server (what prod-deploy.sh does)
 
@@ -334,7 +334,7 @@ Symptoms: nginx container exits immediately
 
 1. Check public key in `~/.ssh/authorized_keys` on server
 2. On Windows: `ssh-copy-id -i ~/.ssh/id_ed25519.pub <user>@<server-ip>`
-3. Test: `ssh portfolio-server` — should not prompt for password
+3. Test: `ssh <server-hostname>` — should not prompt for password
 4. If hostname doesn't resolve, use IP or add to `~/.ssh/config`
 
 ### Disk space full
