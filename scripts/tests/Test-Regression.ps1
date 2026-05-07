@@ -151,6 +151,10 @@ Test-Endpoint -Name "POST /api/stats/visit?page=unknown returns 400" `
     -Method "POST" -Url "$BaseUrl/api/stats/visit?page=unknown" `
     -ExpectStatus 400
 
+Test-Endpoint -Name "GET /api/health returns 200 with status ok" `
+    -Method "GET" -Url "$BaseUrl/api/health" `
+    -ExpectStatus 200 -ExpectBody "ok"
+
 Test-Endpoint -Name "Unknown route returns 404" `
     -Method "GET" -Url "$BaseUrl/api/does-not-exist" `
     -ExpectStatus 404
