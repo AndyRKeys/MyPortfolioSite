@@ -47,9 +47,9 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 - **`admin.html` is large (18KB) and monolithic.** The admin panel is a single HTML file with significant inline logic. It works, but it is difficult for an agent to safely modify one part without risk of breaking another. This is the single file most likely to cause regressions.
 - **`index.html` is also large (23KB).** The main page has grown by accretion. Some of this is unavoidable (it is a portfolio page with many sections), but it is worth periodically reviewing whether JavaScript logic belongs in a separate module.
-- **Legacy jQuery is still present.** Some files use jQuery for DOM manipulation alongside vanilla ES modules. The two styles coexist but this creates inconsistency — a new agent reading the codebase may not know which pattern to follow in a given file. `docs/AI.md` addresses this ("jQuery only for legacy compatibility") but the legacy files themselves have not been cleaned up.
+- **Legacy jQuery is still present.** Some files use jQuery for DOM manipulation alongside vanilla ES modules. The two styles coexist but this creates inconsistency — a new agent reading the codebase may not know which pattern to follow in a given file. In practice, this creates genuine friction: agents often hesitate between patterns and may make inconsistent choices. `docs/AI.md` addresses this ("jQuery only for legacy compatibility") but the rule doesn't fully resolve the uncertainty without cleaning up the legacy code itself.
 - **`backend/routes/auth.js` is the most complex file at 12KB.** WebAuthn + JWT + magic links in one file is a lot of state to hold. It works correctly and is tested, but it is the highest-risk file to modify. Agents should treat it with extra caution and read it fully before any changes.
-- **Frontend test coverage is essentially zero.** The Vitest suite covers backend utilities and some API routes, but there are no frontend tests at all. UI regressions are caught manually via smoke test scripts (`Test-PRN.ps1`), which is better than nothing, but fragile for a codebase growing in complexity.
+- **Frontend test coverage is essentially zero.** The Vitest suite covers backend utilities and some API routes, but there are no frontend tests at all. UI regressions are caught manually via smoke test scripts (`Test-PRN.ps1`), which is better than nothing, but fragile for a codebase growing in complexity. Adding frontend tests (e.g., Playwright) would help but requires a significant architectural decision — no build step means test infrastructure needs careful thought.
 - **`test-results/` is committed to the repo.** Test output artefacts should not be in version control. This is minor but messy.
 
 **Overall codebase health rating: Amber-Green.** Better than most personal projects of this age; the known debt is identified and tracked, which is more important than having zero debt.
@@ -140,24 +140,28 @@ This is an unusual section for a project assessment, but it is directly relevant
 ### Where agent friction exists
 
 - **No architecture diagram.** There is no visual representation of how the pieces fit together. Agents (and new humans) must construct a mental model from reading code. A simple `docs/ARCHITECTURE.md` with an ASCII or Mermaid diagram of Nginx → Node → PostgreSQL and the file structure would reduce onboarding time.
-- **`admin.html` is hard for agents to modify safely.** Its size and mixed concerns mean agents often request clarification or make overly conservative changes. Splitting it into logical sections or extracting JS modules would help.
-- **Implicit Pi-specific knowledge.** Several operational facts are not written down: the exact PM2 service name, where Nginx config files live on the Pi, how `ddclient` is configured, where the Let's Encrypt certs are. An agent asked to diagnose a production issue would be guessing at these. A short `docs/INFRASTRUCTURE.md` would close this gap.
+- **`admin.html` is hard for agents to modify safely.** Its size and mixed concerns mean agents often request clarification or make overly conservative changes. Splitting it into logical sections or extracting JS modules would help. This is a concrete friction point that affects every session where admin changes are needed.
+- **Implicit Pi-specific knowledge.** Several operational facts are not written down: the exact PM2 service name, where Nginx config files live on the Pi, how `ddclient` is configured, where the Let's Encrypt certs are. An agent asked to diagnose a production issue would be guessing at these. A short `docs/INFRASTRUCTURE.md` would close this gap. This is more impactful than the current assessment suggests — agents need this to be operationally independent without asking the owner for facts.
 - **Context window pressure in long sessions.** The doc suite is thorough but also long. In extended sessions, earlier context (especially specific file contents read at the start) can be lost. This is a fundamental LLM constraint, not a fixable problem, but it means breaking work into smaller issues (which the project already does well) is especially important here.
 - **No structured way for agents to flag "I am not sure about this."** When an agent is uncertain, it either proceeds (risky) or asks (slows things down). A convention like "if in doubt, raise a GitHub issue with the `needs-decision` label and stop" would help, but this is aspirational rather than current practice.
 
-**Overall AI-readiness rating: Green-Amber.** Better than almost any personal project I have seen; the gaps are well-defined and addressable.
+**Overall AI-readiness rating: Amber.** Better than most personal projects; however, the gaps are more impactful in practice than the initial rating suggests. The `admin.html` monolith, implicit operational knowledge, and jQuery/vanilla JS ambiguity create measurable friction in every session. With the infrastructure docs gap, agents frequently need to ask the owner for operational facts that should be written down. Addressing these would move the rating meaningfully toward Green.
 
 ---
 
 ## 7. Top improvement opportunities
 
-These are ordered by impact-to-effort ratio, not by technical interest.
+These are ordered by impact-to-effort ratio, considering both operational risk and agent friction.
 
-1. **Add a `/api/health` endpoint** — 30 minutes of work, dramatically improves deploy confidence and sets the foundation for future monitoring. Should return `{ status: "ok", db: "ok", version: "..." }`.
-2. **Automate database backups on the Pi** — a cron job running `pg_dump` and rotating files is an afternoon of work; losing all site content because an SD card failed is an unacceptable risk for the effort required to prevent it.
-3. **Containerise production (move prod to Docker Compose on Pi)** — aligns dev and prod environments, makes deploys predictable, and is a prerequisite for the dual-environment setup in the roadmap.
+**High priority (operational + agent enablement):**
+1. **Write `docs/INFRASTRUCTURE.md`** — a short document covering PM2 service name, Nginx config paths, cert locations, ddclient config, and any other Pi-specific facts that currently live only in someone's head. Directly improves agent effectiveness in production debugging scenarios and is a prerequisite for safe agent-driven troubleshooting.
+2. **Containerise production (move prod to Docker Compose on Pi)** — aligns dev and prod environments, makes deploys predictable, reduces friction from environment gaps, and is a prerequisite for the dual-environment setup in the roadmap.
+3. **Add a `/api/health` endpoint** — 30 minutes of work, dramatically improves deploy confidence and sets the foundation for future monitoring. Should return `{ status: "ok", db: "ok", version: "..." }`.
+
+**High priority (security + agent friction):**
 4. **Add CSP and security headers to Nginx config** — one Nginx config block; meaningfully improves XSS and clickjacking protection with minimal risk.
-5. **Write `docs/INFRASTRUCTURE.md`** — a short document covering PM2 service name, Nginx config paths, cert locations, ddclient config, and any other Pi-specific facts that currently live only in someone's head. Directly improves agent effectiveness in production debugging scenarios.
+
+**Note on backups:** Database backups are critically important, but will be implemented holistically during the Ubuntu Server migration (#171) with a proper backup + offsite strategy.
 
 ---
 
@@ -175,4 +179,5 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-07 (updated)** — Refined AI-readiness rating from Green-Amber to Amber based on real-world friction observed in agent sessions. Elevated priority of infrastructure docs and clarified frontend testing constraints. Updated improvement opportunities ordering to reflect agent friction alongside operational risk.
 - **2026-05-07** — Initial assessment written based on `dev` branch state, covering architecture, codebase health, DX, reliability, security, and AI readiness.
