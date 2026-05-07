@@ -2,6 +2,8 @@
 
 Guidelines for AI-assisted development on this project (Claude, Perplexity, or other models).
 
+For high-level direction and current priorities, AI models may treat `ROADMAP.md` as **context only**. The authoritative instructions for how to work on this project are this document (`docs/AI.md`), the style guide, testing guide, and other docs listed in the onboarding prompt.
+
 ## Scope Discipline
 
 - **Only make changes explicitly requested** in the linked issue or conversation
