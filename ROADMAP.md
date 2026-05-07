@@ -6,7 +6,7 @@ _Last updated: 2026-05-07_
 
 MyPortfolioSite is my personal technical hub: a place to showcase projects, write about travel and tinkering, and experiment with an “AI lab” that orchestrates different assistants (Perplexity for research, Claude for coding) against my own code, content, and home lab.
 
-Over the next 6–12 months, the goals are:
+The goals for the project are:
 
 - Turn the site into a reliable home for my content (blog, travel, devlogs) with low-friction publishing.
 - Evolve the AI Lab into a genuinely useful personal tool for research, coding, and project planning.
@@ -36,7 +36,7 @@ Over the next 6–12 months, the goals are:
 - Pi resource ceiling limits what can run concurrently (especially with future AI experiments).
 - Limited observability (minimal metrics/logs surfaced in UI).
 
-## 3. Near-term (next 1–3 months)
+## 3. Near-term priorities
 
 ### 3.1 Dual-environment hosting (LAN dev + public prod)
 
@@ -72,7 +72,7 @@ Over the next 6–12 months, the goals are:
 
 **Outcome:** Less friction around making and deploying changes, more confidence when experimenting.
 
-## 4. Mid-term (3–6 months)
+## 4. Medium-term directions
 
 ### 4.1 AI Lab v2
 
@@ -94,7 +94,7 @@ Over the next 6–12 months, the goals are:
 - Refine visual design (consistent components, design tokens, responsive behavior).
 - Make admin flows (creating posts, editing content) smoother and more discoverable.
 
-## 5. Longer-term (6–12 months)
+## 5. Longer-term ideas
 
 ### 5.1 Move from Pi to mini PC
 
