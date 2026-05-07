@@ -28,6 +28,8 @@ All production services run as Docker containers managed by `docker compose -f d
 
 **SSL:** Let's Encrypt certs managed by host-level Certbot; `/etc/letsencrypt` bind-mounted into the nginx container read-only.
 
+**DDNS:** ddclient runs on the host (not containerized) to update the DNS record when the IP changes. Configured via cron.
+
 ### Directory Structure (on server)
 
 ```
