@@ -191,14 +191,34 @@ rm -rf /tmp/test
 
 ## 6. Final Verification
 
-### Run Pre-Flight Checks
+### Automated Server Readiness Check (Recommended)
+Run this script to automatically verify all prerequisites:
+
+```bash
+cd ~/MyPortfolioSite
+bash scripts/deploy/check-server-ready.sh yourdomain.com
+```
+
+This checks:
+- OS version and system clock
+- Disk space (10GB+ free)
+- Ports 80 & 443 available
+- No conflicting web servers or snaps
+- DNS resolution working
+- Internet connectivity
+- Required software (Docker, Git, curl)
+- External port accessibility
+
+Expected output: `✓ Server is ready for deployment`
+
+### Alternative: Manual Verification
+If you prefer to check items manually or the script encounters issues:
+
 ```bash
 cd ~/MyPortfolioSite
 bash scripts/deploy/server-setup.sh yourdomain.com --check-only
 # Should pass all checks
 ```
-- [ ] All pre-flight checks pass
-- [ ] No errors or warnings shown
 
 ### Backup Current Server State (if migrating)
 - [ ] Database backed up (if migrating from old server)
