@@ -5,13 +5,13 @@
 **Released:** 2026-05-07  
 **Branch:** release/2026-05-07  
 **PR:** #180  
-**Closes:** #163, #164, #165, #166, #167, #168, #170, #171, #172
+**Closes:** #163, #164, #165, #167, #168, #170, #171, #172
 
 ### Features & Improvements
 
 **Infrastructure Quick Wins (PR #177)**
 - feat(#163): `/api/health` endpoint returns status + DB connectivity + uptime + version
-- security(#166): CSP + MIME sniffing prevention + clickjacking protection + Referrer-Policy + Permissions-Policy headers
+- security: MIME sniffing prevention, clickjacking protection, Referrer-Policy, Permissions-Policy headers
 - docs(#167): `docs/INFRASTRUCTURE.md` — server layout, service architecture, operational procedures, troubleshooting, Dropbear remote decryption workflow
 - docs(#168): `docs/ARCHITECTURE.md` — system diagram, request flows, file structure, data flow examples
 

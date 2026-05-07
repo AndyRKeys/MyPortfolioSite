@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ### Added
 - `/api/health` endpoint for deploy verification and uptime monitoring (#163)
-- CSP and security headers to Nginx reverse proxy configuration (#166)
+- Security headers to Nginx reverse proxy configuration (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
 - `docs/INFRASTRUCTURE.md` — comprehensive server layout, service architecture, operational procedures, troubleshooting guide (#167)
 - `docs/ARCHITECTURE.md` — system design diagrams, request flow examples, data flow walkthrough (#168)
 - `docker-compose.prod.yml` — standalone production Docker Compose file with SSL support, no source code mounts (#165)
