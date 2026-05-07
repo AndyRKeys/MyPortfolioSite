@@ -50,6 +50,9 @@ curl -I http://yourdomain.com:80/  # Should connect (even if 404)
 
 ### Fresh Ubuntu Server
 - [ ] Ubuntu Server LTS 22.04 or later
+- [ ] **Fresh installation (minimal packages only) — strongly recommended**
+  - Avoid reusing servers that had previous hobby projects
+  - Pre-installed services can conflict with deployment
 - [ ] Root or sudo access
 - [ ] Internet connection working
   ```bash

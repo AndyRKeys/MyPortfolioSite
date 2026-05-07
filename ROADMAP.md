@@ -116,6 +116,14 @@ The goals for the project are:
   - For example, “Ask my site about my projects” powered only by public content.
   - Strictly isolated from private AI Lab and any write-capable tools.
 
+### 5.4 Private cloud / personal file sync (Nextcloud)
+
+- Explore running Nextcloud on the mini PC for personal file sync and storage:
+  - Private alternative to commercial cloud services.
+  - Leverage existing Docker and home-lab infrastructure.
+  - Could integrate with AI Lab for local document processing.
+- Would need dedicated Docker resources; deferred until after mini PC migration.
+
 ## 6. Risks and assumptions
 
 - **Pi resource limits:** Running multiple containers and AI features on the Pi will be tight; the mini PC migration is assumed.

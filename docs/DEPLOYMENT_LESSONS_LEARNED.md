@@ -32,7 +32,7 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 
 **Symptom:** Port 80 and 443 in use by Apache (httpd), preventing both Let's Encrypt and nginx from starting.
 
-**Root Cause:** Ubuntu Server image came with Apache web server and Nextcloud snap pre-installed from a previous setup.
+**Root Cause:** Server had Apache and Nextcloud installed from previous hobby project. Not standard Ubuntu Server installations.
 
 **Impact:** Certbot validation failed repeatedly. Nginx container crashed at startup.
 
@@ -40,10 +40,14 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 - Killed Apache processes: `sudo killall -9 httpd`
 - Removed Nextcloud: `sudo snap remove nextcloud`
 
-**Lesson Learned:** Must verify clean server state before deployment. Pre-flight checks should detect and warn about:
-- Existing web servers (Apache, Nginx, etc.)
-- Port conflicts (80, 443)
-- Pre-installed services that might interfere
+**Lesson Learned:** 
+- For fresh deployments, use a **clean Ubuntu Server installation** (minimal packages only)
+- If reusing an existing server, verify no conflicting services are installed
+- Pre-flight checks should detect and warn about:
+  - Existing web servers (Apache, Nginx, etc.)
+  - Port conflicts (80, 443)
+  - Pre-installed services that might interfere
+- **Recommendation:** Always deploy to fresh OS when possible to avoid unexpected state
 
 ---
 
