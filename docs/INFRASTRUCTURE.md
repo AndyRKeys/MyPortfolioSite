@@ -1,69 +1,177 @@
 # Infrastructure
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-07 — updated for Docker Compose production on Ubuntu Server_
 
 This document covers the production server setup, service architecture, operational procedures, and troubleshooting. It is written for agents and operators who need to understand the system without asking the owner for details.
 
 ---
 
-## Current Setup (Raspberry Pi)
+## Production Setup (Ubuntu Server — Docker Compose)
 
 ### Hardware
 
-- **Device:** Raspberry Pi (model 4B recommended, 2GB+ RAM)
-- **OS:** Raspbian (Debian-based)
-- **Storage:** SD card (32GB recommended; failures are a known risk)
-- **Network:** Dynamic IP with DDNS (updated every 5 minutes)
+- **Device:** Old gaming PC running headless Ubuntu Server LTS
+- **OS:** Ubuntu Server LTS
+- **Storage:** Internal SSD (significantly more reliable than the previous Pi SD card)
+- **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
+- **GPU:** Available for future local LLM inference (#173)
 
-### Services
+### Services (Docker Compose)
 
-| Service | Technology | Port | Status | Notes |
-|---------|-----------|------|--------|-------|
-| **Nginx** | nginx:latest (reverse proxy + static files) | 80, 443 | Systemd service | Routes `/api/*` to Node backend; serves static HTML/CSS/JS |
-| **Node backend** | Node.js 20+ (Express) | 8080 | PM2-managed | Main application; handles API routes, auth, database ops |
-| **PostgreSQL** | postgres:15 (system install) | 5432 | Systemd service | Database; stores posts, users, audit log |
-| **SSL/TLS** | Let's Encrypt + certbot | - | Systemd timer | Auto-renewal via cron; renews 30 days before expiry |
-| **DNS** | ddclient | - | Cron job | Updates DDNS record every 5 minutes if IP changes |
+All production services run as Docker containers managed by `docker compose -f docker-compose.prod.yml`.
 
-### Directory Structure (on Pi)
+| Service | Image | Port (host) | Purpose |
+|---------|-------|-------------|---------|
+| **nginx** | nginx:alpine | 80, 443 | Reverse proxy + static file serving; terminates SSL |
+| **backend** | custom (node:20-alpine, prod stage) | — (internal only) | Express API; handles all `/api/*` routes |
+| **postgres** | postgres:16-alpine | — (internal only) | PostgreSQL database; data in named volume |
+
+**SSL:** Let's Encrypt certs managed by host-level Certbot; `/etc/letsencrypt` bind-mounted into the nginx container read-only.
+
+**DDNS:** ddclient runs on the host (not containerized) to update the DNS record when the IP changes. Configured via cron.
+
+### Directory Structure (on server)
 
 ```
-/home/pi/
+/home/<user>/
 ├── MyPortfolioSite/          ← cloned repo
-│   ├── backend/              ← Node.js source code
-│   ├── resources/            ← frontend (HTML/CSS/JS)
+│   ├── backend/              ← Node.js source code (in Docker image)
+│   ├── resources/            ← frontend HTML/CSS/JS (served by nginx)
 │   ├── docs/                 ← documentation (you are here)
-│   ├── scripts/              ← deployment and utility scripts
-│   └── docker-compose.yml    ← (dev environment; not used in prod yet)
+│   ├── scripts/
+│   │   ├── config/           ← nginx config templates (local + prod)
+│   │   ├── deploy/           ← prod-deploy.sh, server-setup.sh
+│   │   └── backup/           ← db-backup.sh, db-restore.sh, offsite-sync.sh
+│   ├── docker-compose.prod.yml  ← standalone prod compose file
+│   └── .env                  ← production env vars (never committed)
 │
-├── uploads/                  ← user-uploaded files (CVs, images)
-│
-└── backups/                  ← (future) database backups live here
+~/backups/                    ← database and uploads backups (local rotation)
+/etc/letsencrypt/             ← SSL certs (managed by certbot on host)
 ```
 
-### Service Names & PIDs
+### Docker Volume Names
 
-| Service | Type | Status command | Restart command |
-|---------|------|---|---|
-| **Nginx** | systemd | `sudo systemctl status nginx` | `sudo systemctl restart nginx` |
-| **Node backend** | PM2 | `pm2 status` | `pm2 restart portfolio-backend` |
-| **PostgreSQL** | systemd | `sudo systemctl status postgresql` | `sudo systemctl restart postgresql` |
-| **certbot renewal** | systemd timer | `sudo systemctl status certbot.timer` | N/A (automatic) |
-| **ddclient** | cron | `sudo crontab -l` | (edit cron) |
+| Volume | Purpose |
+|--------|---------|
+| `myportfoliosite_postgres_data` | PostgreSQL data directory (persists across deploys) |
+| `myportfoliosite_uploads_data` | User-uploaded files (CVs, images) |
+
+### Service Commands
+
+```bash
+# Status of all containers
+docker compose -f docker-compose.prod.yml ps
+
+# Start all services (with rebuild)
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Stop all services
+docker compose -f docker-compose.prod.yml down
+
+# Restart one service
+docker compose -f docker-compose.prod.yml restart backend
+
+# View logs
+docker compose -f docker-compose.prod.yml logs -f backend
+docker compose -f docker-compose.prod.yml logs -f nginx
+docker compose -f docker-compose.prod.yml logs --tail=50 postgres
+```
 
 ### Key File Locations
 
 | File/Directory | Path | Purpose |
 |---|---|---|
-| **Node app** | `/home/pi/MyPortfolioSite/backend/server.js` | Express entry point |
-| **PM2 config** | (in-memory, no config file) | PM2 managed via `pm2 start/restart` |
-| **Nginx config** | `/etc/nginx/sites-enabled/default` | Reverse proxy + static files |
-| **Nginx SSL template** | `/etc/nginx/sites-available/` or generated on-disk | SSL cert paths rendered by deploy script |
-| **SSL certs** | `/etc/letsencrypt/live/<domain>/` | certbot-managed Let's Encrypt certs |
-| **Database** | `/var/lib/postgresql/15/main/` | PostgreSQL data directory |
-| **Uploads** | `/home/pi/MyPortfolioSite/uploads/` | User-uploaded files |
-| **Backend env** | `/home/pi/MyPortfolioSite/backend/.env` | Environment variables (DB credentials, JWT secret, etc.) |
-| **ddclient config** | `/etc/ddclient/ddclient.conf` | Dynamic DNS client configuration |
+| **Prod env vars** | `~/MyPortfolioSite/.env` | All production configuration (DB creds, JWT secret, SMTP, domain) |
+| **Env template** | `~/MyPortfolioSite/.env.example` | Template for setting up `.env` on a new server |
+| **Nginx config template** | `scripts/config/nginx-portfolio.conf.template` | Prod nginx (HTTPS + reverse proxy) — rendered by nginx container at startup |
+| **SSL certs** | `/etc/letsencrypt/live/<domain>/` | Let's Encrypt certs — managed by certbot on host, bind-mounted into nginx container |
+| **Uploads** | Docker volume `myportfoliosite_uploads_data` | User-uploaded files; also accessible at `/app/uploads` inside backend container |
+| **Database** | Docker volume `myportfoliosite_postgres_data` | PostgreSQL data; inspect via `docker compose exec postgres psql` |
+| **Deploy log** | `~/deploy.log` | Timestamped deploy history |
+| **Backup log** | `~/backup.log` | Backup run history |
+
+---
+
+## Initial Server Setup
+
+Run once on a fresh Ubuntu Server install:
+
+```bash
+# Clone and run setup script (pass your domain as argument)
+git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite
+bash ~/MyPortfolioSite/scripts/deploy/server-setup.sh andykeys.me
+```
+
+The setup script handles:
+1. System packages (curl, git, certbot, rclone)
+2. Docker installation + group membership
+3. SSH password auth disabled (key-only)
+4. `.env` created from `.env.example` (prompts to fill in secrets)
+5. SSL certificate via certbot standalone
+6. `docker compose -f docker-compose.prod.yml up -d --build`
+7. Cron jobs: daily backup at 02:00, cert renewal check 1st of every 2 months
+
+**After setup:** Edit `.env`, verify all secrets are set, then run `docker compose -f docker-compose.prod.yml up -d --build` again.
+
+---
+
+## Disk Decryption (Dropbear SSH Agent)
+
+The server uses **LUKS full-disk encryption** with **Dropbear SSH** in the initramfs. This allows remote decryption without physical keyboard access.
+
+### How it works
+
+When the server boots, the encrypted root filesystem is locked. Before the main OS starts:
+
+1. **Dropbear SSH server** listens on port 2222 (minimal environment)
+2. You SSH in and run `cryptroot-unlock`
+3. Enter your disk encryption passphrase
+4. System decrypts and boots normally
+5. Main SSH (port 22) becomes available once booted
+
+### Decrypt before deploying
+
+**If the server rebooted** (scheduled reboot, power cycle, etc.), you must decrypt before deploying:
+
+```powershell
+# From Windows — connect to Dropbear on port 2222
+ssh -p 2222 root@<server-hostname>
+
+# Inside Dropbear shell, type (do NOT copy-paste):
+cryptroot-unlock
+
+# Dropbear will prompt for the disk encryption passphrase
+# TYPE the passphrase manually — do not copy/paste (Dropbear's terminal mangles clipboard input)
+# System boots after you enter it (wait 10-15 seconds)
+
+# Once booted, you can deploy normally:
+.\scripts\deploy\prod-deploy.ps1
+```
+
+### Decryption passphrase
+
+**IMPORTANT:** The disk encryption passphrase is **NOT** stored anywhere in the repo or `.env`. You must remember it or store it securely (password manager, not in code).
+
+It's separate from:
+- Your user login password (`<username>`)
+- The `JWT_SECRET` in `.env`
+- Any other credentials
+
+### Troubleshooting Dropbear
+
+**Can't SSH to port 2222:**
+- Server might not be booting at all (check power, lights)
+- Firewall might be blocking port 2222 (unlikely on home network)
+- Dropbear might not be installed — reinstall with: `sudo apt install dropbear-initramfs && sudo update-initramfs -u`
+
+**`cryptroot-unlock` command not found:**
+- Type it manually, don't copy-paste (Dropbear's terminal can mangle special characters)
+- Correct command: `cryptroot-unlock` (with dash, not underscore)
+
+**Wrong passphrase error:**
+- Ensure you're entering the **disk encryption passphrase** (set during Ubuntu install), not your user login password
+- Passwords are case-sensitive
+- **TYPE the passphrase manually** — do NOT copy-paste, as Dropbear's minimal terminal mangles clipboard input
 
 ---
 
@@ -75,27 +183,16 @@ This document covers the production server setup, service architecture, operatio
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This script:
-1. SSHes into the Pi
-2. Runs `bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh`
-3. Returns success/failure status
+SSHes into `<server-hostname>` and runs `prod-deploy.sh`. Pass `-Rollback <sha>` to roll back.
 
-**SSH key:** must be configured for passwordless auth (see [SSH Troubleshooting](#ssh-troubleshooting) below)
-
-### Deploy on Pi (automated by prod-deploy.ps1)
+### Deploy on server (what prod-deploy.sh does)
 
 ```bash
-cd ~/MyPortfolioSite
 git fetch origin main
 git reset --hard origin/main
-npm install --omit=dev                           # if package.json changed
-psql -U postgres -d portfolio_db -f backend/db/schema.sql  # if schema.sql changed
-pm2 restart portfolio-backend
-sudo systemctl reload nginx                      # if nginx config template changed
-pm2 save
+docker compose -f docker-compose.prod.yml up -d --build
+# health checks backend → HTTP nginx → HTTPS nginx
 ```
-
-**Deploy output:** Logged in `pm2 logs portfolio-backend`
 
 ---
 
@@ -104,60 +201,40 @@ pm2 save
 ### Check logs
 
 ```bash
-# Backend logs (current session + history)
-pm2 logs portfolio-backend
+# Live backend log
+docker compose -f docker-compose.prod.yml logs -f backend
 
 # Last 50 lines
-pm2 logs portfolio-backend --lines 50
+docker compose -f docker-compose.prod.yml logs --tail=50 backend
 
-# Nginx error log
-sudo tail -f /var/log/nginx/error.log
+# Nginx access/error log
+docker compose -f docker-compose.prod.yml logs -f nginx
 
-# PostgreSQL log
-sudo journalctl -u postgresql -f
-```
-
-### Restart a service
-
-```bash
-# Node backend (fastest)
-pm2 restart portfolio-backend
-
-# Nginx (reload config without dropping connections)
-sudo systemctl reload nginx
-
-# Nginx (full restart)
-sudo systemctl restart nginx
-
-# PostgreSQL (rarely needed)
-sudo systemctl restart postgresql
+# All services combined
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 ### Check database
 
 ```bash
-# Connect to the database
-psql -U postgres -d portfolio_db
+# Open psql shell
+docker compose -f docker-compose.prod.yml exec postgres \
+    psql -U postgres portfolio_prod
 
-# List tables
-\dt
-
-# Check a specific table
+# Inside psql:
+\dt           -- list tables
 SELECT COUNT(*) FROM posts;
-
-# Exit
-\q
+\q            -- exit
 ```
 
-### Renew SSL cert (manual)
+### Renew SSL cert
+
+Normally runs automatically via cron (`scripts/backup/certbot-renew.sh`). To renew manually:
 
 ```bash
-# Normally happens automatically via systemd timer
-# But if you need to renew manually:
+docker compose -f docker-compose.prod.yml stop nginx
 sudo certbot renew
-
-# Check cert expiry
-sudo certbot certificates
+docker compose -f docker-compose.prod.yml start nginx
 ```
 
 ### Check system health
@@ -166,136 +243,148 @@ sudo certbot certificates
 # Disk usage
 df -h
 
-# Memory usage
-free -h
+# Container resource usage
+docker stats --no-stream
 
-# CPU load
-uptime
-
-# Process list (find portfolio backend)
-ps aux | grep node
+# Volume sizes
+docker system df -v | grep myportfoliosite
 ```
 
-### Tail all PM2 logs
+### Database backup (manual)
 
 ```bash
-pm2 logs
+~/MyPortfolioSite/scripts/backup/db-backup.sh
+```
+
+Backups land in `~/backups/`. See [Backups](#backups) section.
+
+---
+
+## Backups
+
+### Local backups (automated via cron)
+
+**Script:** `scripts/backup/db-backup.sh`
+**Cron:** `0 2 * * *` (daily at 02:00)
+
+Each run:
+1. `pg_dump` via `docker compose exec postgres` → gzip → `~/backups/portfolio-YYYYMMDD-HHmmss.sql.gz`
+2. `tar -czf` of the uploads volume → `~/backups/uploads-YYYYMMDD-HHmmss.tar.gz`
+3. Prunes local backups older than 7 days
+4. Triggers offsite sync if rclone is configured
+
+### Offsite backups (Backblaze B2 via rclone)
+
+**Script:** `scripts/backup/offsite-sync.sh`
+**Triggered by:** `db-backup.sh` (non-blocking background job)
+
+Setup:
+```bash
+rclone config  # add remote named 'b2', type: b2
+# Set RCLONE_REMOTE=b2 and RCLONE_BUCKET=portfolio-backups in .env
+```
+
+Syncs:
+- DB dumps → `b2:portfolio-backups/db/` (last 30 days)
+- Uploads → `b2:portfolio-backups/uploads/` (incremental)
+
+### Restore from backup
+
+```bash
+# List available backups
+ls -lht ~/backups/*.sql.gz
+
+# Restore a specific backup
+bash ~/MyPortfolioSite/scripts/backup/db-restore.sh ~/backups/portfolio-20260507-020000.sql.gz
 ```
 
 ---
 
 ## Troubleshooting
 
-### Backend not responding (HTTP 502 from Nginx)
+### Backend not responding (502 from nginx)
 
-**Symptoms:** Browser shows "Bad Gateway" or "502 Service Unavailable"
+1. `docker compose -f docker-compose.prod.yml ps` — check all containers are Up
+2. `docker compose -f docker-compose.prod.yml logs --tail=50 backend` — check for errors
+3. If backend is down: `docker compose -f docker-compose.prod.yml restart backend`
+4. If DB is down: `docker compose -f docker-compose.prod.yml restart postgres`
+5. After both are healthy: `docker compose -f docker-compose.prod.yml restart nginx`
 
-**Steps:**
-1. Check if backend is running: `pm2 status`
-2. If stopped, restart: `pm2 restart portfolio-backend`
-3. Check logs: `pm2 logs portfolio-backend --lines 50`
-4. If logs show DB errors, check PostgreSQL: `sudo systemctl status postgresql`
-5. If DB is down, restart it: `sudo systemctl restart postgresql`
-6. Verify port 8080 is listening: `netstat -tlnp | grep 8080` or `ss -tlnp | grep 8080`
+### Database connection errors
 
-### Database connection errors in logs
+Symptoms: `Error: connect ECONNREFUSED` in backend logs
 
-**Symptoms:** `Error: connect ECONNREFUSED 127.0.0.1:5432` or similar
+1. Check postgres container is running: `docker compose -f docker-compose.prod.yml ps postgres`
+2. Restart if needed: `docker compose -f docker-compose.prod.yml restart postgres`
+3. Verify `.env` credentials match the container's `POSTGRES_USER` / `POSTGRES_PASSWORD`
+4. Test connection: `docker compose -f docker-compose.prod.yml exec postgres psql -U postgres portfolio_prod`
 
-**Steps:**
-1. Check PostgreSQL status: `sudo systemctl status postgresql`
-2. If not running: `sudo systemctl start postgresql`
-3. Verify it's listening: `sudo netstat -tlnp | grep postgres`
-4. Check credentials in `.env` match PostgreSQL setup
-5. Try connecting manually: `psql -U postgres -d portfolio_db` (requires valid password from `.env`)
+### Nginx won't start (SSL cert issues)
 
-### Nginx config errors
+Symptoms: nginx container exits immediately
 
-**Symptoms:** Nginx won't start or reload; browser shows 502
+1. Check logs: `docker compose -f docker-compose.prod.yml logs nginx`
+2. Verify cert files exist: `ls /etc/letsencrypt/live/<domain>/`
+3. If missing: stop all containers, run `sudo certbot certonly --standalone -d <domain>`, restart nginx
+4. Check template renders correctly: `sudo nginx -t` inside the nginx container
 
-**Steps:**
-1. Test syntax: `sudo nginx -t`
-2. Check error log: `sudo tail -f /var/log/nginx/error.log`
-3. Common issues:
-   - Missing SSL cert file at `/etc/letsencrypt/live/<domain>/`
-   - Typo in config file
-   - Port already in use by another service
-4. Fix the config, then reload: `sudo systemctl reload nginx`
+### SSL cert renewal failing
 
-### SSL cert about to expire or expired
+1. Check cron log: `tail ~/certbot-renew.log`
+2. Manual test: `docker compose -f docker-compose.prod.yml stop nginx && sudo certbot renew && docker compose -f docker-compose.prod.yml start nginx`
+3. If port 80 is blocked: check firewall `sudo ufw status` / router port forwarding
 
-**Symptoms:** Browser HTTPS warning; `certbot certificates` shows expiry date in red
+### SSH from Windows failing
 
-**Steps:**
-1. Renew manually: `sudo certbot renew`
-2. Check result: `sudo certbot certificates`
-3. If renewal fails, check logs: `sudo journalctl -u certbot -n 50`
-4. Common issues:
-   - Port 80 not accessible (needed for renewal)
-   - DNS not resolving the domain
-   - Let's Encrypt rate limit (wait 1 hour)
+1. Check public key in `~/.ssh/authorized_keys` on server
+2. On Windows: `ssh-copy-id -i ~/.ssh/id_ed25519.pub <user>@<server-ip>`
+3. Test: `ssh <server-hostname>` — should not prompt for password
+4. If hostname doesn't resolve, use IP or add to `~/.ssh/config`
 
-### SSH Troubleshooting
+### Disk space full
 
-**Problem:** Password prompt instead of key-based auth
-
-**Steps:**
-1. Verify key exists locally: `ls ~/.ssh/id_rsa` (or `id_ed25519`)
-2. Copy public key to Pi: `ssh-copy-id -i ~/.ssh/id_rsa.pub pi@<pi-ip>`
-3. Test: `ssh pi@<pi-ip>` (should not prompt for password)
-4. Verify `~/.ssh/authorized_keys` on Pi contains your public key
-
-**Problem:** Slow SSH connection (hangs on login)
-
-**Steps:**
-1. Check Pi disk space: `ssh pi@<pi-ip> 'df -h'` (SD card filling up is common)
-2. If full, clean up old logs: `ssh pi@<pi-ip> 'sudo journalctl --vacuum=100M'`
-3. Check PM2 logs for crashes: `ssh pi@<pi-ip> 'pm2 logs --lines 5'`
-
-### PM2 crashed or unresponsive
-
-**Symptoms:** `pm2 status` hangs or returns error
-
-**Steps:**
-1. Kill PM2 daemon: `pm2 kill`
-2. Restart backend: `pm2 start ~/MyPortfolioSite/backend/server.js --name portfolio-backend`
-3. Verify: `pm2 status`
-4. Save config: `pm2 save`
+```bash
+df -h                           # which volume is full?
+docker system prune -f          # remove unused images/layers
+docker volume ls                # check volume sizes
+sudo journalctl --vacuum=100M   # trim systemd logs
+```
 
 ---
 
-## Production vs Dev Environment Differences
+## Production vs Dev Environment
 
-| Aspect | Production (Pi) | Development (Docker) |
+With Docker Compose in production, dev and prod are now structurally aligned:
+
+| Aspect | Production (Ubuntu Server) | Development (local Docker) |
 |--------|---|---|
-| **Node runtime** | PM2 on host | Docker container |
-| **Database** | System PostgreSQL | Docker container |
-| **Nginx** | System nginx | Docker container |
-| **File serving** | Nginx on host | Nginx in container |
-| **SSL** | Let's Encrypt (host-level certs) | Self-signed or none (local dev) |
-| **Env vars** | `.env` file in repo root | `.env` in docker-compose |
-| **Logs** | PM2 logs, systemd journal | `docker compose logs` |
-| **Config changes** | Edit on server, reload/restart | Edit locally, restart container |
-
-**Future:** Production will move to Docker Compose on the Ubuntu Server, making dev and prod identical.
+| **Compose file** | `docker-compose.prod.yml` | `docker-compose.yml` |
+| **Backend image** | Prod build target (no devDeps) | Dev build target (devDeps + hot reload) |
+| **Source code** | In Docker image | Bind-mounted for hot reload |
+| **Database** | Named volume (persists) | Named volume (persists) |
+| **Nginx** | Port 80 + 443 (SSL) | Port 80 only (no SSL) |
+| **SSL** | Let's Encrypt (host certbot, volume-mounted) | None |
+| **Env vars** | `.env` in repo root | `.env` in repo root |
+| **Logs** | `docker compose -f docker-compose.prod.yml logs` | `docker compose logs` |
 
 ---
 
 ## Update Discipline
 
-This document should be updated when:
+Update this document when:
 
 - Service locations change (new directory, new hostname)
-- New services are added to the stack
-- Operational procedures change (e.g., logging, restart commands)
-- A troubleshooting issue is discovered and resolved (add it here)
+- New services added to the Docker Compose stack
+- Operational procedures change (backup schedule, deploy process)
+- A troubleshooting issue is discovered and resolved
 
-It should **not** be updated for every deploy or minor log output change. It is a reference guide, not a changelog.
+Do **not** update for every deploy or minor change. This is a reference guide, not a changelog.
 
 ---
 
 ## See Also
 
-- `ROADMAP.md` — planned infrastructure changes (Docker Compose prod, Ubuntu Server migration)
-- `docs/SECURITY.md` — auth model, threat model
+- `ROADMAP.md` — planned work (dual-environment, local LLM, schema migrations)
+- `docs/ARCHITECTURE.md` — system design, request flow diagrams
+- `docs/SECURITY.md` — auth model, JWT, threat model
 - `README.md` — local dev setup, branching, deployment overview
