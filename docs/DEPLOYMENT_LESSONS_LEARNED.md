@@ -136,15 +136,45 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 Before running `server-setup.sh`, verify:
 
 - [ ] Fresh Ubuntu Server LTS (22.04+) with minimal packages
-- [ ] No pre-installed web servers: `systemctl list-units | grep -i apache`
-- [ ] No conflicting snaps: `snap list | grep -i web`
-- [ ] Port 80/443 accessible from internet
-- [ ] Router port forwarding configured for 80 → server, 443 → server
-- [ ] Sufficient disk space: `df -h` (recommend 10GB+ free)
-- [ ] Internet connectivity: `ping 8.8.8.8`
-- [ ] Domain name resolves to server IP: `nslookup yourdomain.com`
-- [ ] SSH access working and no known key errors
-- [ ] Time synchronized: `timedatectl status`
+- [ ] No conflicting web servers installed:
+  ```bash
+  dpkg -l | grep -E 'apache2|nginx|httpd'  # Should return nothing
+  ```
+- [ ] No pre-installed snaps interfering:
+  ```bash
+  snap list | grep -E 'nextcloud|apache|nginx'  # Should return nothing
+  ```
+- [ ] Ports 80 and 443 are free:
+  ```bash
+  sudo netstat -tlnp | grep -E ':80|:443'  # Should return nothing
+  lsof -i :80 -i :443 2>/dev/null         # Alternative check
+  ```
+- [ ] No systemd services using those ports:
+  ```bash
+  systemctl list-units --type=service | grep -E 'apache|httpd|nginx|nextcloud'
+  ```
+- [ ] Port 80/443 accessible from internet (after router config):
+  ```bash
+  curl --connect-timeout 5 http://yourserver-ip/ || echo "NOT accessible"
+  ```
+- [ ] Domain resolves correctly:
+  ```bash
+  nslookup yourdomain.com  # Should show server IP
+  ```
+- [ ] Router port forwarding configured (80→server, 443→server)
+- [ ] Sufficient disk space:
+  ```bash
+  df -h /  # Should have 10GB+ free
+  ```
+- [ ] Internet connectivity:
+  ```bash
+  ping -c 1 8.8.8.8
+  ```
+- [ ] SSH access working and no known_hosts errors
+- [ ] Time synchronized:
+  ```bash
+  timedatectl status  # Should show "System clock synchronized"
+  ```
 
 ---
 
@@ -187,17 +217,77 @@ Instead of attempting everything at once, deploy incrementally:
 
 ### server-setup.sh Enhancements
 
-1. **Pre-flight Checks:**
+1. **Pre-flight Checks — Installed Programs:**
    ```bash
-   # Detect conflicting services
-   systemctl list-units | grep -E 'apache|httpd|nginx'
-   snap list | grep -E 'nextcloud|apache'
+   # Check for conflicting packages
+   if dpkg -l | grep -qE 'apache2|nginx|httpd'; then
+     echo "ERROR: Conflicting web server already installed"
+     echo "Remove with: sudo apt remove apache2 nginx httpd"
+     exit 1
+   fi
    
-   # Verify ports are free
-   netstat -tlnp | grep ':80\|:443'
+   # Check for interfering snaps
+   if snap list | grep -qE 'nextcloud|apache|nginx'; then
+     echo "WARNING: Found snap services that may conflict"
+     snap list | grep -E 'nextcloud|apache|nginx'
+     echo "Remove with: sudo snap remove <snap-name>"
+     exit 1
+   fi
+   ```
+
+2. **Pre-flight Checks — Port Usage:**
+   ```bash
+   # Verify ports 80 and 443 are free
+   check_port() {
+     local port=$1
+     if lsof -i :$port >/dev/null 2>&1; then
+       echo "ERROR: Port $port is already in use by:"
+       lsof -i :$port
+       echo "Free the port and try again"
+       exit 1
+     fi
+   }
    
-   # Check disk space
-   df /home | awk 'NR==2 {if($4 < 10000000) exit 1}'
+   check_port 80
+   check_port 443
+   
+   # Check systemd services
+   if systemctl list-units --type=service | grep -qE 'apache|httpd|nginx|nextcloud'; then
+     echo "WARNING: Found active web server services:"
+     systemctl list-units --type=service | grep -E 'apache|httpd|nginx|nextcloud'
+     echo "Stop them with: sudo systemctl stop <service>"
+     exit 1
+   fi
+   ```
+
+3. **Pre-flight Checks — Disk Space:**
+   ```bash
+   # Verify sufficient disk space
+   AVAILABLE=$(df / | awk 'NR==2 {print $4}')  # In 1K blocks
+   REQUIRED=$((10 * 1024 * 1024))               # 10GB in 1K blocks
+   
+   if [ "$AVAILABLE" -lt "$REQUIRED" ]; then
+     echo "ERROR: Insufficient disk space"
+     echo "Available: $(($AVAILABLE / 1024 / 1024)) GB"
+     echo "Required: 10 GB"
+     exit 1
+   fi
+   ```
+
+4. **Pre-flight Checks — Network:**
+   ```bash
+   # Verify internet connectivity
+   if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+     echo "ERROR: No internet connectivity"
+     exit 1
+   fi
+   
+   # Verify DNS resolution
+   if ! nslookup $DOMAIN >/dev/null 2>&1; then
+     echo "ERROR: Domain $DOMAIN does not resolve"
+     echo "Configure DNS or router port forwarding first"
+     exit 1
+   fi
    ```
 
 2. **Port Forwarding Validation:**
