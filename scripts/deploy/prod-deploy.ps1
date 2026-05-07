@@ -8,7 +8,7 @@
 #
 # Usage: .\prod-deploy.ps1 [-Hostname <name>] [-Rollback <sha>]
 param(
-    [string]$Hostname = 'portfolio-server',
+    [string]$Hostname = 'ak-home-server',
     [string]$Rollback = ''
 )
 $remoteArgs = if ($Rollback) { "--rollback $Rollback" } else { "" }
