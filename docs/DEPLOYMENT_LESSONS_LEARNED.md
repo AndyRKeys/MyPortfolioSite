@@ -89,14 +89,32 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 
 **Root Cause:** Docker daemon permission issues after initial setup. User group membership not properly applied until after systemd restart.
 
-**Impact:** Extended troubleshooting time. Required system reboot to resolve.
+**Impact:** Extended troubleshooting time (spent 45+ minutes trying incremental fixes). **Would have been resolved in 5 minutes with a system reboot.**
 
-**Resolution:** `sudo systemctl restart docker` + reboot, then containers behaved normally.
+**Troubleshooting Attempts That Failed:**
+- `sudo systemctl restart docker` → still failed
+- `docker rm -f <container>` → permission denied
+- Re-running `usermod -aG docker` → no effect
+- Docker daemon restart → no effect
+
+**Actual Resolution:** Full system reboot solved everything immediately.
 
 **Lesson Learned:** 
-- User group membership changes may require session restart or systemd service restart
-- Docker can get into inconsistent state requiring full system restart
-- Implement retry logic with exponential backoff for container operations in setup script
+- **When Docker gets into permission/state issues, do a full system reboot FIRST, not last**
+- Don't spend time on incremental Docker daemon restarts — they often don't clear kernel state
+- User group membership changes require a full login session or reboot to take effect
+- The 45 minutes spent troubleshooting could have been 5 minutes with a reboot
+
+**Recommendation for server-setup.sh:**
+```bash
+# After Docker installation and user group changes
+echo "System reboot recommended to apply Docker group membership..."
+echo "Reboot now? (y/n)"
+read -r REBOOT
+if [[ "$REBOOT" =~ ^[Yy]$ ]]; then
+  sudo reboot
+fi
+```
 
 ---
 
@@ -344,6 +362,21 @@ Instead of attempting everything at once, deploy incrementally:
    - Add external port accessibility test
    - Add comments explaining each phase
 5. **docs/TROUBLESHOOTING.md** (new): Common issues and fixes
+
+---
+
+## Docker Troubleshooting Strategy
+
+If Docker gets into a bad state during setup:
+
+1. **First attempt:** `docker compose down && docker system prune -f`
+2. **Second attempt:** `sudo systemctl restart docker`
+3. **If still failing:** Don't spend more than 5 minutes trying fixes — **just reboot**
+   ```bash
+   sudo reboot
+   ```
+
+**Why:** Docker can get into kernel-level state issues that daemon restarts can't clear. A full reboot is faster than extensive troubleshooting.
 
 ---
 

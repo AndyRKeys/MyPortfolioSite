@@ -224,7 +224,12 @@ bash scripts/deploy/server-setup.sh yourdomain.com
 ### "Docker Permission Denied"
 - [ ] User must be in docker group: `groups $USER`
 - [ ] If not: `sudo usermod -aG docker $USER`
-- [ ] Then logout and login again
+- [ ] **Logout/login or reboot** (group membership requires new shell session)
+- [ ] If still failing: **Do a full system reboot**
+  ```bash
+  sudo reboot
+  ```
+  This is faster than trying incremental Docker daemon restarts
 
 ### "Database Connection Failed"
 - [ ] Wait 30 seconds for postgres to initialize
