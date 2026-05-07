@@ -34,6 +34,8 @@ Browser → andykeys.me
 
 In production `config.js` exports `API = ''` so `/auth/*` calls are same-origin and Nginx proxies them to the backend. In local dev `API` auto-detects `localhost` and points directly to the backend port.
 
+For a high-level view of where the project is heading and current priorities, see **[ROADMAP.md](./ROADMAP.md)**.
+
 ---
 
 ## Local Development
