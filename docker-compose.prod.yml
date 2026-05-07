@@ -1,0 +1,91 @@
+# Production Docker Compose — standalone file for server deployment.
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from docker-compose.yml (dev):
+#   - Backend uses prod build target (no devDependencies)
+#   - No source code bind mounts — image contains built code
+#   - Named volume for uploads (persists across deployments)
+#   - Nginx listens on 443 with SSL certs from host Certbot
+#   - DB port not exposed externally
+#   - All services restart automatically
+#
+# Requires a .env file in the repo root with production values.
+# Copy .env.example and fill in all variables before first run.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-portfolio_prod}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: prod
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-8080}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-portfolio_prod}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-7d}
+      WEBAUTHN_RP_ID: ${DOMAIN}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-AK Portfolio}
+      WEBAUTHN_ORIGIN: https://${DOMAIN}
+      FRONTEND_URL: https://${DOMAIN}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-8080}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./scripts/config/nginx-portfolio.conf.template:/etc/nginx/templates/default.conf.template
+      - .:/usr/share/nginx/html:ro
+      - uploads_data:/usr/share/nginx/html/uploads:ro
+      # SSL certs managed by host Certbot — mounted read-only
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    environment:
+      DOMAIN: ${DOMAIN}
+      REPO_DIR: /usr/share/nginx/html
+      APP_PORT: ${PORT:-8080}
+      BACKEND_HOST: backend
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:
