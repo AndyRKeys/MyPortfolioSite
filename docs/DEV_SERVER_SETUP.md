@@ -14,21 +14,17 @@ Note the address — it will look like `192.168.x.x`. You need it in step 3.
 
 ---
 
-## Step 2 — Clone the repo and switch to dev
+## Step 2 — Create the env file on the server
+
+SSH into the server, then:
 
 ```bash
-git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
-cd ~/MyPortfolioSite-dev
-git checkout dev
-```
-
----
-
-## Step 3 — Create the env file
-
-```bash
-cp .env.dev-server.example .env
-nano .env
+# The deploy script will clone the repo on first run, but you need
+# the .env in place beforehand. Create it manually:
+mkdir -p ~/MyPortfolioSite-dev
+curl -fsSL https://raw.githubusercontent.com/AndyRKeys/MyPortfolioSite/dev/.env.dev-server.example \
+  -o ~/MyPortfolioSite-dev/.env
+nano ~/MyPortfolioSite-dev/.env
 ```
 
 Set these values (generate secrets with `openssl rand -base64 32`):
@@ -46,7 +42,7 @@ Everything else can stay as defaulted.
 
 ---
 
-## Step 4 — Open port 3001 to LAN only
+## Step 3 — Open port 3001 to LAN only
 
 ```bash
 sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'
@@ -57,7 +53,17 @@ If your home network uses a `10.x.x.x` subnet, adjust the range accordingly.
 
 ---
 
-## Step 5 — Start the dev environment
+## Step 4 — Run the deploy
+
+**From Windows (recommended):**
+
+```powershell
+.\scripts\deploy\dev-server-deploy.ps1
+```
+
+This SSHes into `ak-home-server`, clones the repo on first run, and runs the full deploy script. Uses the same SSH config as `prod-deploy.ps1`.
+
+**From the server directly (or via SSH manually):**
 
 ```bash
 bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
@@ -66,8 +72,9 @@ bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
 Expected output on success:
 
 ```
-✓ Dev site healthy at http://192.168.x.x:3001
-=== Dev deploy complete ===
+╔══════════════════════════════════════════╗
+║           Dev deploy complete ✓          ║
+╚══════════════════════════════════════════╝
 ```
 
 ---
@@ -76,11 +83,17 @@ Expected output on success:
 
 Whenever you want to pull the latest `dev` branch to the server:
 
+```powershell
+# From Windows
+.\scripts\deploy\dev-server-deploy.ps1
+```
+
 ```bash
+# From the server
 bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
 ```
 
-Logs are written to `~/dev-deploy.log`.
+Logs are written to `~/dev-deploy.log` on the server.
 
 ---
 
@@ -105,6 +118,8 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml restart ba
 ## Troubleshooting
 
 **Health check fails after deploy**
+
+The deploy script automatically dumps logs on failure. To investigate manually:
 ```bash
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs --tail=50 backend-dev
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs --tail=20 postgres-dev
@@ -120,3 +135,7 @@ sudo lsof -i :3001     # confirm nginx-dev is listening
 - Confirm `WEBAUTHN_RP_ID` in `.env` is just the bare IP (no `http://`, no port)
 - Confirm `WEBAUTHN_ORIGIN` is exactly `http://<LAN_IP>:3001`
 - Passkeys registered on prod will not work on dev (different origin — expected)
+
+**`.env` validation errors on deploy**
+
+The deploy script checks all required vars on every run and prints exactly which ones are missing or still set to placeholder values. Fix the reported vars in `~/MyPortfolioSite-dev/.env` and re-run.
