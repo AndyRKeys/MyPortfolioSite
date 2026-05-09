@@ -2,7 +2,7 @@
 
 _Last updated: 2026-05-09 — verified against live server post-migration_
 
-This document covers the production server setup, service architecture, operational procedures, and troubleshooting. It is written for agents and operators who need to understand the system without asking the owner for details.
+Production infrastructure for MyPortfolioSite running on Ubuntu Server. This document captures the exact configuration so future agents and maintainers can troubleshoot and operate the system without asking the owner for facts.
 
 ---
 
@@ -27,7 +27,7 @@ All production services run as Docker containers managed by `docker compose -f d
 **Docker:** 29.4.3 | **Docker Compose:** v5.1.3
 
 | Service | Image | Port (host) | Purpose |
-|---------|-------|-------------|---------|
+|---------|-------|-------------|----------|
 | **nginx** | nginx:alpine | 80, 443 → host | Reverse proxy + static file serving; terminates SSL |
 | **backend** | myportfoliosite-backend (node:20-alpine, prod stage) | 8080 (internal only) | Express API; handles all `/api/*` routes |
 | **postgres** | postgres:16-alpine | 5432 (internal only) | PostgreSQL database; data in named volume |
@@ -45,20 +45,30 @@ All production services run as Docker containers managed by `docker compose -f d
 │   ├── resources/            ← frontend HTML/CSS/JS (served by nginx)
 │   ├── docs/                 ← documentation (you are here)
 │   ├── scripts/
-│   │   ├── config/           ← nginx config templates (local + prod)
-│   │   ├── deploy/           ← prod-deploy.sh, server-setup.sh
-│   │   └── backup/           ← db-backup.sh, db-restore.sh, offsite-sync.sh
+│   │   ├── config/           ← nginx config templates
+│   │   │   ├── nginx-local.conf.template (dev, HTTP only)
+│   │   │   └── nginx-portfolio.conf.template (prod, HTTPS)
+│   │   ├── deploy/           ← prod-deploy.sh, server-setup.sh, check-server-ready.sh
+│   │   ├── ops/              ← gather-infrastructure-info.sh
+│   │   └── backup/           ← db-backup.sh, db-restore.sh, offsite-sync.sh, certbot-renew.sh
 │   ├── docker-compose.prod.yml  ← standalone prod compose file
+│   ├── docker-compose.yml    ← local dev compose file
 │   └── .env                  ← production env vars (never committed)
 │
-~/backups/                    ← database and uploads backups (local rotation)
+~/backups/                    ← database and uploads backups (local rotation, 7-day retention)
 /etc/letsencrypt/             ← SSL certs (managed by certbot on host)
+│   ├── live/                 ← symlinks to current certs
+│   ├── archive/              ← cert versions
+│   ├── accounts/             ← certbot accounts
+│   ├── renewal/              ← cert renewal configs
+│   ├── renewal-hooks/        ← renewal hook scripts
+│   └── options-ssl-nginx.conf ← nginx TLS options
 ```
 
 ### Docker Volume Names
 
 | Volume | Purpose |
-|--------|---------|
+|--------|----------|
 | `myportfoliosite_postgres_data` | PostgreSQL data directory (persists across deploys) |
 | `myportfoliosite_uploads_data` | User-uploaded files (CVs, images) |
 
@@ -271,13 +281,16 @@ Backups land in `~/backups/`. See [Backups](#backups) section.
 ### Local backups (automated via cron)
 
 **Script:** `scripts/backup/db-backup.sh`
-**Cron:** `0 2 * * *` (daily at 02:00)
+**Cron:** `0 2 * * * ~/MyPortfolioSite/scripts/backup/db-backup.sh >> ~/backup.log 2>&1` (daily at 02:00 UTC)
+**Runs as:** root (via `sudo crontab -e`)
 
 Each run:
 1. `pg_dump` via `docker compose exec postgres` → gzip → `~/backups/portfolio-YYYYMMDD-HHmmss.sql.gz`
 2. `tar -czf` of the uploads volume → `~/backups/uploads-YYYYMMDD-HHmmss.tar.gz`
 3. Prunes local backups older than 7 days
 4. Triggers offsite sync if rclone is configured
+
+**Latest backup:** `portfolio-20260507-212434.sql.gz` (2.2K)
 
 ### Offsite backups (Backblaze B2 via rclone)
 
@@ -301,8 +314,26 @@ Syncs:
 ls -lht ~/backups/*.sql.gz
 
 # Restore a specific backup
-bash ~/MyPortfolioSite/scripts/backup/db-restore.sh ~/backups/portfolio-20260507-020000.sql.gz
+bash ~/MyPortfolioSite/scripts/backup/db-restore.sh ~/backups/portfolio-20260507-212434.sql.gz
 ```
+
+---
+
+## Active Services & Ports
+
+**Verified open ports (from `lsof`):**
+
+| Port | Service | Purpose | Internal Only |
+|------|---------|---------|---|
+| 22 | SSH (sshd) | Remote administration | — |
+| 53 | systemd-resolve | DNS resolution (localhost) | ✓ |
+| 80 | docker-proxy (nginx) | HTTP → HTTPS redirect | — |
+| 443 | docker-proxy (nginx) | HTTPS public traffic | — |
+| 8080 | Node.js backend | Express API (docker internal) | ✓ |
+| 9090 | Prometheus | Metrics server | ✓ |
+| 27019 | MongoDB | Document database (localhost) | ✓ |
+
+**Note:** Prometheus and MongoDB are present on the system. Verify if these are part of the active deployment or legacy services that can be stopped/removed.
 
 ---
 
@@ -394,3 +425,4 @@ Do **not** update for every deploy or minor change. This is a reference guide, n
 - `docs/ARCHITECTURE.md` — system design, request flow diagrams
 - `docs/SECURITY.md` — auth model, JWT, threat model
 - `README.md` — local dev setup, branching, deployment overview
+- `docs/DEPLOYMENT_LESSONS_LEARNED.md` — lessons from the 2026-05-07 migration
