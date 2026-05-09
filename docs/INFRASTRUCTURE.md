@@ -68,7 +68,7 @@ All production services run as Docker containers managed by `docker compose -f d
 ### Docker Volume Names
 
 | Volume | Purpose |
-|--------|----------|
+|--------|---------|
 | `myportfoliosite_postgres_data` | PostgreSQL data directory (persists across deploys) |
 | `myportfoliosite_uploads_data` | User-uploaded files (CVs, images) |
 
