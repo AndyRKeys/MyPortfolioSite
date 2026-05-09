@@ -1,0 +1,38 @@
+# Default: normalise line endings to LF in repo, checkout as-is on all platforms
+* text=auto eol=lf
+
+# Shell scripts must always use LF — CRLF breaks bash on Windows Git Bash
+*.sh text eol=lf
+
+# HTML/CSS/JS — LF
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.ts   text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# Config files
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+*.env  text eol=lf
+
+# Windows-only scripts — keep CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files — no line ending conversion
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary
