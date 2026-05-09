@@ -1,6 +1,6 @@
 # Infrastructure
 
-_Last updated: 2026-05-07 — updated for Docker Compose production on Ubuntu Server_
+_Last updated: 2026-05-09 — verified against live server post-migration_
 
 This document covers the production server setup, service architecture, operational procedures, and troubleshooting. It is written for agents and operators who need to understand the system without asking the owner for details.
 
@@ -11,7 +11,11 @@ This document covers the production server setup, service architecture, operatio
 ### Hardware
 
 - **Device:** Old gaming PC running headless Ubuntu Server LTS
-- **OS:** Ubuntu Server LTS
+- **OS:** Ubuntu 24.04.4 LTS (kernel 6.8.0-111-generic)
+- **Hostname:** `ak-home-server`
+- **User:** `modnar3`
+- **Repo path:** `/home/modnar3/MyPortfolioSite`
+- **Backups path:** `/home/modnar3/backups`
 - **Storage:** Internal SSD (significantly more reliable than the previous Pi SD card)
 - **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
 - **GPU:** Available for future local LLM inference (#173)
@@ -20,11 +24,13 @@ This document covers the production server setup, service architecture, operatio
 
 All production services run as Docker containers managed by `docker compose -f docker-compose.prod.yml`.
 
+**Docker:** 29.4.3 | **Docker Compose:** v5.1.3
+
 | Service | Image | Port (host) | Purpose |
 |---------|-------|-------------|---------|
-| **nginx** | nginx:alpine | 80, 443 | Reverse proxy + static file serving; terminates SSL |
-| **backend** | custom (node:20-alpine, prod stage) | — (internal only) | Express API; handles all `/api/*` routes |
-| **postgres** | postgres:16-alpine | — (internal only) | PostgreSQL database; data in named volume |
+| **nginx** | nginx:alpine | 80, 443 → host | Reverse proxy + static file serving; terminates SSL |
+| **backend** | myportfoliosite-backend (node:20-alpine, prod stage) | 8080 (internal only) | Express API; handles all `/api/*` routes |
+| **postgres** | postgres:16-alpine | 5432 (internal only) | PostgreSQL database; data in named volume |
 
 **SSL:** Let's Encrypt certs managed by host-level Certbot; `/etc/letsencrypt` bind-mounted into the nginx container read-only.
 
