@@ -1,5 +1,35 @@
 # Release Notes
 
+## Release 2026-05-09-2
+
+**Released:** 2026-05-09  
+**Branch:** release/2026-05-09-2  
+**PR:** #TBD  
+**Closes:** #197
+
+### Bug Fixes
+
+**Content Security Policy fix (PR #198)**
+- fix(#197): extract inline scripts to external modules to satisfy CSP (`admin-init.js`, `login-init.js`)
+- fix(#197): add `cdn.jsdelivr.net` to CSP `script-src` (Leaflet maps dependency)
+- fix(#197): update `API_BASE` handling and add CSP policy headers
+- fix(#197): add `.gitattributes` to enforce LF line endings for shell scripts
+- fix(#197): normalise `Test-Regression.ps1` line endings in git object
+- fix(#197): add security headers check to regression test suite
+- fix(#197): pipe security debug script via bash stdin to avoid Windows path issues
+
+### Docs / Ops (previously unreleased — included in 2026-05-09 releases)
+
+- docs(#182): `docs/DEPLOYMENT_LESSONS_LEARNED.md` — post-migration lessons, pre-deployment checklist
+- ops(#186): `scripts/ops/gather-infrastructure-info.sh` — automated server info gathering for documentation
+- docs(#186): `docs/INFRASTRUCTURE.md` updated with full server inventory (sensitive details replaced with placeholders)
+
+### Breaking Changes / Deployment Notes
+
+- None — frontend changes only; no backend restart or DB migration required
+
+---
+
 ## Release 2026-05-07
 
 **Released:** 2026-05-07  
