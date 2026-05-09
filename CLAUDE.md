@@ -110,12 +110,9 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 # Push and create PR
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
-# Apply 'awaiting review' tag to the issue once PR is raised
 
 # After review, merge to dev (user does this, not you)
-# Apply 'awaiting release' tag to the issue once merged to dev
 # User will then create a release PR: dev → main for deploy
-# 'awaiting release' tag is removed when the release PR merges to main (GitHub closes issue via Closes #N)
 ```
 
 ### Deployment (From Windows)
