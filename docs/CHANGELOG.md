@@ -6,6 +6,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
+## Release 2026-05-07
+
+### Added
+- `/api/health` endpoint for deploy verification and uptime monitoring (#163)
+- Security headers to Nginx reverse proxy configuration (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+- `docs/INFRASTRUCTURE.md` — comprehensive server layout, service architecture, operational procedures, troubleshooting guide (#167)
+- `docs/ARCHITECTURE.md` — system design diagrams, request flow examples, data flow walkthrough (#168)
+- `docker-compose.prod.yml` — standalone production Docker Compose file with SSL support, no source code mounts (#165)
+- `scripts/deploy/server-setup.sh` — one-shot Ubuntu Server initial setup script (Docker, SSH hardening, SSL, crons) (#171)
+- `scripts/backup/db-backup.sh` — daily PostgreSQL backup with 7-day local rotation (#164)
+- `scripts/backup/db-restore.sh` — restore from any backup file (#164)
+- `scripts/backup/offsite-sync.sh` — rclone sync to Backblaze B2 for offsite backup (#172)
+- `scripts/backup/certbot-renew.sh` — SSL certificate renewal with nginx container management (#172)
+- `.env.example` — root-level production environment template for Docker Compose (#171)
+- Dropbear SSH in initramfs for remote disk decryption on server reboot (#171)
+
+### Fixed
+- Nginx template path bug in `docker-compose.yml` (was `scripts/nginx-*.conf.template`, now `scripts/config/nginx-*.conf.template`) (#152 merged)
+- SSH deploy target hostname changed from `portfolio-server` to `ak-home-server` (#179)
+
+### Changed
+- Production architecture: from PM2 on host to Docker Compose containerized services (#165)
+- Nginx now reverse-proxies from Docker instead of system service (#165)
+- PostgreSQL now containerized with persistent volumes (#165)
+- Deploy script (`prod-deploy.sh`) rewritten for Docker Compose instead of PM2 (#179)
+- `.env` now loaded by Docker Compose at repo root instead of per-service (#171)
+
+### Removed
+- `test-results/` directory from version control; added to `.gitignore` (#170)
+
+---
+
 ## Hotfix 2026-05-06
 
 ### Fixed

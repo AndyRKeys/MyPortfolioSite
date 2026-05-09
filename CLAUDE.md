@@ -315,5 +315,8 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 4. Make changes, test: `. scripts\dev\dev-local.ps1 test`
 5. Commit: `git commit -m "imperative summary" && git add Co-Authored-By line`
 6. Push and PR: `git push -u origin fix/issue-N-...` then `gh pr create --base dev`
+   - Add `Closes #N` in PR body
+   - Apply `awaiting review` tag to the issue
+   - After merge to dev: apply `awaiting release` tag to the issue
 
 Ask if anything is unclear.
