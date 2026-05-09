@@ -12,10 +12,10 @@ Production infrastructure for MyPortfolioSite running on Ubuntu Server. This doc
 
 - **Device:** Old gaming PC running headless Ubuntu Server LTS
 - **OS:** Ubuntu 24.04.4 LTS (kernel 6.8.0-111-generic)
-- **Hostname:** `ak-home-server`
-- **User:** `modnar3`
-- **Repo path:** `/home/modnar3/MyPortfolioSite`
-- **Backups path:** `/home/modnar3/backups`
+- **Hostname:** `<server-hostname>`
+- **User:** `<username>` (non-root user with sudo access)
+- **Repo path:** `/home/<username>/MyPortfolioSite`
+- **Backups path:** `/home/<username>/backups`
 - **Storage:** Internal SSD (significantly more reliable than the previous Pi SD card)
 - **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
 - **GPU:** Available for future local LLM inference (#173)
@@ -39,7 +39,7 @@ All production services run as Docker containers managed by `docker compose -f d
 ### Directory Structure (on server)
 
 ```
-/home/<user>/
+/home/<username>/
 ├── MyPortfolioSite/          ← cloned repo
 │   ├── backend/              ← Node.js source code (in Docker image)
 │   ├── resources/            ← frontend HTML/CSS/JS (served by nginx)
@@ -115,7 +115,7 @@ Run once on a fresh Ubuntu Server install:
 ```bash
 # Clone and run setup script (pass your domain as argument)
 git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite
-bash ~/MyPortfolioSite/scripts/deploy/server-setup.sh andykeys.me
+bash ~/MyPortfolioSite/scripts/deploy/server-setup.sh yourdomain.com
 ```
 
 The setup script handles:
@@ -151,7 +151,7 @@ When the server boots, the encrypted root filesystem is locked. Before the main 
 
 ```powershell
 # From Windows — connect to Dropbear on port 2222
-ssh -p 2222 root@ak-home-server
+ssh -p 2222 root@<server-hostname>
 
 # Inside Dropbear shell, type (do NOT copy-paste):
 cryptroot-unlock
@@ -169,7 +169,7 @@ cryptroot-unlock
 **IMPORTANT:** The disk encryption passphrase is **NOT** stored anywhere in the repo or `.env`. You must remember it or store it securely (password manager, not in code).
 
 It's separate from:
-- Your user login password (`modnar3`)
+- Your user login password (`<username>`)
 - The `JWT_SECRET` in `.env`
 - Any other credentials
 
@@ -199,7 +199,7 @@ It's separate from:
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-SSHes into `ak-home-server` and runs `prod-deploy.sh`. Pass `-Rollback <sha>` to roll back.
+SSHes into `<server-hostname>` and runs `prod-deploy.sh`. Pass `-Rollback <sha>` to roll back.
 
 ### Deploy on server (what prod-deploy.sh does)
 
@@ -374,8 +374,8 @@ Symptoms: nginx container exits immediately
 ### SSH from Windows failing
 
 1. Check public key in `~/.ssh/authorized_keys` on server
-2. On Windows: `ssh-copy-id -i ~/.ssh/id_ed25519.pub <user>@<server-ip>`
-3. Test: `ssh ak-home-server` — should not prompt for password
+2. On Windows: `ssh-copy-id -i ~/.ssh/id_ed25519.pub <username>@<server-hostname>`
+3. Test: `ssh <server-hostname>` — should not prompt for password
 4. If hostname doesn't resolve, use IP or add to `~/.ssh/config`
 
 ### Disk space full
