@@ -17,20 +17,27 @@
 .PARAMETER SkipVitest
     Skip the Vitest unit/integration suite (useful for quick smoke runs).
 
+.PARAMETER SkipSecurity
+    Skip the security headers check (scripts/ops/security-debug-report.sh).
+
 .EXAMPLE
-    # Standard run — Vitest + all regression checks
+    # Standard run — Vitest + security + all regression checks
     . scripts\tests\Test-Regression.ps1
 
     # Skip Vitest (faster)
     . scripts\tests\Test-Regression.ps1 -SkipVitest
+
+    # Skip security check (e.g. running against non-localhost target)
+    . scripts\tests\Test-Regression.ps1 -SkipSecurity
 #>
 param(
     [string]$Token      = '',
     [string]$BaseUrl    = 'http://localhost',
-    [switch]$SkipVitest
+    [switch]$SkipVitest,
+    [switch]$SkipSecurity
 )
 
-# ── Output capture — console AND timestamped file ─────────────────────────────
+# ── Output capture — console AND timestamped file ─────────────────────────────────
 $resultsDir = Join-Path $PSScriptRoot '..' '..' 'test-results'
 if (-not (Test-Path $resultsDir)) {
     New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
@@ -39,7 +46,7 @@ $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile   = Join-Path $resultsDir "Regression-$timestamp.txt"
 Start-Transcript -Path $logFile -Append | Out-Null
 
-# ── Auto-generate JWT if not provided ────────────────────────────────────────
+# ── Auto-generate JWT if not provided ──────────────────────────────────────────
 if (-not $Token) {
     try {
         Write-Host "  [INFO] No -Token provided — attempting to generate dev JWT from container..." -ForegroundColor DarkGray
@@ -58,7 +65,7 @@ console.log(jwt.sign({ userId: 'dev-test-user' }, process.env.JWT_SECRET, { expi
 
 $pass = 0; $fail = 0; $skip = 0; $results = @()
 
-# ── Test-Endpoint helper ──────────────────────────────────────────────────────
+# ── Test-Endpoint helper ─────────────────────────────────────────────────────────────────
 function Test-Endpoint {
     param(
         [string]$Name,
@@ -97,7 +104,7 @@ function Test-Endpoint {
     }
 }
 
-# ── Header ────────────────────────────────────────────────────────────────────
+# ── Header ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host ("═" * 60) -ForegroundColor Cyan
 Write-Host "  Regression Test Run — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
@@ -107,7 +114,7 @@ Write-Host "  Log file : $logFile"
 Write-Host ("═" * 60) -ForegroundColor Cyan
 Write-Host ""
 
-# ── Vitest unit + integration suite ──────────────────────────────────────────
+# ── Vitest unit + integration suite ─────────────────────────────────────────────────
 if (-not $SkipVitest) {
     Write-Host "--- Vitest unit + integration suite ---" -ForegroundColor Yellow
     Write-Host "  Running inside backend container..."
@@ -122,7 +129,21 @@ if (-not $SkipVitest) {
     Write-Host ""
 }
 
-# ── No-auth baseline checks ───────────────────────────────────────────────────
+# ── Security headers check ──────────────────────────────────────────────────────────
+if (-not $SkipSecurity) {
+    Write-Host "--- Security headers check ---" -ForegroundColor Yellow
+    bash scripts/ops/security-debug-report.sh $BaseUrl 2>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [PASS] Security headers check" -ForegroundColor Green
+        $pass++
+    } else {
+        Write-Host "  [FAIL] Security headers check — review output above" -ForegroundColor Red
+        $fail++
+    }
+    Write-Host ""
+}
+
+# ── No-auth baseline checks ────────────────────────────────────────────────────────────
 Write-Host "--- No-auth baseline ---" -ForegroundColor Yellow
 
 Test-Endpoint -Name "GET /api/posts returns 200" `
@@ -161,7 +182,7 @@ Test-Endpoint -Name "Unknown route returns 404" `
 
 Write-Host ""
 
-# ── Auth-required baseline checks ────────────────────────────────────────────
+# ── Auth-required baseline checks ────────────────────────────────────────────────────────────
 Write-Host "--- Auth-required baseline ---" -ForegroundColor Yellow
 
 $missingTitleBody = @{
@@ -208,7 +229,7 @@ Test-Endpoint -Name "GET /api/stats/visits without auth returns 401" `
 
 Write-Host ""
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# ── Summary ────────────────────────────────────────────────────────────────────────────
 Write-Host ("═" * 60) -ForegroundColor Cyan
 Write-Host "  PASSED : $pass" -ForegroundColor Green
 if ($skip -gt 0) { Write-Host "  SKIPPED: $skip" -ForegroundColor DarkYellow }
