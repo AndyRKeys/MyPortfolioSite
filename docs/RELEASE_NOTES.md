@@ -1,5 +1,64 @@
 # Release Notes
 
+## Release 2026-05-09-2
+
+**Released:** 2026-05-09  
+**Branch:** release/2026-05-09-2  
+**PR:** #204  
+**Closes:** #197
+
+### Bug Fixes
+
+**Content Security Policy fix (PR #198)**
+- fix(#197): extract inline scripts to external modules to satisfy CSP (`admin-init.js`, `login-init.js`)
+- fix(#197): add `cdn.jsdelivr.net` to CSP `script-src` (Leaflet maps dependency)
+- fix(#197): update `API_BASE` handling and add CSP policy headers
+- fix(#197): add `.gitattributes` to enforce LF line endings for shell scripts
+- fix(#197): normalise `Test-Regression.ps1` line endings in git object
+- fix(#197): add security headers check to regression test suite
+- fix(#197): pipe security debug script via bash stdin to avoid Windows path issues
+
+### Breaking Changes / Deployment Notes
+
+- None — frontend changes only; no backend restart or DB migration required
+
+---
+
+## Release 2026-05-09-docs
+
+**Released:** 2026-05-09  
+**Branch:** release/2026-05-09-docs  
+**PR:** #191
+
+### Ops
+
+- ops: expand `scripts/ops/gather-infrastructure-info.sh` with comprehensive system checks — CPU, memory, disk, Docker container status, network interfaces, cron jobs, and service health
+
+### Breaking Changes / Deployment Notes
+
+- None — ops script only; no application changes
+
+---
+
+## Release 2026-05-09
+
+**Released:** 2026-05-09  
+**Branch:** release/2026-05-09-docs  
+**PR:** #189  
+**Closes:** #182, #186
+
+### Docs / Ops
+
+- docs(#182): `docs/DEPLOYMENT_LESSONS_LEARNED.md` — post-migration lessons learned from the 2026-05-07 Docker Compose production migration; pre-deployment checklist with detailed server setup procedures
+- ops(#186): `scripts/ops/gather-infrastructure-info.sh` — automated server information gathering script for documentation and diagnostics
+- docs(#186): `docs/INFRASTRUCTURE.md` updated with verified server inventory (sensitive details replaced with placeholders)
+
+### Breaking Changes / Deployment Notes
+
+- None — documentation and ops scripts only; no application changes
+
+---
+
 ## Release 2026-05-07
 
 **Released:** 2026-05-07  
@@ -53,10 +112,10 @@
 
 ---
 
-## 🔥 Hotfix 2026-05-06
+## 🔥 Hotfix 2026-05-06 (PR #144)
 
-**Released:** 2026-05-06
-**Branch:** hotfix/duplicate-initDeploySection
+**Released:** 2026-05-06  
+**Branch:** hotfix/duplicate-initDeploySection  
 **PR:** #144
 
 ### Bug Fixes
@@ -68,10 +127,24 @@
 
 ---
 
+## 🔥 Hotfix 2026-05-06 (PR #140)
+
+**Released:** 2026-05-06  
+**Branch:** hotfix/deploy-section-missing  
+**PR:** #140
+
+### Bug Fixes
+- fix(#140): restore missing deployment section HTML in `admin.html` — the deployment panel tab content was absent after the `release/2026-05-05-2` merge, making the deploy console inaccessible
+
+### Breaking Changes / Deployment Notes
+- None — frontend-only fix; no backend restart or DB changes required
+
+---
+
 ## 2026-05-05-2
 
-**Released:** 2026-05-05
-**Branch:** release/2026-05-05-2
+**Released:** 2026-05-05  
+**Branch:** release/2026-05-05-2  
 **PR:** #126
 
 ### Features
@@ -97,8 +170,8 @@
 
 ## 2026-05-05
 
-**Released:** 2026-05-05
-**Branch:** release/2026-05-05
+**Released:** 2026-05-05  
+**Branch:** release/2026-05-05  
 **PR:** #113
 
 ### Features
