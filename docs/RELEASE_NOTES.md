@@ -1,58 +1,5 @@
 # Release Notes
 
-## Release 2026-05-07
-
-**Released:** 2026-05-07  
-**Branch:** release/2026-05-07  
-**PR:** #180  
-**Closes:** #163, #164, #165, #167, #168, #170, #171, #172
-
-### Features & Improvements
-
-**Infrastructure Quick Wins (PR #177)**
-- feat(#163): `/api/health` endpoint returns status + DB connectivity + uptime + version
-- security: MIME sniffing prevention, clickjacking protection, Referrer-Policy, Permissions-Policy headers
-- docs(#167): `docs/INFRASTRUCTURE.md` — server layout, service architecture, operational procedures, troubleshooting, Dropbear remote decryption workflow
-- docs(#168): `docs/ARCHITECTURE.md` — system diagram, request flows, file structure, data flow examples
-
-**Docker Compose Production Migration (PR #179)**
-- feat(#165): `docker-compose.prod.yml` — production-grade containerization with postgres, backend (prod target), nginx, named volumes, SSL cert mounting
-- feat(#165): Production architecture now entirely containerized: postgres 16, Node.js backend, nginx reverse proxy
-- feat(#171): `scripts/deploy/server-setup.sh` — one-shot Ubuntu Server LTS initialization script
-  - Installs Docker + docker-compose, certbot, rclone, hardens SSH, creates `.env`, provisions SSL cert, starts services, configures cron jobs
-  - Includes Dropbear SSH in initramfs for remote disk decryption on reboot
-- feat(#164): `scripts/backup/db-backup.sh` — automated daily PostgreSQL backups with 7-day local rotation
-- feat(#164): `scripts/backup/db-restore.sh` — interactive database restoration from any backup file
-- feat(#172): `scripts/backup/offsite-sync.sh` — Rclone sync to Backblaze B2 with 30-day DB retention
-- feat(#172): `scripts/backup/certbot-renew.sh` — SSL certificate renewal without downtime (nginx container management)
-- feat(#171): `.env.example` — production environment template for Docker Compose
-- feat(#171): Dropbear SSH in initramfs for remote unlocking of LUKS-encrypted disks on server reboot
-- fix(#179): `prod-deploy.sh` rewritten for Docker Compose — git fetch/reset, `docker compose up -d --build`, health checks (backend + HTTP + HTTPS)
-- fix(#179): SSH deploy target hostname changed from `portfolio-server` to `ak-home-server`
-- fix(#152): Nginx template path bug — `scripts/nginx-local.conf.template` → `scripts/config/nginx-local.conf.template` in docker-compose.yml
-- chore(#170): `test-results/` directory removed from version control, added to `.gitignore`
-
-### Breaking Changes / Deployment Notes
-
-**⚠️ MAJOR: Docker Compose production deployment**
-- Production now runs entirely via Docker Compose instead of PM2 on host
-- No more system-level PostgreSQL, Nginx, or Node.js services
-- Requires fresh server setup via `scripts/deploy/server-setup.sh` on Ubuntu Server LTS 22.04+
-- `.env` file at repo root (loaded by docker-compose) replaces per-service configuration
-- Uploads stored in named volume `uploads_data` instead of host directory
-- Backups automated via cron: `db-backup.sh` at 02:00 daily, `certbot-renew.sh` monthly
-- SSL certificates must be provisioned via Let's Encrypt (certbot) on initial setup
-- Rollback syntax unchanged: `bash prod-deploy.sh --rollback <sha>`
-
-### Migration Path
-
-1. Provision fresh Ubuntu Server LTS 22.04+ (or later)
-2. Run `scripts/deploy/server-setup.sh` — handles Docker, certbot, rclone, cron, initial deploy
-3. For disk encryption on reboot: `ssh -p 2222 root@ak-home-server; cryptroot-unlock; <enter passphrase>`
-4. Subsequent deploys via `./prod-deploy.ps1` from Windows (or `bash prod-deploy.sh` on server directly)
-
----
-
 ## 🔥 Hotfix 2026-05-06
 
 **Released:** 2026-05-06

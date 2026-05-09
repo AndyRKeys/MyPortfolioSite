@@ -42,14 +42,14 @@ case "$1" in
       docker compose exec -T postgres psql \
         -U "${DB_USER:-postgres}" \
         -d "${DB_NAME:-portfolio_dev}" \
-        < "$REPO_DIR/backend/db/schema.sql"
+        -f /docker-entrypoint-initdb.d/01-schema.sql
       echo "  Schema applied."
     elif [ "$SCHEMA_CHANGED" -gt 0 ]; then
       echo "=== schema.sql changed — applying to dev DB ==="
       docker compose exec -T postgres psql \
         -U "${DB_USER:-postgres}" \
         -d "${DB_NAME:-portfolio_dev}" \
-        < "$REPO_DIR/backend/db/schema.sql"
+        -f /docker-entrypoint-initdb.d/01-schema.sql
       echo "  Schema applied."
     else
       echo "=== DB already populated and schema.sql unchanged — skipping migration ==="
@@ -84,7 +84,7 @@ case "$1" in
       docker compose exec -T postgres psql \
         -U "${DB_USER:-postgres}" \
         -d "${DB_NAME:-portfolio_dev}" \
-        < "$REPO_DIR/backend/db/schema.sql"
+        -f /docker-entrypoint-initdb.d/01-schema.sql
       echo "  Schema applied."
 
       echo ""
