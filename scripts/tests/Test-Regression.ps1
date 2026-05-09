@@ -132,7 +132,16 @@ if (-not $SkipVitest) {
 # ── Security headers check ──────────────────────────────────────────────────────────
 if (-not $SkipSecurity) {
     Write-Host "--- Security headers check ---" -ForegroundColor Yellow
-    bash scripts/ops/security-debug-report.sh $BaseUrl 2>&1 | ForEach-Object { Write-Host "  $_" }
+    # Strip CRLF line endings before invoking bash — Git on Windows may check out .sh files
+    # with CRLF even with .gitattributes in place, causing '\r': command not found errors.
+    $secScript = Join-Path $PSScriptRoot '..' '..' 'scripts' 'ops' 'security-debug-report.sh'
+    $secScript = (Resolve-Path $secScript).Path
+    $raw = [System.IO.File]::ReadAllText($secScript)
+    if ($raw -match "`r") {
+        [System.IO.File]::WriteAllText($secScript, ($raw -replace "`r`n", "`n" -replace "`r", "`n"),
+            [System.Text.Encoding]::UTF8)
+    }
+    bash $secScript $BaseUrl 2>&1 | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [PASS] Security headers check" -ForegroundColor Green
         $pass++
