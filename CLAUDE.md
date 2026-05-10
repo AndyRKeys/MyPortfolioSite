@@ -267,7 +267,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ## High-Risk Areas
 
 | File | Why | Mitigation |
-|------|-----|-----------|
+|------|-----|----------|
 | `admin.html` (18KB) | Monolithic, handles blog + travel + CV + deploy; one mistake breaks multiple features | Read full file before edits; test admin flows thoroughly |
 | `backend/routes/auth.js` (12KB) | WebAuthn state machine is complex; JWT + magic links state must be correct | High test coverage; read full file; don't eyeball auth logic |
 | `resources/java/admin.js` | Mirrors admin.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
@@ -295,6 +295,30 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **Branching rules** → README.md
 - **Dependency rules** → `docs/DEPENDENCIES.md`
 - **AI working instructions** → `docs/AI.md` (scope discipline, commit hygiene, workflow)
+
+---
+
+## Server Administration
+
+### Text Editor
+
+**micro** is the standard text editor for server-side work. It's modern, lightweight, and uses familiar shortcuts:
+
+- **Install:** `sudo apt install micro`
+- **Edit a file:** `micro ~/MyPortfolioSite-dev/.env`
+- **Key shortcuts:**
+  - `Ctrl+S` — save
+  - `Ctrl+Q` — quit
+  - `Ctrl+X/C/V` — cut/copy/paste
+  - `Ctrl+F` — find & replace
+  - `Ctrl+Z/Y` — undo/redo
+  - Mouse support for selection and clicking
+
+Set as your default editor:
+```bash
+echo 'export EDITOR=micro' >> ~/.bashrc
+source ~/.bashrc
+```
 
 ---
 
