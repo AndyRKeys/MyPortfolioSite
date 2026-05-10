@@ -23,4 +23,7 @@ else
 fi
 '@
 
+# Strip Windows CRLF line endings — bash on the server rejects them
+$remoteCommand = $remoteCommand -replace "`r`n", "`n"
+
 ssh $Hostname $remoteCommand
