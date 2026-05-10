@@ -203,33 +203,29 @@ fi
 
 section "Checking Docker maintenance setup"
 
-MAINTENANCE_OK=true
+NEED_CRON=false
+NEED_AUTOSTART=false
 
 # Check for Docker system prune cron job
 if sudo crontab -l 2>/dev/null | grep -q "docker system prune"; then
     ok "Docker cleanup cron job is scheduled"
 else
-    warn "Docker cleanup cron job not found"
-    warn "Schedule weekly cleanup to prevent disk issues:"
-    warn "  sudo crontab -e"
-    warn "  # Add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1"
-    MAINTENANCE_OK=false
+    warn "Docker cleanup cron job not found — will offer setup after deploy"
+    NEED_CRON=true
 fi
 
 # Check for autostart service
 if systemctl is-enabled myportfolio-dev.service &>/dev/null 2>&1; then
     ok "Dev autostart service is enabled"
 else
-    warn "Dev autostart service not enabled"
-    warn "Enable autostart on reboot:"
-    warn "  sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
-    MAINTENANCE_OK=false
+    warn "Dev autostart service not enabled — will offer setup after deploy"
+    NEED_AUTOSTART=true
 fi
 
-if [ "$MAINTENANCE_OK" = false ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn ""
-    warn "Some maintenance items are missing, but continuing deploy anyway."
-    warn "Configure them at your convenience to improve stability."
+    warn "Some maintenance items are missing. Deploy will continue and you"
+    warn "will be prompted to set them up once the site is healthy."
     warn ""
 fi
 
@@ -333,3 +329,47 @@ log "${BOLD}╔═════════════════════�
 log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
+
+# ── Section 10: Post-deploy maintenance setup ─────────────────────────────────────────────────
+
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
+    section "Optional maintenance setup"
+
+    if [ "$NEED_CRON" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Docker cleanup cron job is not scheduled."
+        echo "        Running 'docker system prune' weekly prevents disk issues over time."
+        read -r -p "        Set up weekly Docker cleanup cron now? [y/N] " _cron_resp
+        if [[ "$_cron_resp" =~ ^[Yy]$ ]]; then
+            (sudo crontab -l 2>/dev/null; echo "0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1") | sudo crontab -
+            ok "Weekly Docker cleanup cron scheduled (Sundays at 2 AM)"
+            log "[$(timestamp)] Cron job added by deploy script" | tee -a "$LOG_FILE"
+        else
+            warn "Skipped — run 'sudo crontab -e' to add it manually when ready."
+        fi
+    fi
+
+    if [ "$NEED_AUTOSTART" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Dev autostart service is not installed."
+        echo "        Without it, the dev stack won't come back up automatically after a reboot."
+        read -r -p "        Install autostart service now? [y/N] " _autostart_resp
+        if [[ "$_autostart_resp" =~ ^[Yy]$ ]]; then
+            if sudo bash "$DEV_REPO/scripts/setup/install-dev-autostart.sh"; then
+                ok "Dev autostart service installed and enabled"
+                log "[$(timestamp)] Autostart service installed by deploy script" | tee -a "$LOG_FILE"
+            else
+                warn "Autostart install failed — run manually: sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+            fi
+        else
+            warn "Skipped — run 'sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh' when ready."
+        fi
+    fi
+
+    if [ ! -t 0 ]; then
+        warn "Running non-interactively — skipping maintenance prompts."
+        warn "Set up missing items manually:"
+        [ "$NEED_CRON" = true ]      && warn "  Cron:      sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
+        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart: sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+    fi
+fi
