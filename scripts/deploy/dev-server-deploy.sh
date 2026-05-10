@@ -72,6 +72,7 @@ log "${BOLD}╔═════════════════════�
 log "${BOLD}║     Dev Server Deploy — $(timestamp)   ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
+log "[DEBUG] Script header: DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO' COMPOSE_FILE='$COMPOSE_FILE'" | tee -a "$LOG_FILE"
 
 # ── Section 1: Prerequisites ───────────────────────────────────────────────────────────
 
@@ -113,6 +114,9 @@ ok "All prerequisites satisfied (docker, git, curl)"
 
 section "Checking repository"
 
+echo "[DEBUG] PWD before repo checks: $(pwd)" | tee -a "$LOG_FILE"
+
+echo "[DEBUG] Checking DEV_REPO at '$DEV_REPO'" | tee -a "$LOG_FILE"
 if [ ! -d "$DEV_REPO" ]; then
     info "Dev repo not found at $DEV_REPO — cloning..."
     git clone "$REPO_URL" "$DEV_REPO" || die "git clone failed. Check your internet connection."
@@ -121,7 +125,10 @@ if [ ! -d "$DEV_REPO" ]; then
     ok "Repo cloned and set to $DEPLOY_BRANCH branch."
 else
     ok "Repo found at $DEV_REPO"
+    cd "$DEV_REPO"
 fi
+
+echo "[DEBUG] After cd DEV_REPO, PWD=$(pwd), HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')" | tee -a "$LOG_FILE"
 
 if [ ! -f "${DEV_REPO}/.env" ]; then
     if [ -f "${DEV_REPO}/.env.dev-server.example" ]; then
@@ -152,6 +159,8 @@ section "Checking SSL certificates for HTTPS"
 # Extract LAN_IP from .env for certificate generation
 LAN_IP_FOR_CERTS=$(grep "^LAN_IP=" "${DEV_REPO}/.env" | cut -d'=' -f2 | tr -d ' ')
 
+echo "[DEBUG] LAN_IP_FOR_CERTS='$LAN_IP_FOR_CERTS'" | tee -a "$LOG_FILE"
+
 if [ -z "$LAN_IP_FOR_CERTS" ]; then
     warn "LAN_IP not yet configured in .env — skipping cert generation for now"
 else
@@ -171,6 +180,10 @@ set -a
 # shellcheck disable=SC1090
 source <(grep -E '^[A-Z_]+=.' "${DEV_REPO}/.env" | grep -v '^#') 2>/dev/null || true
 set +a
+
+echo "[DEBUG] After sourcing .env: LAN_IP='${LAN_IP:-}' WEBAUTHN_ORIGIN='${WEBAUTHN_ORIGIN:-}' FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
+
+env | grep -E '^(LAN_IP|WEBAUTHN_ORIGIN|FRONTEND_URL)=' | sed 's/^/[DEBUG][env] /' | tee -a "$LOG_FILE"
 
 ENV_ERRORS=()
 
@@ -268,15 +281,23 @@ fi
 
 section "Building and starting dev services"
 
-# Check if package.json changed to avoid unnecessary rebuilds
 REBUILD_NEEDED="--build"
-if [ -n "${PREV_SHA:-}" ] && [ -n "${NEW_SHA:-}" ] && [ "$NEW_SHA" != "$PREV_SHA" ]; then
+
+if git rev-parse HEAD^ &>/dev/null; then
+    PREV_SHA=$(git rev-parse HEAD^)
+    NEW_SHA=$(git rev-parse HEAD)
+    echo "[DEBUG] PREV_SHA='$PREV_SHA' NEW_SHA='$NEW_SHA'" | tee -a "$LOG_FILE"
+
     PREV_PACKAGE_HASH=$(git show "$PREV_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
     NEW_PACKAGE_HASH=$(git show "$NEW_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
+    echo "[DEBUG] PREV_PACKAGE_HASH='$PREV_PACKAGE_HASH' NEW_PACKAGE_HASH='$NEW_PACKAGE_HASH'" | tee -a "$LOG_FILE"
+
     if [ "$PREV_PACKAGE_HASH" = "$NEW_PACKAGE_HASH" ]; then
         info "package.json unchanged — skipping rebuild (faster deploy)"
         REBUILD_NEEDED=""
     fi
+else
+    echo "[DEBUG] No previous commit available for package.json hash comparison" | tee -a "$LOG_FILE"
 fi
 
 # Clean shutdown before rebuild to avoid port conflicts and stale state
@@ -298,10 +319,15 @@ fi
 
 section "Waiting for site to become healthy"
 
+echo "[DEBUG] Entering health check with FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
+
 ATTEMPTS=$(( HEALTH_TIMEOUT / HEALTH_INTERVAL ))
 
 # -k to trust self-signed certificate on dev server
-_health_ok() { curl -sfk --max-time 4 "${FRONTEND_URL}/api/health" > /dev/null 2>&1; }
+_health_ok() {
+    echo "[DEBUG] _health_ok curl to '${FRONTEND_URL}/api/health'" | tee -a "$LOG_FILE"
+    curl -sfk --max-time 4 "${FRONTEND_URL}/api/health" > /dev/null 2>&1
+}
 
 _wait_for_health() {
     local label="$1"
@@ -414,10 +440,3 @@ log "${BOLD}╔═════════════════════�
 log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
-
-# ── Section 9: Post-deploy configuration setup ──────────────────────────────────────────────
-
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED" = true ]; then
-    section "Optional configuration setup"
-    # (unchanged UFW/cron/autostart logic follows...)
-fi
