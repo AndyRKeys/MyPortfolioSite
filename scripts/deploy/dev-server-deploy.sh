@@ -127,8 +127,8 @@ if [ ! -f "${DEV_REPO}/.env" ]; then
         warn "    DB_PASSWORD      — strong random password"
         warn "    JWT_SECRET       — random string, min 32 chars (openssl rand -base64 32)"
         warn "    WEBAUTHN_RP_ID   — same as LAN_IP (bare IP, no protocol/port)"
-        warn "    WEBAUTHN_ORIGIN  — http://<LAN_IP>:3001"
-        warn "    FRONTEND_URL     — http://<LAN_IP>:3001"
+        warn "    WEBAUTHN_ORIGIN  — https://<LAN_IP>:3001"
+        warn "    FRONTEND_URL     — https://<LAN_IP>:3001"
         warn ""
         die "Configure .env then re-run this script."
     else
@@ -137,6 +137,23 @@ if [ ! -f "${DEV_REPO}/.env" ]; then
 fi
 
 ok ".env file present"
+
+# ── Section 2.5: Generate SSL certificates ──────────────────────────────────────────────────
+
+section "Checking SSL certificates for HTTPS"
+
+# Extract LAN_IP from .env for certificate generation
+LAN_IP_FOR_CERTS=$(grep "^LAN_IP=" "${DEV_REPO}/.env" | cut -d'=' -f2 | tr -d ' ')
+
+if [ -z "$LAN_IP_FOR_CERTS" ]; then
+    warn "LAN_IP not yet configured in .env — skipping cert generation for now"
+else
+    if bash "${DEV_REPO}/scripts/setup/generate-dev-certs.sh" "$LAN_IP_FOR_CERTS" 2>&1 | tee -a "$LOG_FILE"; then
+        ok "SSL certificates ready"
+    else
+        die "Failed to generate SSL certificates. Check LAN_IP in .env."
+    fi
+fi
 
 # ── Section 3: Git update ───────────────────────────────────────────────────────────────────
 
