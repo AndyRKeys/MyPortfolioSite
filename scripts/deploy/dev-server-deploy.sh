@@ -110,8 +110,8 @@ if [ ! -d "$DEV_REPO" ]; then
     info "Dev repo not found at $DEV_REPO — cloning..."
     git clone "$REPO_URL" "$DEV_REPO" || die "git clone failed. Check your internet connection."
     cd "$DEV_REPO"
-    git checkout dev || die "Could not switch to dev branch."
-    ok "Repo cloned and set to dev branch."
+    git checkout "$DEPLOY_BRANCH" || die "Could not switch to $DEPLOY_BRANCH branch."
+    ok "Repo cloned and set to $DEPLOY_BRANCH branch."
 else
     ok "Repo found at $DEV_REPO"
 fi

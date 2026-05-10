@@ -29,7 +29,7 @@ if [ -f "`$DEPLOY_SCRIPT" ]; then
 else
     echo "[INFO] Dev repo not found — cloning for the first time..."
     git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
-    cd ~/MyPortfolioSite-dev && git checkout dev
+    cd ~/MyPortfolioSite-dev && git checkout "`$DEPLOY_BRANCH"
     bash scripts/deploy/dev-server-deploy.sh "`$DEPLOY_BRANCH"
 fi
 "@
