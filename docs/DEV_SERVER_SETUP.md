@@ -18,14 +18,34 @@ Note the address — it will look like `192.168.x.x`. You need it in step 3.
 
 ---
 
-## Step 2 — Open port 3001 to LAN only
+## Step 2 — Configure firewall (UFW)
+
+> ⚠️ **Add SSH first.** If you enable UFW without an SSH rule, you will lock yourself out of the server.
+
+Run these in order:
 
 ```bash
+# 1. Allow SSH (CRITICAL — do this before enabling UFW)
+sudo ufw allow 2222/tcp comment 'SSH'
+
+# 2. Allow dev site from LAN only
 sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'
-sudo ufw status | grep 3001
+
+# 3. Enable UFW
+sudo ufw enable
+
+# Verify all rules are in place
+sudo ufw status
 ```
 
-If your home network uses a `10.x.x.x` subnet, adjust the range accordingly.
+Expected output should show rules for port 2222 and 3001. If your home network uses a `10.x.x.x` subnet, adjust the port 3001 rule accordingly.
+
+**Required firewall rules summary:**
+
+| Port | Protocol | Source | Purpose |
+|------|----------|---------|---------|
+| 2222 | TCP | Any | SSH access |
+| 3001 | TCP | 192.168.0.0/16 | Dev site (LAN-only) |
 
 ---
 
@@ -213,6 +233,14 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs --tai
 ```bash
 sudo ufw status        # confirm the allow rule is present
 sudo lsof -i :3001     # confirm nginx-dev is listening
+```
+
+**SSH connection timeout (port 2222)**
+```bash
+# On the server, check SSH is allowed through UFW:
+sudo ufw status | grep 2222
+# If missing, add the rule:
+sudo ufw allow 2222/tcp comment 'SSH'
 ```
 
 **WebAuthn / passkey errors on the dev site**
