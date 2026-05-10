@@ -3,8 +3,9 @@
 # from Snap Docker to the official Docker CE packages on Ubuntu Server.
 #
 # This script:
-# - Logs relevant state using docker-migration-checklist.sh.
+# - Logs relevant state using docker-migration-inventory.sh.
 # - Discovers and backs up dev/prod env files using docker-env-discovery.sh and docker-env-backup.sh.
+# - Logs potential port/service conflicts before recreating stacks.
 # - Asks for explicit y/N confirmation before each step.
 # - Can run commands for you once you confirm.
 #
@@ -42,10 +43,10 @@ echo "       to Docker CE on Ubuntu. It will ask for confirmation before running
 echo "       potentially disruptive command."
 
 echo ""
-echo "Step 0: Inspect and log current Docker/Snap state (recommended)"
-echo "----------------------------------------------------------------"
-if confirm "Run docker-migration-checklist.sh now?"; then
-  bash "${SCRIPT_DIR}/docker-migration-checklist.sh" || echo "[WARN] checklist script failed"
+echo "Step 0: Inspect and log current Docker/Snap and host state (recommended)"
+echo "-----------------------------------------------------------------------"
+if confirm "Run docker-migration-inventory.sh now?"; then
+  bash "${SCRIPT_DIR}/docker-migration-inventory.sh" || echo "[WARN] inventory script failed"
 fi
 
 echo ""
@@ -108,6 +109,7 @@ echo ""
 echo "Step 5: Install Docker CE from official apt repository"
 echo "-------------------------------------------------------"
 echo "The following commands are recommended (from Docker docs)."
+
 echo "They will be run one by one if you confirm."
 
 if confirm "Install prerequisites (ca-certificates, curl, gnupg)?"; then
@@ -149,7 +151,29 @@ if confirm "Run these verification commands now?"; then
 fi
 
 echo ""
-echo "Step 8: Recreate MyPortfolioSite dev stack under Docker CE"
+echo "Step 8: Check for port/service conflicts before recreating stacks"
+echo "------------------------------------------------------------------"
+echo "This step will log any listeners on ports 80/443/3001/8081 and any apache/httpd/nginx/nextcloud services."
+echo "It will NOT stop or remove anything — it is purely informational."
+if confirm "Show potential conflicts now?"; then
+  if command -v ss >/dev/null 2>&1; then
+    echo "[INFO] Listeners on ports 80/443/3001/8081 (if any):"
+    ss -tulpn 2>/dev/null | grep -E ':(80|443|3001|8081)\b' || echo "[INFO] (no listeners on 80/443/3001/8081)"
+  elif command -v lsof >/dev/null 2>&1; then
+    echo "[INFO] Listeners on ports 80/443/3001/8081 (if any):"
+    lsof -iTCP -sTCP:LISTEN 2>/dev/null | grep -E ':(80|443|3001|8081)\b' || echo "[INFO] (no listeners on 80/443/3001/8081)"
+  else
+    echo "[WARN] neither ss nor lsof available to check ports"
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "[INFO] Active services matching apache/httpd/nginx/nextcloud (if any):"
+    systemctl list-units --type=service 2>/dev/null | grep -E 'apache|httpd|nginx|nextcloud' || echo "[INFO] (no matching services active)"
+  fi
+fi
+
+echo ""
+echo "Step 9: Recreate MyPortfolioSite dev stack under Docker CE"
 echo "-----------------------------------------------------------"
 echo "Command: cd ${DEV_PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml up -d --build"
 if confirm "Run this command now?"; then
@@ -162,7 +186,7 @@ else
 fi
 
 echo ""
-echo "Step 9: Recreate MyPortfolioSite prod stack under Docker CE"
+echo "Step 10: Recreate MyPortfolioSite prod stack under Docker CE"
 echo "-------------------------------------------------------------"
 echo "Command: cd ${PROD_PROJECT_ROOT} && docker compose -f docker-compose.prod.yml up -d --build"
 if confirm "Run this command now?"; then
@@ -175,7 +199,7 @@ else
 fi
 
 echo ""
-echo "Step 10: (Optional but recommended) Remove Docker Snap package once CE is healthy"
+echo "Step 11: (Optional but recommended) Remove Docker Snap package once CE is healthy"
 echo "---------------------------------------------------------------------------------"
 if snap list docker >/dev/null 2>&1; then
   echo "[INFO] Docker Snap is still installed."
