@@ -4,8 +4,9 @@
 #
 # This script:
 # - Logs relevant state using docker-migration-checklist.sh.
+# - Backs up dev/prod env files using docker-env-backup.sh.
 # - Asks for explicit y/N confirmation before each step.
-# - Can run some commands for you once you confirm.
+# - Can run commands for you once you confirm.
 #
 # WARNING:
 # - This script is intended to be run on your Ubuntu host, not inside a container.
@@ -30,8 +31,11 @@ echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║   Migrate Snap Docker → Docker CE (apt)  ║"
 echo "╚══════════════════════════════════════════╝"
-echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${PROJECT_ROOT:-$HOME/MyPortfolioSite-dev}"
+
+echo ""
 echo "[INFO] This script will walk you through the steps to migrate from Snap Docker"
 echo "       to Docker CE on Ubuntu. It will ask for confirmation before running any"
 echo "       potentially disruptive command."
@@ -40,15 +44,27 @@ echo ""
 echo "Step 0: Inspect and log current Docker/Snap state (recommended)"
 echo "----------------------------------------------------------------"
 if confirm "Run docker-migration-checklist.sh now?"; then
-  bash "$(dirname "$0")/docker-migration-checklist.sh" || echo "[WARN] checklist script failed"
+  bash "${SCRIPT_DIR}/docker-migration-checklist.sh" || echo "[WARN] checklist script failed"
 fi
 
 echo ""
-echo "Step 1: Stop MyPortfolioSite dev stack and remove orphans"
+echo "Step 1: Backup dev/prod env files"
+echo "---------------------------------"
+echo "This uses scripts/setup/docker-env-backup.sh to copy env files into"
+echo "~/docker-migration-backup/<timestamp> (or BACKUP_ROOT if overridden)."
+if confirm "Backup env files now?"; then
+  bash "${SCRIPT_DIR}/docker-env-backup.sh" backup || echo "[WARN] env backup script failed"
+else
+  echo "[INFO] Skipping automatic env backup (ensure you have backups before proceeding)."
+fi
+
+echo ""
+echo "Step 2: Stop MyPortfolioSite dev stack and remove orphans"
 echo "----------------------------------------------------------"
-if confirm "Stop dev stack with docker compose down --remove-orphans now?"; then
+echo "Command: cd ${PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml down --remove-orphans"
+if confirm "Run this command now?"; then
   echo "[INFO] Stopping dev stack..."
-  if cd "$HOME/MyPortfolioSite-dev" && docker compose -f docker-compose.dev-server.yml down --remove-orphans; then
+  if cd "${PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml down --remove-orphans; then
     echo "[OK] Dev stack stopped."
   else
     echo "[WARN] Failed to stop dev stack. Check output above." ; fi
@@ -57,13 +73,13 @@ else
 fi
 
 echo ""
-echo "Step 2: Stop Snap Docker daemon"
-echo "--------------------------------"
+echo "Step 3: Stop Snap Docker daemon (if present)"
+echo "--------------------------------------------"
 echo "Command: sudo systemctl stop snap.docker.dockerd"
 if confirm "Run this command now?"; then
   echo "[INFO] Stopping snap.docker.dockerd..."
   if sudo systemctl stop snap.docker.dockerd; then
-    echo "[OK] snap.docker.dockerd stopped."
+    echo "[OK] snap.docker.dockerd stopped (or not running)."
   else
     echo "[WARN] Failed to stop snap.docker.dockerd. Check output above." ; fi
 else
@@ -71,22 +87,27 @@ else
 fi
 
 echo ""
-echo "Step 3: Remove Docker Snap package"
-echo "-----------------------------------"
-echo "Command: sudo snap remove docker"
-echo "WARNING: This removes the Docker Snap package from the system."
-if confirm "Run this command now?"; then
-  echo "[INFO] Removing docker Snap package..."
-  if sudo snap remove docker; then
-    echo "[OK] docker Snap removed."
+echo "Step 4: Remove Docker Snap package (if installed)"
+echo "--------------------------------------------------"
+if snap list docker >/dev/null 2>&1; then
+  echo "[INFO] Docker Snap is installed."
+  echo "Command: sudo snap remove --purge docker"
+  echo "WARNING: This removes the Docker Snap package from the system."
+  if confirm "Run this command now?"; then
+    echo "[INFO] Removing docker Snap package..."
+    if sudo snap remove --purge docker; then
+      echo "[OK] docker Snap removed."
+    else
+      echo "[WARN] Failed to remove docker Snap. Check output above." ; fi
   else
-    echo "[WARN] Failed to remove docker Snap. Check output above." ; fi
+    echo "[INFO] Skipping automatic removal of docker Snap."
+  fi
 else
-  echo "[INFO] Skipping automatic removal of docker Snap."
+  echo "[INFO] Docker Snap is not installed (snap list docker returned nothing)."
 fi
 
 echo ""
-echo "Step 4: Install Docker CE from official apt repository"
+echo "Step 5: Install Docker CE from official apt repository"
 echo "-------------------------------------------------------"
 echo "The following commands are recommended (from Docker docs)."
 echo "They will be run one by one if you confirm."
@@ -108,7 +129,7 @@ if confirm "Install Docker CE, CLI, containerd, and compose plugin?"; then
 fi
 
 echo ""
-echo "Step 5: Add your user to the docker group and apply change"
+echo "Step 6: Add your user to the docker group and apply change"
 echo "---------------------------------------------------------"
 echo "Command: sudo usermod -aG docker $USER"
 echo "You may need to log out and back in, or run 'newgrp docker', for this to take effect."
@@ -120,7 +141,7 @@ else
 fi
 
 echo ""
-echo "Step 6: Verify Docker CE is working"
+echo "Step 7: Verify Docker CE is working"
 echo "------------------------------------"
 echo "Suggested commands: docker info, docker ps, docker compose version"
 if confirm "Run these verification commands now?"; then
@@ -130,11 +151,11 @@ if confirm "Run these verification commands now?"; then
 fi
 
 echo ""
-echo "Step 7: Recreate MyPortfolioSite dev stack under Docker CE"
+echo "Step 8: Recreate MyPortfolioSite dev stack under Docker CE"
 echo "-----------------------------------------------------------"
-echo "Command: cd ~/MyPortfolioSite-dev && docker compose -f docker-compose.dev-server.yml up -d --build"
+echo "Command: cd ${PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml up -d --build"
 if confirm "Run this command now?"; then
-  if cd "$HOME/MyPortfolioSite-dev" && docker compose -f docker-compose.dev-server.yml up -d --build; then
+  if cd "${PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml up -d --build; then
     echo "[OK] Dev stack recreated under Docker CE."
   else
     echo "[WARN] Failed to recreate dev stack. Check output above." ; fi
