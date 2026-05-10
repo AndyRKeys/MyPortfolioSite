@@ -222,8 +222,19 @@ fi
 
 section "Building and starting dev services"
 
-info "Running: docker compose up -d --build"
-if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
+# Check if package.json changed to avoid unnecessary rebuilds
+REBUILD_NEEDED="--build"
+if [ "$NEW_SHA" != "$PREV_SHA" ]; then
+    PREV_PACKAGE_HASH=$(git show "$PREV_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
+    NEW_PACKAGE_HASH=$(git show "$NEW_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
+    if [ "$PREV_PACKAGE_HASH" = "$NEW_PACKAGE_HASH" ]; then
+        info "package.json unchanged — skipping rebuild (faster deploy)"
+        REBUILD_NEEDED=""
+    fi
+fi
+
+info "Running: docker compose up -d $REBUILD_NEEDED"
+if ! docker compose -f "$COMPOSE_FILE" up -d $REBUILD_NEEDED 2>&1 | tee -a "$LOG_FILE"; then
     fail "docker compose up failed. Container logs:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 2>&1 | tee -a "$LOG_FILE"
     # Roll back to previous commit if there was one
