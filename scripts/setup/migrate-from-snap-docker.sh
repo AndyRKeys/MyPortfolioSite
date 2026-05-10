@@ -4,7 +4,7 @@
 #
 # This script:
 # - Logs relevant state using docker-migration-checklist.sh.
-# - Backs up dev/prod env files using docker-env-backup.sh.
+# - Discovers and backs up dev/prod env files using docker-env-discovery.sh and docker-env-backup.sh.
 # - Asks for explicit y/N confirmation before each step.
 # - Can run commands for you once you confirm.
 #
@@ -33,7 +33,8 @@ echo "║   Migrate Snap Docker → Docker CE (apt)  ║"
 echo "╚══════════════════════════════════════════╝"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${PROJECT_ROOT:-$HOME/MyPortfolioSite-dev}"
+DEV_PROJECT_ROOT="${DEV_PROJECT_ROOT:-$HOME/MyPortfolioSite-dev}"
+PROD_PROJECT_ROOT="${PROD_PROJECT_ROOT:-$HOME/MyPortfolioSite}"
 
 echo ""
 echo "[INFO] This script will walk you through the steps to migrate from Snap Docker"
@@ -48,23 +49,26 @@ if confirm "Run docker-migration-checklist.sh now?"; then
 fi
 
 echo ""
-echo "Step 1: Backup dev/prod env files"
-echo "---------------------------------"
-echo "This uses scripts/setup/docker-env-backup.sh to copy env files into"
-echo "~/docker-migration-backup/<timestamp> (or BACKUP_ROOT if overridden)."
-if confirm "Backup env files now?"; then
+echo "Step 1: Discover and back up dev/prod env files"
+echo "-----------------------------------------------"
+echo "This will:" 
+echo "  - Run docker-env-discovery.sh to log where dev/prod stacks and env files live."
+echo "  - Run docker-env-backup.sh to copy .env files into"
+echo "    ~/docker-migration-backup/<timestamp> (or BACKUP_ROOT if overridden)."
+if confirm "Run discovery + env backup now?"; then
+  bash "${SCRIPT_DIR}/docker-env-discovery.sh" || echo "[WARN] env discovery script failed"
   bash "${SCRIPT_DIR}/docker-env-backup.sh" backup || echo "[WARN] env backup script failed"
 else
-  echo "[INFO] Skipping automatic env backup (ensure you have backups before proceeding)."
+  echo "[INFO] Skipping automatic env discovery/backup (ensure you have backups before proceeding)."
 fi
 
 echo ""
 echo "Step 2: Stop MyPortfolioSite dev stack and remove orphans"
 echo "----------------------------------------------------------"
-echo "Command: cd ${PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml down --remove-orphans"
+echo "Command: cd ${DEV_PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml down --remove-orphans"
 if confirm "Run this command now?"; then
   echo "[INFO] Stopping dev stack..."
-  if cd "${PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml down --remove-orphans; then
+  if cd "${DEV_PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml down --remove-orphans; then
     echo "[OK] Dev stack stopped."
   else
     echo "[WARN] Failed to stop dev stack. Check output above." ; fi
@@ -73,7 +77,21 @@ else
 fi
 
 echo ""
-echo "Step 3: Stop Snap Docker daemon (if present)"
+echo "Step 3: Stop MyPortfolioSite prod stack and remove orphans (if running)"
+echo "-------------------------------------------------------------------------"
+echo "Command: cd ${PROD_PROJECT_ROOT} && docker compose -f docker-compose.prod.yml down --remove-orphans"
+if confirm "Run this command now?"; then
+  echo "[INFO] Stopping prod stack..."
+  if cd "${PROD_PROJECT_ROOT}" && docker compose -f docker-compose.prod.yml down --remove-orphans; then
+    echo "[OK] Prod stack stopped."
+  else
+    echo "[WARN] Failed to stop prod stack. Check output above." ; fi
+else
+  echo "[INFO] Skipping automatic prod stack stop (you can do this manually)."
+fi
+
+echo ""
+echo "Step 4: Stop Snap Docker daemon (if present)"
 echo "--------------------------------------------"
 echo "Command: sudo systemctl stop snap.docker.dockerd"
 if confirm "Run this command now?"; then
@@ -87,7 +105,7 @@ else
 fi
 
 echo ""
-echo "Step 4: Remove Docker Snap package (if installed)"
+echo "Step 5: Remove Docker Snap package (if installed)"
 echo "--------------------------------------------------"
 if snap list docker >/dev/null 2>&1; then
   echo "[INFO] Docker Snap is installed."
@@ -107,7 +125,7 @@ else
 fi
 
 echo ""
-echo "Step 5: Install Docker CE from official apt repository"
+echo "Step 6: Install Docker CE from official apt repository"
 echo "-------------------------------------------------------"
 echo "The following commands are recommended (from Docker docs)."
 echo "They will be run one by one if you confirm."
@@ -129,7 +147,7 @@ if confirm "Install Docker CE, CLI, containerd, and compose plugin?"; then
 fi
 
 echo ""
-echo "Step 6: Add your user to the docker group and apply change"
+echo "Step 7: Add your user to the docker group and apply change"
 echo "---------------------------------------------------------"
 echo "Command: sudo usermod -aG docker $USER"
 echo "You may need to log out and back in, or run 'newgrp docker', for this to take effect."
@@ -141,7 +159,7 @@ else
 fi
 
 echo ""
-echo "Step 7: Verify Docker CE is working"
+echo "Step 8: Verify Docker CE is working"
 echo "------------------------------------"
 echo "Suggested commands: docker info, docker ps, docker compose version"
 if confirm "Run these verification commands now?"; then
@@ -151,16 +169,29 @@ if confirm "Run these verification commands now?"; then
 fi
 
 echo ""
-echo "Step 8: Recreate MyPortfolioSite dev stack under Docker CE"
+echo "Step 9: Recreate MyPortfolioSite dev stack under Docker CE"
 echo "-----------------------------------------------------------"
-echo "Command: cd ${PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml up -d --build"
+echo "Command: cd ${DEV_PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml up -d --build"
 if confirm "Run this command now?"; then
-  if cd "${PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml up -d --build; then
+  if cd "${DEV_PROJECT_ROOT}" && docker compose -f docker-compose.dev-server.yml up -d --build; then
     echo "[OK] Dev stack recreated under Docker CE."
   else
     echo "[WARN] Failed to recreate dev stack. Check output above." ; fi
 else
   echo "[INFO] Skipping automatic dev stack recreation (you can run it manually)."
+fi
+
+echo ""
+echo "Step 10: Recreate MyPortfolioSite prod stack under Docker CE"
+echo "-------------------------------------------------------------"
+echo "Command: cd ${PROD_PROJECT_ROOT} && docker compose -f docker-compose.prod.yml up -d --build"
+if confirm "Run this command now?"; then
+  if cd "${PROD_PROJECT_ROOT}" && docker compose -f docker-compose.prod.yml up -d --build; then
+    echo "[OK] Prod stack recreated under Docker CE."
+  else
+    echo "[WARN] Failed to recreate prod stack. Check output above." ; fi
+else
+  echo "[INFO] Skipping automatic prod stack recreation (you can run it manually)."
 fi
 
 echo ""
