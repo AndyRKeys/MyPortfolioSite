@@ -265,6 +265,56 @@ sudo reboot
 
 ---
 
+## Recovery & Self-Healing
+
+The deploy script automatically attempts recovery before giving up. When the health check fails after a deploy, it escalates through three tiers before rolling back:
+
+| Tier | Action | When |
+|------|--------|------|
+| 1 | Restart backend container only | Health check fails after `up` |
+| 2 | Full `down` + `up` (no rebuild) | Tier 1 fails |
+| Rollback | Reset to previous git commit + rebuild | Tier 2 fails |
+
+### Consecutive failure tracking
+
+The script tracks consecutive failures in `~/.dev-deploy-failures`. On success this file is cleared. If failures accumulate:
+
+- **2 failures** — script recommends `docker system prune -f`
+- **3+ failures** — script recommends nuclear rebuild (see below)
+
+Check the current failure count:
+```bash
+cat ~/.dev-deploy-failures 2>/dev/null || echo "0"
+```
+
+Reset manually (e.g. after fixing a known issue):
+```bash
+rm -f ~/.dev-deploy-failures
+```
+
+### Nuclear rebuild (last resort)
+
+When normal recovery fails, the nuclear rebuild tears down all containers, images, and networks and rebuilds from scratch. **The database is preserved by default.**
+
+```bash
+bash ~/MyPortfolioSite-dev/scripts/setup/nuclear-rebuild.sh
+```
+
+You must type `nuclear` at the prompt to confirm. After it completes, re-run the deploy script:
+
+```bash
+bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
+```
+
+**If the database schema is also corrupt** (very rare — use only when you know data is unrecoverable):
+```bash
+bash ~/MyPortfolioSite-dev/scripts/setup/nuclear-rebuild.sh --wipe-db
+```
+
+⚠️ `--wipe-db` permanently destroys all blog posts, users, and data. There is no undo.
+
+---
+
 ## Docker Maintenance
 
 To keep the dev server stable and prevent Docker issues, maintain the Docker system regularly:
