@@ -1,9 +1,9 @@
 # Release Notes
 
-## Release 2026-05-09-3
+## Release 2026-06-10
 
-**Released:** 2026-05-09  
-**Branch:** release/2026-05-09-3  
+**Released:** 2026-06-10  
+**Branch:** release/2026-06-10  
 **PR:** #TBD  
 **Closes:** #159
 
