@@ -56,6 +56,7 @@ export function createApp() {
 
   // Health check endpoint — no auth required, lightweight DB verification
   app.get('/health', healthRouter);
+  app.get('/api/health', healthRouter);
 
   // Centralised error handler — must be last
   app.use(errorHandler);
