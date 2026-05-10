@@ -462,7 +462,21 @@ else
             warn "Skipped Snap Docker daemon restart at user request."
         fi
 
-        docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE" || true
+        # ── Self-heal Tier 2c: handle container ID conflicts after daemon restart
+        if ask_yes_no "Docker may have stale dev containers (ID conflicts). Run 'docker compose down --remove-orphans' and re-create the dev stack?" "N"; then
+            warn "Running docker compose down --remove-orphans to clear dev stack..."
+            docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+
+            info "Re-creating dev stack after cleanup..."
+            if ! docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
+                fail "docker compose up failed even after cleanup."
+                _dump_logs
+                increment_failure_count
+                die "Deploy failed after Snap cleanup and re-create — see log at $LOG_FILE"
+            fi
+        else
+            warn "Skipped container cleanup; dev stack may still have stale containers."
+        fi
 
         if _wait_for_health "after full restart"; then
             ok "✓ Recovered after full stack restart"
