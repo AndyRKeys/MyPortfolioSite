@@ -2,26 +2,27 @@
 # HTTPS on port 3001 with self-signed certificate for WebAuthn support.
 # Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST
 
-# HTTP → HTTPS redirect
+# HTTP → HTTPS redirect (disabled in no-SSL dev branch)
+# server {
+#     listen 3001;
+#     server_name ${DOMAIN} localhost;
+#     return 301 https://$host$request_uri;
+# }
+
+# HTTP server (no SSL) for dev
 server {
+    # listen 3001 ssl;
     listen 3001;
     server_name ${DOMAIN} localhost;
-    return 301 https://$host$request_uri;
-}
 
-# HTTPS server
-server {
-    listen 3001 ssl;
-    server_name ${DOMAIN} localhost;
+    # SSL certificate paths (disabled in no-SSL dev branch)
+    # ssl_certificate     /etc/nginx/certs/dev-server.crt;
+    # ssl_certificate_key /etc/nginx/certs/dev-server.key;
 
-    # SSL certificate paths (mounted from host in docker-compose)
-    ssl_certificate     /etc/nginx/certs/dev-server.crt;
-    ssl_certificate_key /etc/nginx/certs/dev-server.key;
-
-    # Modern SSL configuration
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
+    # Modern SSL configuration (not used without SSL)
+    # ssl_protocols TLSv1.2 TLSv1.3;
+    # ssl_ciphers HIGH:!aNULL:!MD5;
+    # ssl_prefer_server_ciphers on;
 
     root ${REPO_DIR};
     index index.html;
