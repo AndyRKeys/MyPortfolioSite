@@ -198,28 +198,16 @@ section "Checking firewall (UFW)"
 
 NEED_UFW_ENABLE=false
 NEED_UFW_RULE=false
+UFW_INSTALLED=false
 
+# Checking UFW status requires sudo which can prompt for a password mid-deploy.
+# Just detect if UFW is installed here; actual status check happens post-deploy
+# in Section 10 where interactive sudo is already expected.
 if command -v ufw &>/dev/null; then
-    # Use -n flag to prevent password prompt; timeout in case sudo/ufw hang
-    UFW_STATUS=$(timeout 5 sudo -n ufw status 2>/dev/null || echo "")
-    if [ -z "$UFW_STATUS" ]; then
-        warn "Could not check UFW status (may require password) — skipping firewall checks"
-    elif echo "$UFW_STATUS" | grep -q "Status: active"; then
-        ok "UFW is active"
-        if echo "$UFW_STATUS" | grep -q "3001"; then
-            ok "UFW rule for port 3001 is present"
-        else
-            warn "UFW is active but rule for port 3001 not found — will offer setup after deploy"
-            NEED_UFW_RULE=true
-        fi
-    elif echo "$UFW_STATUS" | grep -q "Status: inactive"; then
-        warn "UFW is installed but inactive — will offer to enable after deploy"
-        NEED_UFW_ENABLE=true
-    else
-        warn "Could not determine UFW status — skipping firewall checks"
-    fi
+    UFW_INSTALLED=true
+    info "UFW is installed — status will be checked after deploy"
 else
-    info "UFW not installed (optional)"
+    info "UFW not installed (optional for LAN access control)"
 fi
 
 # ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
@@ -229,8 +217,8 @@ section "Checking Docker maintenance setup"
 NEED_CRON=false
 NEED_AUTOSTART=false
 
-# Check for Docker system prune cron job
-if timeout 5 sudo -n crontab -l 2>/dev/null | grep -q "docker system prune"; then
+# Check for Docker system prune cron job (check user crontab without sudo)
+if crontab -l 2>/dev/null | grep -q "docker system prune"; then
     ok "Docker cleanup cron job is scheduled"
 else
     warn "Docker cleanup cron job not found — will offer setup after deploy"
@@ -245,7 +233,7 @@ else
     NEED_AUTOSTART=true
 fi
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn ""
     warn "Some configuration items are missing. Deploy will continue and you"
     warn "will be prompted to set them up once the site is healthy."
@@ -356,8 +344,24 @@ log ""
 
 # ── Section 10: Post-deploy configuration setup ──────────────────────────────────────────────
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED" = true ]; then
     section "Optional configuration setup"
+
+    # UFW status check happens here, post-deploy, where interactive sudo is expected
+    if [ "$UFW_INSTALLED" = true ] && [ -t 0 ]; then
+        _ufw_status=$(sudo ufw status 2>/dev/null)
+        if echo "$_ufw_status" | grep -q "Status: active"; then
+            if echo "$_ufw_status" | grep -q "3001"; then
+                ok "UFW is active and port 3001 rule is present"
+            else
+                NEED_UFW_RULE=true
+            fi
+        elif echo "$_ufw_status" | grep -q "Status: inactive"; then
+            NEED_UFW_ENABLE=true
+        else
+            warn "Could not determine UFW status — verify manually: sudo ufw status"
+        fi
+    fi
 
     if [ "$NEED_UFW_ENABLE" = true ] && [ -t 0 ]; then
         echo ""
@@ -430,8 +434,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABL
     if [ ! -t 0 ]; then
         warn "Running non-interactively — skipping setup prompts."
         warn "Set up missing items manually:"
-        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw allow 22/tcp && sudo ufw enable"
-        [ "$NEED_UFW_RULE" = true ]  && warn "  UFW rule:     sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+        [ "$UFW_INSTALLED" = true ]  && warn "  UFW:          sudo ufw status | grep 3001  (verify port 3001 is allowed from LAN)"
         [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
         [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
     fi
