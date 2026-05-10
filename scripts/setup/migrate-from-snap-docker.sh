@@ -105,27 +105,7 @@ else
 fi
 
 echo ""
-echo "Step 5: Remove Docker Snap package (if installed)"
-echo "--------------------------------------------------"
-if snap list docker >/dev/null 2>&1; then
-  echo "[INFO] Docker Snap is installed."
-  echo "Command: sudo snap remove --purge docker"
-  echo "WARNING: This removes the Docker Snap package from the system."
-  if confirm "Run this command now?"; then
-    echo "[INFO] Removing docker Snap package..."
-    if sudo snap remove --purge docker; then
-      echo "[OK] docker Snap removed."
-    else
-      echo "[WARN] Failed to remove docker Snap. Check output above." ; fi
-  else
-    echo "[INFO] Skipping automatic removal of docker Snap."
-  fi
-else
-  echo "[INFO] Docker Snap is not installed (snap list docker returned nothing)."
-fi
-
-echo ""
-echo "Step 6: Install Docker CE from official apt repository"
+echo "Step 5: Install Docker CE from official apt repository"
 echo "-------------------------------------------------------"
 echo "The following commands are recommended (from Docker docs)."
 echo "They will be run one by one if you confirm."
@@ -147,7 +127,7 @@ if confirm "Install Docker CE, CLI, containerd, and compose plugin?"; then
 fi
 
 echo ""
-echo "Step 7: Add your user to the docker group and apply change"
+echo "Step 6: Add your user to the docker group and apply change"
 echo "---------------------------------------------------------"
 echo "Command: sudo usermod -aG docker $USER"
 echo "You may need to log out and back in, or run 'newgrp docker', for this to take effect."
@@ -159,7 +139,7 @@ else
 fi
 
 echo ""
-echo "Step 8: Verify Docker CE is working"
+echo "Step 7: Verify Docker CE is working"
 echo "------------------------------------"
 echo "Suggested commands: docker info, docker ps, docker compose version"
 if confirm "Run these verification commands now?"; then
@@ -169,7 +149,7 @@ if confirm "Run these verification commands now?"; then
 fi
 
 echo ""
-echo "Step 9: Recreate MyPortfolioSite dev stack under Docker CE"
+echo "Step 8: Recreate MyPortfolioSite dev stack under Docker CE"
 echo "-----------------------------------------------------------"
 echo "Command: cd ${DEV_PROJECT_ROOT} && docker compose -f docker-compose.dev-server.yml up -d --build"
 if confirm "Run this command now?"; then
@@ -182,7 +162,7 @@ else
 fi
 
 echo ""
-echo "Step 10: Recreate MyPortfolioSite prod stack under Docker CE"
+echo "Step 9: Recreate MyPortfolioSite prod stack under Docker CE"
 echo "-------------------------------------------------------------"
 echo "Command: cd ${PROD_PROJECT_ROOT} && docker compose -f docker-compose.prod.yml up -d --build"
 if confirm "Run this command now?"; then
@@ -192,6 +172,27 @@ if confirm "Run this command now?"; then
     echo "[WARN] Failed to recreate prod stack. Check output above." ; fi
 else
   echo "[INFO] Skipping automatic prod stack recreation (you can run it manually)."
+fi
+
+echo ""
+echo "Step 10: (Optional but recommended) Remove Docker Snap package once CE is healthy"
+echo "---------------------------------------------------------------------------------"
+if snap list docker >/dev/null 2>&1; then
+  echo "[INFO] Docker Snap is still installed."
+  echo "Command: sudo snap remove --purge docker"
+  echo "WARNING: Only do this once you have confirmed the Docker CE dev/prod stacks"
+  echo "         are healthy and you no longer need the Snap-managed Docker."
+  if confirm "Remove docker Snap package now?"; then
+    echo "[INFO] Removing docker Snap package..."
+    if sudo snap remove --purge docker; then
+      echo "[OK] docker Snap removed."
+    else
+      echo "[WARN] Failed to remove docker Snap. Check output above." ; fi
+  else
+    echo "[INFO] Skipping removal of docker Snap (you can run this later)."
+  fi
+else
+  echo "[INFO] Docker Snap is not installed (snap list docker returned nothing)."
 fi
 
 echo ""
