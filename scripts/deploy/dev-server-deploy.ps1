@@ -5,10 +5,11 @@
 # On subsequent runs it updates the specified branch and then invokes
 # the main dev-server-deploy.sh script on the server.
 #
-# The script automatically detects your current git branch and deploys from it.
+# The script automatically detects your current git branch if -Branch is not set.
 # This enables rapid testing of feature/fix branches without creating a PR.
 #
 # Usage: .\scripts\deploy\dev-server-deploy.ps1 [-Hostname <name>] [-Branch <branch>]
+
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = ''
@@ -21,7 +22,9 @@ if ([string]::IsNullOrEmpty($Branch)) {
 }
 
 # Remote command: ensure dev repo exists, update to requested branch via
-# the wrapper script, then run the main deploy.
+# the wrapper script, then run the main deploy. The wrapper is responsible for
+# resetting the failure counter (via --reset-failures) so the PowerShell caller
+# does not need to manage that flag.
 $remoteCommand = @"
 WRAPPER_SCRIPT=~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh
 DEPLOY_BRANCH="$Branch"
