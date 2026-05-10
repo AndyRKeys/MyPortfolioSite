@@ -1,5 +1,31 @@
 # Release Notes
 
+## Release 2026-06-10
+
+**Released:** 2026-06-10  
+**Branch:** release/2026-06-10  
+**PR:** #206  
+**Closes:** #159
+
+### Features
+
+**Dev environment on Ubuntu Server — LAN-only, port 3001 (PR #201)**
+- feat(#159): `docker-compose.dev-server.yml` — separate Docker stack running the `dev` branch alongside production; services: `postgres-dev` (`portfolio_dev` DB), `backend-dev` (port 8081 internal), `nginx-dev` (port 3001, LAN-only)
+- feat(#159): `scripts/config/nginx-dev-server.conf.template` — HTTP-only nginx on port 3001 with full security headers (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy)
+- feat(#159): `.env.dev-server.example` — env template documenting `LAN_IP`, separate DB and JWT secrets, and WebAuthn origin pointing at `http://<LAN_IP>:3001`
+- feat(#159): `scripts/deploy/dev-server-deploy.sh` — unified setup and deploy script; handles first-time clone, `.env` creation and validation (required vars, placeholder detection, JWT length, WebAuthn consistency), UFW check, git update with rollback on failure, Docker build, health polling with auto log-dump, and deploy summary
+- feat(#159): `scripts/deploy/dev-server-deploy.ps1` — Windows PowerShell wrapper; SSHes into `ak-home-server` and invokes the bash deploy script (mirrors `prod-deploy.ps1` pattern)
+- docs(#159): `docs/DEV_SERVER_SETUP.md` — first-time setup guide: find LAN IP, open UFW port, run the deploy script (3 steps; script handles the rest)
+- docs(#159): `docs/INFRASTRUCTURE.md` — new dev server section and updated 3-way environment comparison table (prod / dev-server / local)
+
+### Breaking Changes / Deployment Notes
+
+- No changes to production — the dev stack is fully isolated (separate compose file, DB, ports, and repo directory `~/MyPortfolioSite-dev`)
+- No backend restart or DB migration required for the live site
+- To start the dev environment on the server for the first time: open UFW port 3001, then run `dev-server-deploy.ps1` from Windows (or the bash script directly on the server)
+
+---
+
 ## Release 2026-05-09-2
 
 **Released:** 2026-05-09  

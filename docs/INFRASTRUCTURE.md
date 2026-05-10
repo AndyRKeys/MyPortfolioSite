@@ -68,7 +68,7 @@ All production services run as Docker containers managed by `docker compose -f d
 ### Docker Volume Names
 
 | Volume | Purpose |
-|--------|----------|
+|--------|---------|
 | `myportfoliosite_postgres_data` | PostgreSQL data directory (persists across deploys) |
 | `myportfoliosite_uploads_data` | User-uploaded files (CVs, images) |
 
@@ -389,20 +389,110 @@ sudo journalctl --vacuum=100M   # trim systemd logs
 
 ---
 
+## Dev Environment on Ubuntu Server (LAN-only)
+
+A second environment runs the `dev` branch on the same Ubuntu Server, accessible only on the local network at `http://<LAN_IP>:3001`. This lets you test `dev` changes on real hardware without touching the live site.
+
+### Repository layout
+
+```
+/home/<username>/
+├── MyPortfolioSite/          ← main branch (production)
+└── MyPortfolioSite-dev/      ← dev branch (LAN dev environment)
+    ├── docker-compose.dev-server.yml
+    └── .env                  ← dev env vars (from .env.dev-server.example)
+```
+
+### First-time setup
+
+```bash
+# 1. Clone the repo to a separate directory and switch to dev
+git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
+cd ~/MyPortfolioSite-dev
+git checkout dev
+
+# 2. Create the env file and fill in values (especially LAN_IP)
+cp .env.dev-server.example .env
+nano .env
+
+# 3. Open port 3001 to LAN only (adjust subnet to match your home network)
+sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'
+
+# 4. Start dev services
+docker compose -f docker-compose.dev-server.yml up -d --build
+```
+
+### Deploy (update to latest dev branch)
+
+```bash
+bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
+```
+
+Logs are written to `~/dev-deploy.log`.
+
+### Service commands
+
+```bash
+# Status
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml ps
+
+# Logs
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs -f backend-dev
+
+# Stop dev environment (frees resources when not in use)
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml down
+
+# Restart one service
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml restart backend-dev
+```
+
+### Dev services
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| **nginx-dev** | nginx:alpine | 3001 → host (LAN only) | HTTP reverse proxy + static files |
+| **backend-dev** | myportfoliosite-backend (prod build) | 8081 (internal) | Express API |
+| **postgres-dev** | postgres:16-alpine | internal only | Separate DB (`portfolio_dev`) |
+
+### Key differences from production
+
+| Aspect | Production | Dev Server |
+|--------|-----------|------------|
+| Branch | `main` | `dev` |
+| Compose file | `docker-compose.prod.yml` | `docker-compose.dev-server.yml` |
+| Port | 80 / 443 | 3001 |
+| SSL | Let's Encrypt | None (HTTP only) |
+| Database | `portfolio_prod` | `portfolio_dev` |
+| Backend port | 8080 (internal) | 8081 (internal) |
+| Access | Public internet | LAN only (UFW rule) |
+| WebAuthn origin | `https://<domain>` | `http://<LAN_IP>:3001` |
+
+### Environment variables
+
+See `.env.dev-server.example` for the full reference. Critical values to set:
+- `LAN_IP` — server's LAN IP (find with `ip -4 addr show`)
+- `DB_PASSWORD` — strong random password (different from prod)
+- `JWT_SECRET` — different from prod JWT secret
+- `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN` — must match `http://<LAN_IP>:3001`
+
+---
+
 ## Production vs Dev Environment
 
 With Docker Compose in production, dev and prod are now structurally aligned:
 
-| Aspect | Production (Ubuntu Server) | Development (local Docker) |
-|--------|---|---|
-| **Compose file** | `docker-compose.prod.yml` | `docker-compose.yml` |
-| **Backend image** | Prod build target (no devDeps) | Dev build target (devDeps + hot reload) |
-| **Source code** | In Docker image | Bind-mounted for hot reload |
-| **Database** | Named volume (persists) | Named volume (persists) |
-| **Nginx** | Port 80 + 443 (SSL) | Port 80 only (no SSL) |
-| **SSL** | Let's Encrypt (host certbot, volume-mounted) | None |
-| **Env vars** | `.env` in repo root | `.env` in repo root |
-| **Logs** | `docker compose -f docker-compose.prod.yml logs` | `docker compose logs` |
+| Aspect | Production (Ubuntu Server) | Dev Server (Ubuntu Server LAN) | Local Dev (Windows) |
+|--------|---|---|---|
+| **Compose file** | `docker-compose.prod.yml` | `docker-compose.dev-server.yml` | `docker-compose.yml` |
+| **Branch** | `main` | `dev` | any |
+| **Backend image** | Prod build target (no devDeps) | Prod build target (no devDeps) | Dev build target (devDeps + hot reload) |
+| **Source code** | In Docker image | In Docker image | Bind-mounted for hot reload |
+| **Database** | `portfolio_prod` | `portfolio_dev` | `portfolio_dev` |
+| **Nginx** | Port 80 + 443 (SSL) | Port 3001 (no SSL) | Port 80 (no SSL) |
+| **SSL** | Let's Encrypt | None | None |
+| **Access** | Public internet | LAN only (UFW) | localhost only |
+| **Repo path** | `~/MyPortfolioSite` | `~/MyPortfolioSite-dev` | local clone |
+| **Logs** | `docker compose -f docker-compose.prod.yml logs` | `docker compose -f docker-compose.dev-server.yml logs` | `docker compose logs` |
 
 ---
 
