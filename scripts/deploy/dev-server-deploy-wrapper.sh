@@ -43,5 +43,6 @@ fi
 
 echo "[DEBUG][wrapper] HEAD is now at $(git rev-parse --short HEAD) on branch '$DEPLOY_BRANCH'" >&2
 
-# Now run the actual deploy script from the updated working tree
-exec bash "$DEV_REPO/scripts/deploy/dev-server-deploy.sh" "$DEPLOY_BRANCH"
+# Now run the actual deploy script from the updated working tree, always
+# resetting the failure counter for wrapper-driven runs.
+exec bash "$DEV_REPO/scripts/deploy/dev-server-deploy.sh" "$DEPLOY_BRANCH" --reset-failures
