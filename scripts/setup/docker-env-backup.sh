@@ -83,17 +83,25 @@ restore_envs() {
   local any=0
 
   if [[ -f "${backup_dir}/.env.dev" ]]; then
-    cp "${backup_dir}/.env.dev" "${DEV_ENV_FILE}"
-    echo "[OK] Restored dev env to: ${DEV_ENV_FILE}"
-    any=1
+    if [[ -f "${DEV_ENV_FILE}" ]]; then
+      echo "[INFO] Dev env already exists at ${DEV_ENV_FILE}; leaving in place."
+    else
+      cp "${backup_dir}/.env.dev" "${DEV_ENV_FILE}"
+      echo "[OK] Restored dev env to: ${DEV_ENV_FILE}"
+      any=1
+    fi
   else
     echo "[WARN] Dev env backup not found in: ${backup_dir}"
   fi
 
   if [[ -f "${backup_dir}/.env.prod" ]]; then
-    cp "${backup_dir}/.env.prod" "${PROD_ENV_FILE}"
-    echo "[OK] Restored prod env to: ${PROD_ENV_FILE}"
-    any=1
+    if [[ -f "${PROD_ENV_FILE}" ]]; then
+      echo "[INFO] Prod env already exists at ${PROD_ENV_FILE}; leaving in place."
+    else
+      cp "${backup_dir}/.env.prod" "${PROD_ENV_FILE}"
+      echo "[OK] Restored prod env to: ${PROD_ENV_FILE}"
+      any=1
+    fi
   else
     echo "[WARN] Prod env backup not found in: ${backup_dir}"
   fi
