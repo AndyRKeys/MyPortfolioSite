@@ -6,6 +6,7 @@
 # - Where Docker data directories live.
 # - Basic docker info / ps output (if available).
 # - Presence of dev/prod project roots and .env files.
+# - Presence of conflicting web servers/snaps/services on HTTP/HTTPS ports.
 #
 # Usage:
 #   bash scripts/setup/docker-migration-inventory.sh
@@ -69,6 +70,39 @@ log ""
 log "[INFO] docker ps (if reachable):"
 if command -v docker >/dev/null 2>&1; then
   docker ps 2>&1 | tee -a "${LOG_FILE}" || log "[WARN] docker ps failed (daemon not reachable?)"
+fi
+log ""
+
+# Conflicting packages and services (Apache/Nginx/Nextcloud etc.)
+log "[INFO] Checking for potentially conflicting web server packages (apache2|nginx|httpd):"
+dpkg -l 2>/dev/null | grep -E 'apache2|nginx|httpd' || log "(no apache2/nginx/httpd packages found)"
+log ""
+
+log "[INFO] Checking for potentially conflicting snaps (nextcloud|apache|nginx):"
+if command -v snap >/dev/null 2>&1; then
+  snap list 2>/dev/null | grep -E 'nextcloud|apache|nginx' || log "(no nextcloud/apache/nginx snaps found)"
+else
+  log "snap not installed"
+fi
+log ""
+
+log "[INFO] Checking active services for apache/httpd/nginx/nextcloud:"
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl list-units --type=service 2>/dev/null | grep -E 'apache|httpd|nginx|nextcloud' || log "(no matching services active)"
+else
+  log "systemctl not available"
+fi
+log ""
+
+log "[INFO] Checking listeners on ports 80/443/3001/8081:"
+if command -v ss >/dev/null 2>&1; then
+  ss -tulpn 2>/dev/null | grep -E ':(80|443|3001|8081)\b' || log "(no listeners on 80/443/3001/8081)"
+else
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP -sTCP:LISTEN 2>/dev/null | grep -E ':(80|443|3001|8081)\b' || log "(no listeners on 80/443/3001/8081)"
+  else
+    log "neither ss nor lsof available to check ports"
+  fi
 fi
 log ""
 
