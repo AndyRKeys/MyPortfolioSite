@@ -85,9 +85,9 @@ ask_yes_no() {
     local prompt="$1"
     local default="${2:-N}"
 
-    local suffix="[y/N]"
+    local suffix="[y/n]"
     if [[ "$default" =~ ^[Yy]$ ]]; then
-        suffix="[Y/n]"
+        suffix="[y/n]"
     fi
 
     while true; do
@@ -398,7 +398,7 @@ _wait_for_health() {
     info "Polling ${FRONTEND_URL}/api/health — ${HEALTH_TIMEOUT}s timeout [$label]..."
     for i in $(seq 1 "$ATTEMPTS"); do
         if _health_ok; then return 0; fi
-        if [ "$i" -eq "$ATTEMPTS"); then return 1; fi
+        if [ "$i" -eq "$ATTEMPTS"]; then return 1; fi
         info "  attempt $i/$ATTEMPTS — not ready, retrying in ${HEALTH_INTERVAL}s..."
         sleep "$HEALTH_INTERVAL"
     done
@@ -604,7 +604,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
         echo ""
         echo -e "        ${RED}${BOLD}IMPORTANT:${RESET} SSH (port 2222) will be allowed before enabling UFW"
         echo "        to ensure you are not locked out of the server."
-        read -r -p "        Enable UFW now? [y/N] " _ufw_enable_resp
+        read -r -p "        Enable UFW now? [y/n] " _ufw_enable_resp
         if [[ "$_ufw_enable_resp" =~ ^[Yy]$ ]]; then
             # Always allow SSH before enabling UFW to prevent lockout
             sudo ufw allow 2222/tcp comment 'SSH' 2>&1 | tee -a "$LOG_FILE"
@@ -625,7 +625,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
         echo ""
         echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW rule for port 3001 is not configured."
         echo "        The dev site won't be reachable from other LAN devices without this rule."
-        read -r -p "        Set up UFW rule now? [y/N] " _ufw_rule_resp
+        read -r -p "        Set up UFW rule now? [y/n] " _ufw_rule_resp
         if [[ "$_ufw_rule_resp" =~ ^[Yy]$ ]]; then
             if sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only' 2>&1 | tee -a "$LOG_FILE"; then
                 ok "UFW rule added for 192.168.0.0/16 on port 3001"
@@ -644,7 +644,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
         echo ""
         echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Docker cleanup cron job is not scheduled."
         echo "        Running 'docker system prune' weekly prevents disk issues over time."
-        read -r -p "        Set up weekly Docker cleanup cron now? [y/N] " _cron_resp
+        read -r -p "        Set up weekly Docker cleanup cron now? [y/n] " _cron_resp
         if [[ "$_cron_resp" =~ ^[Yy]$ ]]; then
             (sudo crontab -l 2>/dev/null; echo "0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1") | sudo crontab -
             ok "Weekly Docker cleanup cron scheduled (Sundays at 2 AM)"
@@ -658,7 +658,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
         echo ""
         echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Dev autostart service is not installed."
         echo "        Without it, the dev stack won't come back up automatically after a reboot."
-        read -r -p "        Install autostart service now? [y/N] " _autostart_resp
+        read -r -p "        Install autostart service now? [y/n] " _autostart_resp
         if [[ "$_autostart_resp" =~ ^[Yy]$ ]]; then
             if sudo bash "$DEV_REPO/scripts/setup/install-dev-autostart.sh"; then
                 ok "Dev autostart service installed and enabled"

@@ -10,10 +10,19 @@
 #
 # Usage: .\scripts\deploy\dev-server-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-ResetFailures]
 
+# Trigger a dev server deploy from Windows via SSH.
+# Usage:
+#   # default: reset failures ON
+#   .\scripts\deploy\dev-server-deploy.ps1
+#   # reset OFF
+#   .\scripts\deploy\dev-server-deploy.ps1 -ResetFailures:$false
+#   # override branch
+#   .\scripts\deploy\dev-server-deploy.ps1 -Branch 'feature/219-dev-server-https'
+
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = '',
-    [switch]$ResetFailures
+    [bool]  $ResetFailures = $false
 )
 
 # Detect current branch if not specified
@@ -22,9 +31,11 @@ if ([string]::IsNullOrEmpty($Branch)) {
     Write-Host "Detected branch: $Branch"
 }
 
+$ResetFailures = $true
+
 # Build extra args for the wrapper based on ResetFailures
 $resetArg = ''
-if ($ResetFailures.IsPresent) {
+if ($ResetFailures) {
     $resetArg = '--reset-failures'
 }
 
@@ -47,7 +58,7 @@ fi
 # Strip Windows CRLF line endings — bash on the server rejects them
 $remoteCommand = $remoteCommand -replace "`r`n", "`n"
 
-if ($ResetFailures.IsPresent) {
+if ($ResetFailures) {
     Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh $Branch --reset-failures"
 } else {
     Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh $Branch"
