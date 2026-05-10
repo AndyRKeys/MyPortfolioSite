@@ -440,3 +440,114 @@ log "${BOLD}╔═════════════════════�
 log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
+
+# ── Section 9: Post-deploy configuration setup ──────────────────────────────────────────────
+
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED" = true ]; then
+    section "Optional configuration setup"
+
+    # UFW status check happens here, post-deploy, where interactive sudo is expected
+    if [ "$UFW_INSTALLED" = true ] && [ -t 0 ]; then
+        _ufw_status=$(sudo ufw status 2>/dev/null)
+        if echo "$_ufw_status" | grep -q "Status: active"; then
+            # Check SSH rule (port 2222) — warn if missing to prevent lockout on next enable
+            if ! echo "$_ufw_status" | grep -q "2222"; then
+                warn "UFW is active but SSH port 2222 has no rule — add it to avoid future lockout:"
+                warn "  sudo ufw allow 2222/tcp comment 'SSH'"
+            else
+                ok "UFW is active and SSH port 2222 rule is present"
+            fi
+            if echo "$_ufw_status" | grep -q "3001"; then
+                ok "UFW is active and port 3001 rule is present"
+            else
+                NEED_UFW_RULE=true
+            fi
+        elif echo "$_ufw_status" | grep -q "Status: inactive"; then
+            NEED_UFW_ENABLE=true
+        else
+            warn "Could not determine UFW status — verify manually: sudo ufw status"
+        fi
+    fi
+
+    if [ "$NEED_UFW_ENABLE" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW firewall is installed but not active."
+        echo "        It must be enabled for the firewall rules to take effect."
+        echo ""
+        echo -e "        ${RED}${BOLD}IMPORTANT:${RESET} SSH (port 2222) will be allowed before enabling UFW"
+        echo "        to ensure you are not locked out of the server."
+        read -r -p "        Enable UFW now? [y/N] " _ufw_enable_resp
+        if [[ "$_ufw_enable_resp" =~ ^[Yy]$ ]]; then
+            # Always allow SSH before enabling UFW to prevent lockout
+            sudo ufw allow 2222/tcp comment 'SSH' 2>&1 | tee -a "$LOG_FILE"
+            ok "SSH port 2222 rule added"
+            if sudo ufw enable 2>&1 | tee -a "$LOG_FILE"; then
+                ok "UFW enabled"
+                log "[$(timestamp)] UFW enabled by deploy script" | tee -a "$LOG_FILE"
+                NEED_UFW_RULE=true
+            else
+                warn "UFW enable failed — run manually: sudo ufw allow 2222/tcp && sudo ufw enable"
+            fi
+        else
+            warn "Skipped — when ready: sudo ufw allow 2222/tcp && sudo ufw enable"
+        fi
+    fi
+
+    if [ "$NEED_UFW_RULE" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW rule for port 3001 is not configured."
+        echo "        The dev site won't be reachable from other LAN devices without this rule."
+        read -r -p "        Set up UFW rule now? [y/N] " _ufw_rule_resp
+        if [[ "$_ufw_rule_resp" =~ ^[Yy]$ ]]; then
+            if sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only' 2>&1 | tee -a "$LOG_FILE"; then
+                ok "UFW rule added for 192.168.0.0/16 on port 3001"
+                log "[$(timestamp)] UFW rule added by deploy script" | tee -a "$LOG_FILE"
+                warn "Note: If your LAN uses a different subnet (e.g. 10.x.x.x), run:"
+                warn "  sudo ufw allow from YOUR_SUBNET to any port 3001 comment 'Dev site LAN-only'"
+            else
+                warn "UFW rule setup failed — run manually: sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+            fi
+        else
+            warn "Skipped — run manually when ready: sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+        fi
+    fi
+
+    if [ "$NEED_CRON" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Docker cleanup cron job is not scheduled."
+        echo "        Running 'docker system prune' weekly prevents disk issues over time."
+        read -r -p "        Set up weekly Docker cleanup cron now? [y/N] " _cron_resp
+        if [[ "$_cron_resp" =~ ^[Yy]$ ]]; then
+            (sudo crontab -l 2>/dev/null; echo "0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1") | sudo crontab -
+            ok "Weekly Docker cleanup cron scheduled (Sundays at 2 AM)"
+            log "[$(timestamp)] Cron job added by deploy script" | tee -a "$LOG_FILE"
+        else
+            warn "Skipped — run 'sudo crontab -e' to add it manually when ready."
+        fi
+    fi
+
+    if [ "$NEED_AUTOSTART" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} Dev autostart service is not installed."
+        echo "        Without it, the dev stack won't come back up automatically after a reboot."
+        read -r -p "        Install autostart service now? [y/N] " _autostart_resp
+        if [[ "$_autostart_resp" =~ ^[Yy]$ ]]; then
+            if sudo bash "$DEV_REPO/scripts/setup/install-dev-autostart.sh"; then
+                ok "Dev autostart service installed and enabled"
+                log "[$(timestamp)] Autostart service installed by deploy script" | tee -a "$LOG_FILE"
+            else
+                warn "Autostart install failed — run manually: sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+            fi
+        else
+            warn "Skipped — run 'sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh' when ready."
+        fi
+    fi
+
+    if [ ! -t 0 ]; then
+        warn "Running non-interactively — skipping setup prompts."
+        warn "Set up missing items manually:"
+        [ "$UFW_INSTALLED" = true ]  && warn "  UFW:          sudo ufw status | grep 3001  (verify port 3001 is allowed from LAN)"
+        [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
+        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+    fi
+fi
