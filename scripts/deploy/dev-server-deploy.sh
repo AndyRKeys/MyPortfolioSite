@@ -199,7 +199,41 @@ else
     warn "Continuing anyway — this is a warning, not an error."
 fi
 
-# ── Section 5: Git update ───────────────────────────────────────────────────────────────────
+# ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
+
+section "Checking Docker maintenance setup"
+
+MAINTENANCE_OK=true
+
+# Check for Docker system prune cron job
+if sudo crontab -l 2>/dev/null | grep -q "docker system prune"; then
+    ok "Docker cleanup cron job is scheduled"
+else
+    warn "Docker cleanup cron job not found"
+    warn "Schedule weekly cleanup to prevent disk issues:"
+    warn "  sudo crontab -e"
+    warn "  # Add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1"
+    MAINTENANCE_OK=false
+fi
+
+# Check for autostart service
+if systemctl is-enabled myportfolio-dev.service &>/dev/null 2>&1; then
+    ok "Dev autostart service is enabled"
+else
+    warn "Dev autostart service not enabled"
+    warn "Enable autostart on reboot:"
+    warn "  sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+    MAINTENANCE_OK=false
+fi
+
+if [ "$MAINTENANCE_OK" = false ]; then
+    warn ""
+    warn "Some maintenance items are missing, but continuing deploy anyway."
+    warn "Configure them at your convenience to improve stability."
+    warn ""
+fi
+
+# ── Section 6: Git update ───────────────────────────────────────────────────────────────────
 
 section "Updating to latest dev branch"
 
@@ -218,7 +252,7 @@ else
     ok "Updated: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
 fi
 
-# ── Section 6: Docker build & up ───────────────────────────────────────────────────────────
+# ── Section 7: Docker build & up ───────────────────────────────────────────────────────────
 
 section "Building and starting dev services"
 
@@ -246,7 +280,7 @@ if ! docker compose -f "$COMPOSE_FILE" up -d $REBUILD_NEEDED 2>&1 | tee -a "$LOG
     die "Deploy failed — see above for details."
 fi
 
-# ── Section 7: Health check ───────────────────────────────────────────────────────────────────
+# ── Section 8: Health check ───────────────────────────────────────────────────────────────────
 
 section "Waiting for site to become healthy"
 
@@ -281,7 +315,7 @@ for i in $(seq 1 "$ATTEMPTS"); do
     sleep "$HEALTH_INTERVAL"
 done
 
-# ── Section 8: Summary ───────────────────────────────────────────────────────────────────────────
+# ── Section 9: Summary ───────────────────────────────────────────────────────────────────────────
 
 section "Deploy complete"
 
