@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# dev-deploy.sh — Unified dev environment setup and deploy script.
+#
+# Handles both first-time setup and subsequent deploys.
+# Run on the Ubuntu Server as the non-root user.
+#
+# Usage:
+#   bash scripts/deploy/dev-deploy.sh
+
+set -euo pipefail
+
+# ── Config ──────────────────────────────────────────────────────────────────────────────
+
+REPO_DIR="${HOME}/MyPortfolioSite-dev"
+REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
+BRANCH="dev"
+COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
+ENV_FILE="${REPO_DIR}/.env"
+ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
+LOG_FILE="${HOME}/dev-deploy.log"
+HEALTH_TIMEOUT=60   # seconds to wait for the site to become healthy
+HEALTH_INTERVAL=5   # seconds between health check attempts
+
+# Required .env vars — must be present and not a placeholder value
+REQUIRED_VARS=(LAN_IP DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRONTEND_URL)
+
+# Placeholder values that signal the var hasn't been configured
+PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx")
+
+# ── Extra env checks for dev ───────────────────────────────────────────────────────────
+
+extra_env_checks() {
+  # $1 is the name of the errors array (passed by validate_env)
+  local -n _errors="$1"
+
+  # JWT_SECRET length check (min 32 chars)
+  if [ -n "${JWT_SECRET:-}" ] && [ ${#JWT_SECRET} -lt 32 ]; then
+    _errors+=("JWT_SECRET is too short (${#JWT_SECRET} chars — minimum 32). Generate with: openssl rand -base64 32")
+  fi
+
+  # WebAuthn consistency — RP_ID must be just the IP, ORIGIN must include port
+  if [ -n "${WEBAUTHN_RP_ID:-}" ] && [ -n "${LAN_IP:-}" ]; then
+    if [ "$WEBAUTHN_RP_ID" != "$LAN_IP" ]; then
+      _errors+=("WEBAUTHN_RP_ID ('$WEBAUTHN_RP_ID') must match LAN_IP ('$LAN_IP') exactly")
+    fi
+  fi
+
+  if [ -n "${WEBAUTHN_ORIGIN:-}" ] && [[ "$WEBAUTHN_ORIGIN" != *":3001"* ]]; then
+    _errors+=("WEBAUTHN_ORIGIN ('$WEBAUTHN_ORIGIN') should end with :3001 — passkey registration will fail otherwise")
+  fi
+}
+
+# ── Load shared deploy helpers ─────────────────────────────────────────────────────────
+
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-lib.sh"
+
+# ── Entry point ─────────────────────────────────────────────────────────────────────────
+
+init_log_banner "Dev Server Deploy"
+
+require_tools docker git curl
+
+ensure_repo_cloned
+
+ensure_env_file
+
+load_env
+
+validate_env
+
+# ── UFW check (dev-specific) ───────────────────────────────────────────────────────────
+
+dsection "Checking firewall (UFW)"
+
+if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "3001"; then
+  dok "UFW rule for port 3001 is present"
+else
+  dwarn "No UFW rule found for port 3001."
+  dwarn "The dev site may not be reachable from other LAN devices."
+  dwarn "To open port 3001 to your LAN:"
+  dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+  dwarn "Continuing anyway — this is a warning, not an error."
+fi
+
+# ── Git update ─────────────────────────────────────────────────────────────────────────
+
+update_to_branch
+
+# ── Docker build & up ─────────────────────────────────────────────────────────────────
+
+# Health URL depends on LAN_IP, so set it after env load
+HEALTH_URL="http://${LAN_IP}:3001/api/health"
+HEALTH_URL_2=""  # dev doesn't use a second health URL
+
+compose_up_with_rollback backend-dev
+
+# ── Health check ───────────────────────────────────────────────────────────────────────
+
+wait_for_health backend-dev
+
+# ── Summary ────────────────────────────────────────────────────────────────────────────
+
+dsection "Deploy complete"
+
+dok "  Site:    http://${LAN_IP}:3001"
+dok "  Commit:  $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
+dok "  Log:     $LOG_FILE"
+
+dinfo "Container status:"
+docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
+
+dlog ""
+dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
+dlog "${DEPLOY_BOLD}║           Dev deploy complete ✓          ║${DEPLOY_RESET}"
+dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+dlog ""
