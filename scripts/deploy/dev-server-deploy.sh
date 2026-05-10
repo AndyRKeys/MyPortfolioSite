@@ -138,7 +138,26 @@ fi
 
 ok ".env file present"
 
-# ── Section 3: Environment validation ───────────────────────────────────────────────────
+# ── Section 3: Git update ───────────────────────────────────────────────────────────────────
+
+section "Updating to latest $DEPLOY_BRANCH branch"
+
+cd "$DEV_REPO"
+
+PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
+info "Current commit: $PREV_SHA"
+
+git fetch origin "$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
+git reset --hard "origin/$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE"
+
+NEW_SHA=$(git rev-parse HEAD)
+if [ "$NEW_SHA" = "$PREV_SHA" ]; then
+    info "Already at latest commit — no code changes."
+else
+    ok "Updated: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
+fi
+
+# ── Section 4: Environment validation ───────────────────────────────────────────────────
 
 section "Validating .env"
 
@@ -192,7 +211,7 @@ fi
 
 ok "All required env vars set and valid (LAN_IP=${LAN_IP})"
 
-# ── Section 4: UFW check ───────────────────────────────────────────────────────────────────
+# ── Section 5: UFW check ───────────────────────────────────────────────────────────────────
 
 section "Checking firewall (UFW)"
 
@@ -210,7 +229,7 @@ else
     info "UFW not installed (optional for LAN access control)"
 fi
 
-# ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
+# ── Section 6: Maintenance checks ───────────────────────────────────────────────────────────
 
 section "Checking Docker maintenance setup"
 
@@ -238,25 +257,6 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn "Some configuration items are missing. Deploy will continue and you"
     warn "will be prompted to set them up once the site is healthy."
     warn ""
-fi
-
-# ── Section 6: Git update ───────────────────────────────────────────────────────────────────
-
-section "Updating to latest $DEPLOY_BRANCH branch"
-
-cd "$DEV_REPO"
-
-PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
-info "Current commit: $PREV_SHA"
-
-git fetch origin "$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
-git reset --hard "origin/$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE"
-
-NEW_SHA=$(git rev-parse HEAD)
-if [ "$NEW_SHA" = "$PREV_SHA" ]; then
-    info "Already at latest commit — no code changes."
-else
-    ok "Updated: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
 fi
 
 # ── Section 7: Docker build & up ───────────────────────────────────────────────────────────
