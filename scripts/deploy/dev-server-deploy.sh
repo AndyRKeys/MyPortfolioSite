@@ -35,7 +35,7 @@ REQUIRED_VARS=(LAN_IP DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRON
 # Placeholder values that signal the var hasn't been configured
 PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx")
 
-# ── Helpers ───────────────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────────
 
 # Colour support only when attached to a real terminal
 if [ -t 1 ]; then
@@ -392,17 +392,26 @@ else
             if [ "$FAILURE_COUNT" -ge 3 ]; then
                 warn ""
                 warn "══════════════════════════════════════════════════════"
-                warn "  3+ consecutive failures — nuclear rebuild recommended"
+                warn "  ⚠️  3+ consecutive failures — nuclear rebuild"
                 warn ""
                 warn "  bash ${DEV_REPO}/scripts/setup/nuclear-rebuild.sh"
                 warn ""
-                warn "  Tears down containers/images and rebuilds from scratch."
-                warn "  Database is preserved. Use --wipe-db only if schema is corrupt."
+                warn "  This script:"
+                warn "    • Stops and removes DEV containers, images, networks"
+                warn "    • Preserves DEV database (use --wipe-db to reset it)"
+                warn "    • Does NOT affect production site"
+                warn ""
+                warn "  Persistent failures suggest deeper issues (disk space,"
+                warn "  Docker daemon problems, or infrastructure issues)."
+                warn "  Monitor system resources after nuclear rebuild."
                 warn "══════════════════════════════════════════════════════"
             elif [ "$FAILURE_COUNT" -ge 2 ]; then
                 warn ""
-                warn "  2 consecutive failures — try a deep clean before next deploy:"
-                warn "  docker system prune -f"
+                warn "  ⚠️  2 consecutive failures — Docker daemon may need restart:"
+                warn "  sudo systemctl restart docker"
+                warn ""
+                warn "  This briefly interrupts BOTH dev and production services."
+                warn "  Then re-run the deploy script."
                 warn ""
             fi
 

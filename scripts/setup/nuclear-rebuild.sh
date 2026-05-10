@@ -33,17 +33,17 @@ echo "╔═══════════════════════�
 echo "║         NUCLEAR REBUILD — DEV STACK                  ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "This will:"
+echo "This will (DEV STACK ONLY — does not affect production):"
 echo "  ✓ Stop all dev containers"
-echo "  ✓ Remove app images and networks"
-echo "  ✓ Prune dangling Docker resources"
+echo "  ✓ Remove dev images and networks"
 if [ "$WIPE_DB" = true ]; then
-    echo "  ✗ DESTROY postgres_dev_data volume (ALL DATABASE DATA LOST)"
+    echo "  ✗ DESTROY postgres_dev_data volume (ALL DEV DATABASE DATA LOST)"
 else
-    echo "  ✓ Preserve postgres_dev_data volume (database kept)"
+    echo "  ✓ Preserve postgres_dev_data volume (dev database kept)"
 fi
 echo ""
-echo "After this completes, re-run the deploy script to rebuild from scratch."
+echo "After this completes, re-run the deploy script to rebuild from scratch:"
+echo "  bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh"
 echo ""
 
 if [ "$WIPE_DB" = true ]; then
@@ -64,8 +64,8 @@ fi
 echo ""
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Nuclear rebuild started" | tee -a "$LOG_FILE"
 
-# Stop and remove containers, networks, and local images
-echo "Stopping and removing containers..."
+# Stop and remove containers, networks, and local images (dev stack only)
+echo "Stopping and removing dev containers..."
 docker compose -f "$COMPOSE_FILE" down --remove-orphans --rmi local 2>&1 | tee -a "$LOG_FILE" || true
 
 # Optionally wipe the database volume
@@ -74,10 +74,6 @@ if [ "$WIPE_DB" = true ]; then
     docker volume rm myportfoliosite-dev_postgres_dev_data 2>&1 | tee -a "$LOG_FILE" || \
         echo "Volume not found or already removed — continuing."
 fi
-
-# Prune dangling images and build cache
-echo "Pruning dangling images and build cache..."
-docker system prune -f 2>&1 | tee -a "$LOG_FILE" || true
 
 # Reset consecutive failure counter so next deploy starts fresh
 rm -f "$FAILURE_COUNTER_FILE"
