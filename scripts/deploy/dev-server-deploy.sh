@@ -5,12 +5,19 @@
 # Run on the Ubuntu Server as the non-root user.
 #
 # Usage:
-#   bash scripts/deploy/dev-server-deploy.sh
+#   bash scripts/deploy/dev-server-deploy.sh [branch]
+# Examples:
+#   bash scripts/deploy/dev-server-deploy.sh              # Deploy from dev
+#   bash scripts/deploy/dev-server-deploy.sh fix/215      # Deploy from feature branch
 #
 # On first run the script will clone the repo and guide you through .env setup.
-# On subsequent runs it pulls the latest dev branch and rebuilds containers.
+# On subsequent runs it pulls the latest specified branch and rebuilds containers.
 
 set -euo pipefail
+
+# ── Branch parameter ───────────────────────────────────────────────────────────────────────
+
+DEPLOY_BRANCH="${1:-dev}"
 
 # ── Config ──────────────────────────────────────────────────────────────────────────────
 
@@ -103,8 +110,8 @@ if [ ! -d "$DEV_REPO" ]; then
     info "Dev repo not found at $DEV_REPO — cloning..."
     git clone "$REPO_URL" "$DEV_REPO" || die "git clone failed. Check your internet connection."
     cd "$DEV_REPO"
-    git checkout dev || die "Could not switch to dev branch."
-    ok "Repo cloned and set to dev branch."
+    git checkout "$DEPLOY_BRANCH" || die "Could not switch to $DEPLOY_BRANCH branch."
+    ok "Repo cloned and set to $DEPLOY_BRANCH branch."
 else
     ok "Repo found at $DEV_REPO"
 fi
@@ -131,7 +138,26 @@ fi
 
 ok ".env file present"
 
-# ── Section 3: Environment validation ───────────────────────────────────────────────────
+# ── Section 3: Git update ───────────────────────────────────────────────────────────────────
+
+section "Updating to latest $DEPLOY_BRANCH branch"
+
+cd "$DEV_REPO"
+
+PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
+info "Current commit: $PREV_SHA"
+
+git fetch origin "$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
+git reset --hard "origin/$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE"
+
+NEW_SHA=$(git rev-parse HEAD)
+if [ "$NEW_SHA" = "$PREV_SHA" ]; then
+    info "Already at latest commit — no code changes."
+else
+    ok "Updated: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
+fi
+
+# ── Section 4: Environment validation ───────────────────────────────────────────────────
 
 section "Validating .env"
 
@@ -185,42 +211,33 @@ fi
 
 ok "All required env vars set and valid (LAN_IP=${LAN_IP})"
 
-# ── Section 4: UFW check ───────────────────────────────────────────────────────────────────
+# ── Section 5: UFW check ───────────────────────────────────────────────────────────────────
 
 section "Checking firewall (UFW)"
 
 NEED_UFW_ENABLE=false
 NEED_UFW_RULE=false
+UFW_INSTALLED=false
 
+# Checking UFW status requires sudo which can prompt for a password mid-deploy.
+# Just detect if UFW is installed here; actual status check happens post-deploy
+# in Section 10 where interactive sudo is already expected.
 if command -v ufw &>/dev/null; then
-    UFW_STATUS=$(timeout 5 sudo ufw status 2>/dev/null || echo "Error: UFW check timed out")
-    if echo "$UFW_STATUS" | grep -q "Status: active"; then
-        ok "UFW is active"
-        if echo "$UFW_STATUS" | grep -q "3001"; then
-            ok "UFW rule for port 3001 is present"
-        else
-            warn "UFW is active but rule for port 3001 not found — will offer setup after deploy"
-            NEED_UFW_RULE=true
-        fi
-    elif echo "$UFW_STATUS" | grep -q "Status: inactive"; then
-        warn "UFW is installed but inactive — will offer to enable after deploy"
-        NEED_UFW_ENABLE=true
-    else
-        warn "Could not determine UFW status (ufw may not be responding) — skipping firewall checks"
-    fi
+    UFW_INSTALLED=true
+    info "UFW is installed — status will be checked after deploy"
 else
-    info "UFW not installed (optional)"
+    info "UFW not installed (optional for LAN access control)"
 fi
 
-# ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
+# ── Section 6: Maintenance checks ───────────────────────────────────────────────────────────
 
 section "Checking Docker maintenance setup"
 
 NEED_CRON=false
 NEED_AUTOSTART=false
 
-# Check for Docker system prune cron job
-if sudo crontab -l 2>/dev/null | grep -q "docker system prune"; then
+# Check for Docker system prune cron job (check user crontab without sudo)
+if crontab -l 2>/dev/null | grep -q "docker system prune"; then
     ok "Docker cleanup cron job is scheduled"
 else
     warn "Docker cleanup cron job not found — will offer setup after deploy"
@@ -235,30 +252,11 @@ else
     NEED_AUTOSTART=true
 fi
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn ""
     warn "Some configuration items are missing. Deploy will continue and you"
     warn "will be prompted to set them up once the site is healthy."
     warn ""
-fi
-
-# ── Section 6: Git update ───────────────────────────────────────────────────────────────────
-
-section "Updating to latest dev branch"
-
-cd "$DEV_REPO"
-
-PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
-info "Current commit: $PREV_SHA"
-
-git fetch origin dev 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
-git reset --hard origin/dev 2>&1 | tee -a "$LOG_FILE"
-
-NEW_SHA=$(git rev-parse HEAD)
-if [ "$NEW_SHA" = "$PREV_SHA" ]; then
-    info "Already at latest commit — no code changes."
-else
-    ok "Updated: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
 fi
 
 # ── Section 7: Docker build & up ───────────────────────────────────────────────────────────
@@ -330,6 +328,7 @@ section "Deploy complete"
 
 ok ""
 ok "  Site:    ${DEV_URL}"
+ok "  Branch:  $DEPLOY_BRANCH"
 ok "  Commit:  $(git rev-parse --short HEAD)"
 ok "  Log:     $LOG_FILE"
 ok ""
@@ -345,8 +344,24 @@ log ""
 
 # ── Section 10: Post-deploy configuration setup ──────────────────────────────────────────────
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED" = true ]; then
     section "Optional configuration setup"
+
+    # UFW status check happens here, post-deploy, where interactive sudo is expected
+    if [ "$UFW_INSTALLED" = true ] && [ -t 0 ]; then
+        _ufw_status=$(sudo ufw status 2>/dev/null)
+        if echo "$_ufw_status" | grep -q "Status: active"; then
+            if echo "$_ufw_status" | grep -q "3001"; then
+                ok "UFW is active and port 3001 rule is present"
+            else
+                NEED_UFW_RULE=true
+            fi
+        elif echo "$_ufw_status" | grep -q "Status: inactive"; then
+            NEED_UFW_ENABLE=true
+        else
+            warn "Could not determine UFW status — verify manually: sudo ufw status"
+        fi
+    fi
 
     if [ "$NEED_UFW_ENABLE" = true ] && [ -t 0 ]; then
         echo ""
@@ -419,8 +434,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABL
     if [ ! -t 0 ]; then
         warn "Running non-interactively — skipping setup prompts."
         warn "Set up missing items manually:"
-        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw allow 22/tcp && sudo ufw enable"
-        [ "$NEED_UFW_RULE" = true ]  && warn "  UFW rule:     sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+        [ "$UFW_INSTALLED" = true ]  && warn "  UFW:          sudo ufw status | grep 3001  (verify port 3001 is allowed from LAN)"
         [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
         [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
     fi

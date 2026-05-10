@@ -1,12 +1,42 @@
 # Testing Guide
 
-The backend test suite uses [Vitest](https://vitest.dev/) as the test runner and [Supertest](https://github.com/ladjs/supertest) for HTTP-layer integration tests. No live server, database, or network connection is required — the `pg` pool and `nodemailer` are mocked at the module level.
+Tests are performed in two stages: **server-based integration testing** (primary) and **unit/integration tests** (supplementary).
 
 ---
 
-## Running Tests
+## Primary: Server-Based Testing
 
-The dev environment runs inside Docker. Tests must be run **inside the backend container** — not directly on your local machine. The source directory is volume-mounted into the container, so any local file changes are immediately reflected without rebuilding.
+The dev server at `http://<LAN_IP>:3001` is the canonical test environment. Deploy your feature/fix branch and test in a real environment with database, authentication, and file uploads.
+
+### Workflow
+
+1. **Deploy your branch** to the dev server:
+   ```powershell
+   git checkout fix/your-issue
+   .\scripts\deploy\dev-server-deploy.ps1
+   ```
+
+2. **Test the feature** in a browser at `http://<LAN_IP>:3001`
+   - Test the golden path (happy case)
+   - Test error cases and edge conditions
+   - Check for regressions in related features
+
+3. **View server logs** if something fails:
+   ```bash
+   docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs -f backend-dev
+   ```
+
+4. **If tests pass**, create a PR and merge to `dev`
+
+This approach catches integration issues that unit tests cannot (database state, authentication, third-party services) and lets you test on a real environment before committing.
+
+---
+
+## Supplementary: Unit & Integration Tests
+
+The backend test suite uses [Vitest](https://vitest.dev/) as the test runner and [Supertest](https://github.com/ladjs/supertest) for HTTP-layer integration tests. No live server, database, or network connection is required — the `pg` pool and `nodemailer` are mocked at the module level.
+
+These tests catch regressions quickly but **do not replace server-based testing**.
 
 ### Quick start
 
@@ -23,7 +53,7 @@ The dev environment runs inside Docker. Tests must be run **inside the backend c
 
 The `test` command installs devDependencies inside the container (vitest, supertest) then runs `npm test`. This is safe to run repeatedly — `npm install` is a no-op if nothing has changed.
 
-### Manual (if you prefer)
+### Manual test commands
 
 ```powershell
 # Run tests
@@ -37,11 +67,13 @@ docker compose exec backend npm run test:watch
 docker compose exec backend npm run test:coverage
 ```
 
-> **Note:** Do not run `npm test` directly on your local machine unless you have Node 20 installed locally. The canonical test environment is the Docker container.
-
 ---
 
-## Capturing Test Output
+## Fallback: Local Testing (Windows)
+
+If you cannot access the dev server, you can still validate code changes locally with the test suite and smoke tests.
+
+### Capturing Test Output
 
 Test output is verbose and scrolls quickly. There are two patterns depending on context:
 
@@ -75,11 +107,9 @@ Create the `test-results\` folder if it doesn't exist. It is gitignored so logs 
 New-Item -ItemType Directory -Force -Path test-results
 ```
 
----
+### PR Smoke Tests (Fallback)
 
-## PR Smoke Tests — Two-Tier Process
-
-Every PR that touches backend code requires **two scripts** to be run before requesting review:
+If you're testing locally without access to the dev server, every PR that touches backend code should run **two scripts** before requesting review:
 
 ```powershell
 # Step 1 — always run the regression baseline first
