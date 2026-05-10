@@ -66,7 +66,7 @@ init_log_banner() {
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
 require_tools() {
-  dsection "Checking prerequisites"
+  dsection "Phase 0: checking prerequisites"
 
   local missing=()
   for tool in "$@"; do
@@ -105,7 +105,7 @@ require_tools() {
 # ── Repo helpers ───────────────────────────────────────────────────────────────
 
 ensure_repo_cloned() {
-  dsection "Checking repository"
+  dsection "Phase 1: ensuring repository exists"
 
   if [ ! -d "$REPO_DIR" ]; then
     dinfo "Repo not found at $REPO_DIR — cloning..."
@@ -119,7 +119,7 @@ ensure_repo_cloned() {
 }
 
 update_to_branch() {
-  dsection "Updating to latest $BRANCH branch"
+  dsection "Phase 2: updating to latest $BRANCH branch"
 
   cd "$REPO_DIR"
 
@@ -140,7 +140,7 @@ update_to_branch() {
 # ── Env helpers ────────────────────────────────────────────────────────────────
 
 ensure_env_file() {
-  dsection "Checking .env"
+  dsection "Phase 3: checking .env"
 
   if [ -f "$ENV_FILE" ]; then
     dok ".env present at $ENV_FILE"
@@ -168,7 +168,7 @@ load_env() {
 }
 
 validate_env() {
-  dsection "Validating .env"
+  dsection "Phase 4: validating .env"
 
   local errors=()
 
@@ -207,7 +207,7 @@ validate_env() {
 compose_up_with_rollback() {
   local service_name="$1"   # e.g. backend-dev or backend
 
-  dsection "Building and starting services"
+  dsection "Phase 5: building and starting services"
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
 
   if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
@@ -233,7 +233,7 @@ wait_for_health() {
   local timeout="${HEALTH_TIMEOUT:-60}"
   local interval="${HEALTH_INTERVAL:-5}"
 
-  dsection "Waiting for service to become healthy"
+  dsection "Phase 6: HTTP/HTTPS health checks"
 
   if [ -z "$url" ]; then
     dwarn "No HEALTH_URL configured; skipping HTTP health checks."
