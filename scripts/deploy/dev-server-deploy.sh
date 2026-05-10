@@ -200,8 +200,11 @@ NEED_UFW_ENABLE=false
 NEED_UFW_RULE=false
 
 if command -v ufw &>/dev/null; then
-    UFW_STATUS=$(timeout 5 sudo ufw status 2>/dev/null || echo "Error: UFW check timed out")
-    if echo "$UFW_STATUS" | grep -q "Status: active"; then
+    # Use -n flag to prevent password prompt; timeout in case sudo/ufw hang
+    UFW_STATUS=$(timeout 5 sudo -n ufw status 2>/dev/null || echo "")
+    if [ -z "$UFW_STATUS" ]; then
+        warn "Could not check UFW status (may require password) — skipping firewall checks"
+    elif echo "$UFW_STATUS" | grep -q "Status: active"; then
         ok "UFW is active"
         if echo "$UFW_STATUS" | grep -q "3001"; then
             ok "UFW rule for port 3001 is present"
@@ -213,7 +216,7 @@ if command -v ufw &>/dev/null; then
         warn "UFW is installed but inactive — will offer to enable after deploy"
         NEED_UFW_ENABLE=true
     else
-        warn "Could not determine UFW status (ufw may not be responding) — skipping firewall checks"
+        warn "Could not determine UFW status — skipping firewall checks"
     fi
 else
     info "UFW not installed (optional)"
@@ -227,7 +230,7 @@ NEED_CRON=false
 NEED_AUTOSTART=false
 
 # Check for Docker system prune cron job
-if sudo crontab -l 2>/dev/null | grep -q "docker system prune"; then
+if timeout 5 sudo -n crontab -l 2>/dev/null | grep -q "docker system prune"; then
     ok "Docker cleanup cron job is scheduled"
 else
     warn "Docker cleanup cron job not found — will offer setup after deploy"
