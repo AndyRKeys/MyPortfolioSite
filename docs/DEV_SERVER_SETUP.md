@@ -1,8 +1,8 @@
 # Dev Server Setup
 
-Sets up the `dev` branch as a second environment on the Ubuntu Server, accessible LAN-only at `http://<LAN_IP>:3001`.
+Sets up the `dev` branch as a second environment on the Ubuntu Server, accessible LAN-only at `https://<LAN_IP>:3001` (HTTPS with self-signed certificate).
 
-The deploy script handles cloning, `.env` creation, building, and health-checking automatically. You only need to do three things manually before the first run.
+The deploy script handles cloning, `.env` creation, building, certificate generation, and health-checking automatically. You only need to do three things manually before the first run.
 
 ---
 
@@ -66,8 +66,8 @@ The script checks for a `.env` file. If one doesn't exist it copies `.env.dev-se
 [WARN]    DB_PASSWORD      — strong random password
 [WARN]    JWT_SECRET       — random string, min 32 chars (openssl rand -base64 32)
 [WARN]    WEBAUTHN_RP_ID   — same as LAN_IP (bare IP, no protocol/port)
-[WARN]    WEBAUTHN_ORIGIN  — http://<LAN_IP>:3001
-[WARN]    FRONTEND_URL     — http://<LAN_IP>:3001
+[WARN]    WEBAUTHN_ORIGIN  — https://<LAN_IP>:3001
+[WARN]    FRONTEND_URL     — https://<LAN_IP>:3001
 ```
 
 Edit the file with:
@@ -83,9 +83,27 @@ Generate secrets with:
 openssl rand -base64 32
 ```
 
+### Automatic certificate generation
+
+On the first run (and whenever LAN_IP changes), the deploy script automatically generates a self-signed HTTPS certificate for your LAN IP. This is required because WebAuthn (passkey registration) only works over HTTPS or localhost.
+
+The certificate is generated with:
+- **Valid for 10 years** — covers the lifetime of most dev environments
+- **Self-signed** — no external CA needed, your browser will warn once and then cache it
+- **Includes both IP and localhost** — works whether you access via IP or hostname
+
+**On your first visit to `https://<LAN_IP>:3001`:**
+
+Your browser will show a certificate warning (self-signed). Click "Advanced" → "Accept the risk and continue" (or equivalent). The certificate is then cached and you won't see the warning again until the certificate expires or changes.
+
+To verify the certificate details on the server:
+```bash
+openssl x509 -in ~/MyPortfolioSite-dev/scripts/config/certs/dev-server.crt -noout -text
+```
+
 ### What happens on the second run (and all future runs)
 
-The script validates `.env`, builds the containers, and polls the health endpoint. On success:
+The script validates `.env`, generates/verifies the certificate, builds the containers, and polls the health endpoint. On success:
 
 ```
 ╔══════════════════════════════════════════╗
@@ -124,7 +142,7 @@ The deploy script automatically detects your current git branch and deploys it. 
    [OK]    Commit:  a1b2c3d
    ```
 
-4. Test on the dev server at `http://<LAN_IP>:3001`
+4. Test on the dev server at `https://<LAN_IP>:3001` (accept the self-signed certificate warning in your browser)
 
 5. When testing passes, create a PR and merge to `dev`:
    ```bash
@@ -198,8 +216,10 @@ sudo lsof -i :3001     # confirm nginx-dev is listening
 ```
 
 **WebAuthn / passkey errors on the dev site**
-- Confirm `WEBAUTHN_RP_ID` in `.env` is the bare IP (no `http://`, no port)
-- Confirm `WEBAUTHN_ORIGIN` is exactly `http://<LAN_IP>:3001`
+- Browsers only allow WebAuthn on HTTPS (or localhost). The dev server uses a self-signed HTTPS certificate for this reason.
+- Confirm `WEBAUTHN_RP_ID` in `.env` is the bare IP (no `https://`, no port)
+- Confirm `WEBAUTHN_ORIGIN` is exactly `https://<LAN_IP>:3001`
+- Accept the self-signed certificate warning in your browser
 - Passkeys registered on prod will not work on dev (different origin — expected)
 
 **`.env` validation errors on deploy**
