@@ -53,6 +53,15 @@ REQUIRED_VARS=(LAN_IP DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRON
 # Placeholder values that signal the var hasn't been configured
 PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx")
 
+# Dev certificates
+DEV_CERT_DIR="scripts/config/certs"
+DEV_CERT_FILE="${DEV_CERT_DIR}/dev-server.crt"
+DEV_KEY_FILE="${DEV_CERT_DIR}/dev-server.key"
+DEV_LAN_IP_FILE="${DEV_CERT_DIR}/dev-server.lan_ip"
+
+# Backend health URL (HTTP, decoupled from HTTPS frontend)
+BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://localhost:8081/api/health}"
+
 # ── Helpers ───────────────────────────────────────────────────────────────────────
 
 # Colour support only when attached to a real terminal
@@ -117,6 +126,39 @@ _wait_for_docker() {
 
     fail "Docker daemon did not become ready within ${timeout}s after restart"
     return 1
+}
+
+_check_or_generate_dev_certs() {
+    mkdir -p "${DEV_CERT_DIR}"
+
+    # Extract LAN_IP from .env for certificate generation
+    local lan_ip_for_certs
+    lan_ip_for_certs=$(grep "^LAN_IP=" "${DEV_REPO}/.env" | cut -d'=' -f2 | tr -d ' ')
+
+    if [ -z "$lan_ip_for_certs" ]; then
+        warn "LAN_IP not yet configured in .env — skipping cert generation for now"
+        return 0
+    fi
+
+    if [ -f "${DEV_CERT_FILE}" ] && [ -f "${DEV_KEY_FILE}" ] && [ -f "${DEV_LAN_IP_FILE}" ]; then
+        local prev_lan_ip
+        prev_lan_ip=$(cat "${DEV_LAN_IP_FILE}" 2>/dev/null || true)
+        if [ "$prev_lan_ip" = "$lan_ip_for_certs" ]; then
+            ok "SSL certificates present and LAN_IP unchanged (${lan_ip_for_certs}) — skipping regeneration"
+            return 0
+        else
+            warn "LAN_IP changed (${prev_lan_ip} -> ${lan_ip_for_certs}), regenerating dev certs..."
+        fi
+    else
+        warn "Dev certs or metadata missing, generating fresh dev certs..."
+    fi
+
+    if bash "${DEV_REPO}/scripts/setup/generate-dev-certs.sh" "$lan_ip_for_certs" 2>&1 | tee -a "$LOG_FILE"; then
+        echo "$lan_ip_for_certs" > "${DEV_LAN_IP_FILE}"
+        ok "SSL certificates ready"
+    else
+        die "Failed to generate SSL certificates. Check LAN_IP in .env."
+    fi
 }
 
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
@@ -215,20 +257,7 @@ ok ".env file present"
 
 section "Checking SSL certificates for HTTPS"
 
-# Extract LAN_IP from .env for certificate generation
-LAN_IP_FOR_CERTS=$(grep "^LAN_IP=" "${DEV_REPO}/.env" | cut -d'=' -f2 | tr -d ' ')
-
-# echo "[DEBUG] LAN_IP_FOR_CERTS='$LAN_IP_FOR_CERTS'" | tee -a "$LOG_FILE"
-
-if [ -z "$LAN_IP_FOR_CERTS" ]; then
-    warn "LAN_IP not yet configured in .env — skipping cert generation for now"
-else
-    if bash "${DEV_REPO}/scripts/setup/generate-dev-certs.sh" "$LAN_IP_FOR_CERTS" 2>&1 | tee -a "$LOG_FILE"; then
-        ok "SSL certificates ready"
-    else
-        die "Failed to generate SSL certificates. Check LAN_IP in .env."
-    fi
-fi
+_check_or_generate_dev_certs
 
 # ── Section 3: Environment validation ───────────────────────────────────────────────────
 
@@ -383,22 +412,18 @@ fi
 
 section "Waiting for site to become healthy"
 
-# echo "[DEBUG] Entering health check with FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
-
 ATTEMPTS=$(( HEALTH_TIMEOUT / HEALTH_INTERVAL ))
 
-# -k to trust self-signed certificate on dev server
 _health_ok() {
-    # echo "[DEBUG] _health_ok curl to '${FRONTEND_URL}/api/health'" | tee -a "$LOG_FILE"
-    curl -sfk --max-time 4 "${FRONTEND_URL}/api/health" > /dev/null 2>&1
+    curl -sf --max-time 4 "${BACKEND_HEALTH_URL}" > /dev/null 2>&1
 }
 
 _wait_for_health() {
     local label="$1"
-    info "Polling ${FRONTEND_URL}/api/health — ${HEALTH_TIMEOUT}s timeout [$label]..."
+    info "Polling ${BACKEND_HEALTH_URL} — ${HEALTH_TIMEOUT}s timeout [$label]..."
     for i in $(seq 1 "$ATTEMPTS"); do
         if _health_ok; then return 0; fi
-        if [ "$i" -eq "$ATTEMPTS"]; then return 1; fi
+        if [ "$i" -eq "$ATTEMPTS" ]; then return 1; fi
         info "  attempt $i/$ATTEMPTS — not ready, retrying in ${HEALTH_INTERVAL}s..."
         sleep "$HEALTH_INTERVAL"
     done
@@ -423,7 +448,7 @@ _rollback() {
 }
 
 if _wait_for_health "initial"; then
-    ok "✓ Dev site healthy at ${FRONTEND_URL}"
+    ok "✓ Dev backend healthy at ${BACKEND_HEALTH_URL}"
     reset_failure_count
 else
     warn "Initial health check failed — attempting self-healing..."
@@ -555,6 +580,7 @@ section "Deploy complete"
 
 ok ""
 ok "  Site:    ${FRONTEND_URL}"
+ok "  Health:  ${BACKEND_HEALTH_URL}"
 ok "  Branch:  $DEPLOY_BRANCH"
 ok "  Commit:  $(git rev-parse --short HEAD)"
 ok "  Log:     $LOG_FILE"
