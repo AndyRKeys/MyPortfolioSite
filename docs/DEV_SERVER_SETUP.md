@@ -95,17 +95,64 @@ The script validates `.env`, builds the containers, and polls the health endpoin
 
 ---
 
-## Future deploys
+## Testing Feature Branches Before PR
 
-Whenever you want to pull the latest `dev` branch to the server, run the same command:
+The deploy script automatically detects your current git branch and deploys it. This enables rapid testing without creating a PR first.
+
+### Workflow
+
+1. Check out your feature/fix branch locally:
+   ```bash
+   git checkout fix/some-issue
+   ```
+
+2. Make your changes and commit:
+   ```bash
+   git add .
+   git commit -m "fix: description"
+   git push -u origin fix/some-issue
+   ```
+
+3. Deploy directly to the dev server:
+   ```powershell
+   .\scripts\deploy\dev-server-deploy.ps1
+   ```
+
+   The script detects you're on `fix/some-issue` and deploys from that branch. You'll see it in the deploy summary:
+   ```
+   [OK]    Branch:  fix/some-issue
+   [OK]    Commit:  a1b2c3d
+   ```
+
+4. Test on the dev server at `http://<LAN_IP>:3001`
+
+5. When testing passes, create a PR and merge to `dev`:
+   ```bash
+   git push -u origin fix/some-issue
+   # Create PR via GitHub UI or: gh pr create --base dev
+   ```
+
+### Explicit branch override (optional)
+
+If you want to deploy a specific branch instead of your current one:
 
 ```powershell
-# From Windows
+.\scripts\deploy\dev-server-deploy.ps1 -Branch fix/different-issue
+```
+
+---
+
+## Future deploys
+
+To pull the latest `dev` branch (or any other branch) to the server, run:
+
+```powershell
+# From Windows — auto-detects current branch
 .\scripts\deploy\dev-server-deploy.ps1
 ```
 
 ```bash
-# From the server
+# From the server — deploy latest dev
 bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
 ```
 
