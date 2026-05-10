@@ -379,6 +379,13 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
     if [ "$UFW_INSTALLED" = true ] && [ -t 0 ]; then
         _ufw_status=$(sudo ufw status 2>/dev/null)
         if echo "$_ufw_status" | grep -q "Status: active"; then
+            # Check SSH rule (port 2222) — warn if missing to prevent lockout on next enable
+            if ! echo "$_ufw_status" | grep -q "2222"; then
+                warn "UFW is active but SSH port 2222 has no rule — add it to avoid future lockout:"
+                warn "  sudo ufw allow 2222/tcp comment 'SSH'"
+            else
+                ok "UFW is active and SSH port 2222 rule is present"
+            fi
             if echo "$_ufw_status" | grep -q "3001"; then
                 ok "UFW is active and port 3001 rule is present"
             else
@@ -395,17 +402,23 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$UFW_INSTALLED"
         echo ""
         echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW firewall is installed but not active."
         echo "        It must be enabled for the firewall rules to take effect."
+        echo ""
+        echo -e "        ${RED}${BOLD}IMPORTANT:${RESET} SSH (port 2222) will be allowed before enabling UFW"
+        echo "        to ensure you are not locked out of the server."
         read -r -p "        Enable UFW now? [y/N] " _ufw_enable_resp
         if [[ "$_ufw_enable_resp" =~ ^[Yy]$ ]]; then
+            # Always allow SSH before enabling UFW to prevent lockout
+            sudo ufw allow 2222/tcp comment 'SSH' 2>&1 | tee -a "$LOG_FILE"
+            ok "SSH port 2222 rule added"
             if sudo ufw enable 2>&1 | tee -a "$LOG_FILE"; then
                 ok "UFW enabled"
                 log "[$(timestamp)] UFW enabled by deploy script" | tee -a "$LOG_FILE"
                 NEED_UFW_RULE=true
             else
-                warn "UFW enable failed — run manually: sudo ufw enable"
+                warn "UFW enable failed — run manually: sudo ufw allow 2222/tcp && sudo ufw enable"
             fi
         else
-            warn "Skipped — run manually when ready: sudo ufw enable"
+            warn "Skipped — when ready: sudo ufw allow 2222/tcp && sudo ufw enable"
         fi
     fi
 
