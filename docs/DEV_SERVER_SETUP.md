@@ -29,6 +29,18 @@ If your home network uses a `10.x.x.x` subnet, adjust the range accordingly.
 
 ---
 
+## Step 2b — Install micro (optional but recommended)
+
+For a modern text editor with familiar shortcuts (Ctrl+S to save, Ctrl+Q to quit):
+
+```bash
+sudo apt install micro
+```
+
+You'll use this to edit `.env` in step 3.
+
+---
+
 ## Step 3 — Run the deploy script
 
 **From Windows (recommended):**
@@ -58,7 +70,13 @@ The script checks for a `.env` file. If one doesn't exist it copies `.env.dev-se
 [WARN]    FRONTEND_URL     — http://<LAN_IP>:3001
 ```
 
-Edit `~/MyPortfolioSite-dev/.env`, fill in the values above, then re-run the deploy script. Everything else in the file can stay as defaulted.
+Edit the file with:
+
+```bash
+micro ~/MyPortfolioSite-dev/.env
+```
+
+Fill in the required values above. The rest of the file can stay as defaulted.
 
 Generate secrets with:
 ```bash
@@ -70,9 +88,9 @@ openssl rand -base64 32
 The script validates `.env`, builds the containers, and polls the health endpoint. On success:
 
 ```
-╔══════════════════════════════════════════╗
+══════════════════════════════════════════
 ║           Dev deploy complete ✓          ║
-╚══════════════════════════════════════════╝
+══════════════════════════════════════════
 ```
 
 ---
@@ -109,6 +127,9 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml down
 
 # Restart backend only
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml restart backend-dev
+
+# Edit .env with micro
+micro ~/MyPortfolioSite-dev/.env
 ```
 
 ---
