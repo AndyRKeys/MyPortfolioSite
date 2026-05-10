@@ -158,3 +158,38 @@ sudo lsof -i :3001     # confirm nginx-dev is listening
 **`.env` validation errors on deploy**
 
 The deploy script checks all required vars on every run and tells you exactly which are missing or still set to placeholder values. Fix them in `~/MyPortfolioSite-dev/.env` and re-run.
+
+**Docker permission errors when stopping containers**
+
+If you see `cannot stop container: permission denied` errors during deploy, the Docker daemon needs to restart:
+```bash
+sudo systemctl restart docker
+# If that doesn't work, reboot the server:
+sudo reboot
+```
+
+---
+
+## Docker Maintenance
+
+To keep the dev server stable and prevent Docker issues, maintain the Docker system regularly:
+
+```bash
+# Weekly: Remove dangling images, volumes, and stopped containers
+docker system prune -f --volumes
+
+# Check Docker disk usage
+docker system df
+
+# View Docker daemon logs
+sudo journalctl -u docker -n 50
+```
+
+**Add to cron for automatic weekly cleanup:**
+```bash
+sudo crontab -e
+# Add this line:
+0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1
+```
+
+This runs `docker system prune` every Sunday at 2 AM, removing unused images and volumes that can accumulate over time.
