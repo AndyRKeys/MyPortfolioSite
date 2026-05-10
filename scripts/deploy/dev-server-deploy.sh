@@ -291,6 +291,13 @@ if [ "$NEW_SHA" != "$PREV_SHA" ]; then
     fi
 fi
 
+# Clean shutdown before rebuild to avoid port conflicts and stale state
+if [ -n "$REBUILD_NEEDED" ]; then
+    info "Stopping existing containers before rebuild..."
+    docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$LOG_FILE" || true
+    info "Containers stopped — proceeding with clean rebuild"
+fi
+
 info "Running: docker compose up -d $REBUILD_NEEDED"
 if ! docker compose -f "$COMPOSE_FILE" up -d $REBUILD_NEEDED 2>&1 | tee -a "$LOG_FILE"; then
     fail "docker compose up failed. Container logs:"
@@ -299,6 +306,8 @@ if ! docker compose -f "$COMPOSE_FILE" up -d $REBUILD_NEEDED 2>&1 | tee -a "$LOG
     if [ "$PREV_SHA" != "none" ] && [ "$PREV_SHA" != "$NEW_SHA" ]; then
         warn "Rolling back to previous commit ($PREV_SHA)..."
         git reset --hard "$PREV_SHA"
+        warn "Stopping containers for clean rollback rebuild..."
+        docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$LOG_FILE" || true
         docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     fi
     die "Deploy failed — see above for details."
@@ -330,6 +339,8 @@ for i in $(seq 1 "$ATTEMPTS"); do
         if [ "$PREV_SHA" != "none" ] && [ "$PREV_SHA" != "$NEW_SHA" ]; then
             warn "Rolling back to previous commit (${PREV_SHA:0:7})..."
             git reset --hard "$PREV_SHA" 2>&1 | tee -a "$LOG_FILE"
+            warn "Stopping containers for clean rollback rebuild..."
+            docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$LOG_FILE" || true
             docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
             warn "Rolled back — verify the site is healthy before investigating the failed update."
         fi
