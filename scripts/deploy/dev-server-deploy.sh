@@ -193,7 +193,7 @@ NEED_UFW_ENABLE=false
 NEED_UFW_RULE=false
 
 if command -v ufw &>/dev/null; then
-    UFW_STATUS=$(sudo ufw status 2>/dev/null)
+    UFW_STATUS=$(timeout 5 sudo ufw status 2>/dev/null || echo "Error: UFW check timed out")
     if echo "$UFW_STATUS" | grep -q "Status: active"; then
         ok "UFW is active"
         if echo "$UFW_STATUS" | grep -q "3001"; then
@@ -202,9 +202,11 @@ if command -v ufw &>/dev/null; then
             warn "UFW is active but rule for port 3001 not found — will offer setup after deploy"
             NEED_UFW_RULE=true
         fi
-    else
+    elif echo "$UFW_STATUS" | grep -q "Status: inactive"; then
         warn "UFW is installed but inactive — will offer to enable after deploy"
         NEED_UFW_ENABLE=true
+    else
+        warn "Could not determine UFW status (ufw may not be responding) — skipping firewall checks"
     fi
 else
     info "UFW not installed (optional)"
@@ -417,7 +419,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABL
     if [ ! -t 0 ]; then
         warn "Running non-interactively — skipping setup prompts."
         warn "Set up missing items manually:"
-        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw enable"
+        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw allow 22/tcp && sudo ufw enable"
         [ "$NEED_UFW_RULE" = true ]  && warn "  UFW rule:     sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
         [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
         [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
