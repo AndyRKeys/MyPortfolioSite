@@ -88,9 +88,9 @@ openssl rand -base64 32
 The script validates `.env`, builds the containers, and polls the health endpoint. On success:
 
 ```
-══════════════════════════════════════════
+╔══════════════════════════════════════════╗
 ║           Dev deploy complete ✓          ║
-══════════════════════════════════════════
+╚══════════════════════════════════════════╝
 ```
 
 ---
@@ -193,3 +193,28 @@ sudo crontab -e
 ```
 
 This runs `docker system prune` every Sunday at 2 AM, removing unused images and volumes that can accumulate over time.
+
+---
+
+## Autostart on Reboot
+
+To automatically bring the dev environment online after a system reboot, install the systemd autostart service:
+
+```bash
+# Enable autostart for the dev stack
+sudo bash ~/MyPortfolioSite-dev/scripts/setup/install-dev-autostart.sh
+
+# Verify the service is enabled
+systemctl list-unit-files | grep myportfolio-dev
+
+# Start it manually (or wait for reboot)
+sudo systemctl start myportfolio-dev
+
+# View status
+sudo systemctl status myportfolio-dev
+
+# View startup logs
+sudo journalctl -u myportfolio-dev -n 50
+```
+
+The service will automatically start the dev containers on boot, no manual intervention needed after reboot.
