@@ -21,9 +21,11 @@ if [[ -z "${MODE}" ]]; then
 fi
 
 # Adjust these paths/names if your env files differ.
-PROJECT_ROOT="${PROJECT_ROOT:-$HOME/MyPortfolioSite-dev}"
-DEV_ENV_FILE="${DEV_ENV_FILE:-${PROJECT_ROOT}/.env.dev-server}"
-PROD_ENV_FILE="${PROD_ENV_FILE:-${PROJECT_ROOT}/.env.prod-server}"
+DEV_PROJECT_ROOT="${DEV_PROJECT_ROOT:-$HOME/MyPortfolioSite-dev}"
+PROD_PROJECT_ROOT="${PROD_PROJECT_ROOT:-$HOME/MyPortfolioSite}"
+
+DEV_ENV_FILE="${DEV_ENV_FILE:-${DEV_PROJECT_ROOT}/.env}"
+PROD_ENV_FILE="${PROD_ENV_FILE:-${PROD_PROJECT_ROOT}/.env}"
 
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/docker-migration-backup}"
 mkdir -p "${BACKUP_ROOT}"
@@ -39,7 +41,7 @@ backup_envs() {
   local any=0
 
   if [[ -f "${DEV_ENV_FILE}" ]]; then
-    cp "${DEV_ENV_FILE}" "${backup_dir}/.env.dev-server"
+    cp "${DEV_ENV_FILE}" "${backup_dir}/.env.dev"
     echo "[OK] Backed up dev env: ${DEV_ENV_FILE}"
     any=1
   else
@@ -47,7 +49,7 @@ backup_envs() {
   fi
 
   if [[ -f "${PROD_ENV_FILE}" ]]; then
-    cp "${PROD_ENV_FILE}" "${backup_dir}/.env.prod-server"
+    cp "${PROD_ENV_FILE}" "${backup_dir}/.env.prod"
     echo "[OK] Backed up prod env: ${PROD_ENV_FILE}"
     any=1
   else
@@ -80,20 +82,20 @@ restore_envs() {
 
   local any=0
 
-  if [[ -f "${backup_dir}/.env.dev-server" ]]; then
-    cp "${backup_dir}/.env.dev-server" "${DEV_ENV_FILE}"
+  if [[ -f "${backup_dir}/.env.dev" ]]; then
+    cp "${backup_dir}/.env.dev" "${DEV_ENV_FILE}"
     echo "[OK] Restored dev env to: ${DEV_ENV_FILE}"
     any=1
   else
-    echo "[WARN] Dev env backup not found in: ${backup_dir}""
+    echo "[WARN] Dev env backup not found in: ${backup_dir}"
   fi
 
-  if [[ -f "${backup_dir}/.env.prod-server" ]]; then
-    cp "${backup_dir}/.env.prod-server" "${PROD_ENV_FILE}"
+  if [[ -f "${backup_dir}/.env.prod" ]]; then
+    cp "${backup_dir}/.env.prod" "${PROD_ENV_FILE}"
     echo "[OK] Restored prod env to: ${PROD_ENV_FILE}"
     any=1
   else
-    echo "[WARN] Prod env backup not found in: ${backup_dir}""
+    echo "[WARN] Prod env backup not found in: ${backup_dir}"
   fi
 
   if [[ "${any}" -eq 0 ]]; then
