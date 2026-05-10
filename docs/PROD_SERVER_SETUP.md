@@ -2,33 +2,18 @@
 
 _Last updated: 2026-05-10 — verified against live server post-migration_
 
-Production infrastructure for MyPortfolioSite running on Ubuntu Server. This document captures the configuration and operational procedures for the **production environment** (`main` branch).
+Production-specific configuration for MyPortfolioSite on Ubuntu Server. This document focuses on the **production Docker stack**, env vars, deploy entry points, and prod-only troubleshooting.
 
-For a high-level overview of both dev and prod environments, see `INFRASTRUCTURE.md`. For dev-specific setup, see `DEV_SERVER_SETUP.md`.
-
----
-
-## Hardware and host OS
-
-- **Device:** Old gaming PC running headless Ubuntu Server LTS
-- **OS:** Ubuntu 24.04.4 LTS (kernel 6.8.0-111-generic)
-- **Hostname:** `<server-hostname>`
-- **User:** `<username>` (non-root user with sudo access)
-- **Repo path:** `/home/<username>/MyPortfolioSite`
-- **Backups path:** `/home/<username>/backups`
-- **Storage:** Internal SSD (more reliable than the previous Pi SD card)
-- **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
-- **GPU:** Available for future local LLM inference (#173)
-
-Docker is installed via the official Docker CE apt packages. Docker via snap is not supported.
+Host-level details (hardware/OS, disk encryption, backups, generic troubleshooting) are documented in `INFRASTRUCTURE.md`.
 
 ---
 
-## Services (Docker Compose)
+## Prod services and compose file
 
-All production services run as Docker containers managed by:
+All production services run as Docker containers managed by `docker-compose.prod.yml` in `~/MyPortfolioSite`:
 
 ```bash
+cd ~/MyPortfolioSite
 docker compose -f docker-compose.prod.yml <command>
 ```
 
@@ -37,133 +22,37 @@ docker compose -f docker-compose.prod.yml <command>
 | Service | Image | Port (host) | Purpose |
 |---------|-------|-------------|---------|
 | **nginx** | nginx:alpine | 80, 443 → host | Reverse proxy + static file serving; terminates SSL |
-| **backend** | myportfoliosite-backend (node:20-alpine, prod stage) | 8080 (internal only) | Express API; handles all `/api/*` routes |
+| **backend** | myportfoliosite-backend (node:20-alpine, prod stage) | 8080 (internal only) | Express API; handles `/api/*` routes |
 | **postgres** | postgres:16-alpine | 5432 (internal only) | PostgreSQL database; data in named volume |
 
-**SSL:** Let's Encrypt certs managed by host-level Certbot; `/etc/letsencrypt` bind-mounted into the nginx container read-only.
-
-**DDNS:** ddclient runs on the host (not containerized) to update the DNS record when the IP changes. Configured via cron.
+**SSL:** Let's Encrypt certs managed by certbot on the host; `/etc/letsencrypt` is bind-mounted into the nginx container read-only.
 
 ---
 
-## Directory structure
+## Prod env vars and key files
 
-On the server, the relevant directories are:
+| Item | Location | Notes |
+|------|----------|-------|
+| Prod env vars | `~/MyPortfolioSite/.env` | All production configuration (DB creds, JWT secret, SMTP, domain, backups, etc.) |
+| Env template | `~/MyPortfolioSite/.env.example` | Template used by `server-setup.sh` and docs as a starting point |
+| Compose file | `~/MyPortfolioSite/docker-compose.prod.yml` | Orchestrates nginx, backend, postgres |
+| Nginx config template | `~/MyPortfolioSite/scripts/config/nginx-portfolio.conf.template` | Rendered inside nginx container at startup |
+| SSL certs | `/etc/letsencrypt/live/<domain>/` | Managed by certbot on host; mounted read-only into nginx |
 
-```bash
-/home/<username>/
-├── MyPortfolioSite/          ← cloned repo (main branch)
-│   ├── backend/              ← Node.js source code (in Docker image)
-│   ├── resources/            ← frontend HTML/CSS/JS (served by nginx)
-│   ├── docs/                 ← documentation
-│   ├── scripts/
-│   │   ├── config/           ← nginx config templates
-│   │   │   ├── nginx-local.conf.template (dev, HTTP only)
-│   │   │   └── nginx-portfolio.conf.template (prod, HTTPS)
-│   │   ├── deploy/           ← prod-deploy.sh, server-setup.sh, check-server-ready.sh
-│   │   ├── ops/              ← gather-infrastructure-info.sh
-│   │   └── backup/           ← db-backup.sh, db-restore.sh, offsite-sync.sh, certbot-renew.sh
-│   ├── docker-compose.prod.yml  ← standalone prod compose file
-│   ├── docker-compose.yml    ← local dev compose file
-│   └── .env                  ← production env vars (never committed)
-│
-~/backups/                    ← database and uploads backups (local rotation, 7-day retention)
-/etc/letsencrypt/             ← SSL certs (managed by certbot on host)
-│   ├── live/                 ← symlinks to current certs
-│   ├── archive/              ← cert versions
-│   ├── accounts/             ← certbot accounts
-│   ├── renewal/              ← cert renewal configs
-│   ├── renewal-hooks/        ← renewal hook scripts
-│   └── options-ssl-nginx.conf ← nginx TLS options
-```
+### Critical env vars
+
+See `.env.example` for the full reference. Important values to set correctly:
+
+- `DOMAIN` — public domain name for the site.
+- `DB_PASSWORD` — strong password for postgres.
+- `JWT_SECRET` — long random value (32+ chars) for signing JWTs.
+- `RCLONE_REMOTE` / `RCLONE_BUCKET` — if using offsite backups.
+
+The prod deploy script validates required variables (including length and obvious placeholders) before starting containers.
 
 ---
 
-## Docker volumes
-
-| Volume | Purpose |
-|--------|---------|
-| `myportfoliosite_postgres_data` | PostgreSQL data directory (persists across deploys) |
-| `myportfoliosite_uploads_data` | User-uploaded files (CVs, images) |
-
----
-
-## Key files
-
-| File/Directory | Path | Purpose |
-|----------------|------|---------|
-| **Prod env vars** | `~/MyPortfolioSite/.env` | All production configuration (DB creds, JWT secret, SMTP, domain) |
-| **Env template** | `~/MyPortfolioSite/.env.example` | Template for setting up `.env` on a new server |
-| **Nginx config template** | `scripts/config/nginx-portfolio.conf.template` | Prod nginx (HTTPS + reverse proxy), rendered at container startup |
-| **SSL certs** | `/etc/letsencrypt/live/<domain>/` | Let's Encrypt certs; bind-mounted into nginx container |
-| **Uploads** | Docker volume `myportfoliosite_uploads_data` | User-uploaded files; accessible at `/app/uploads` inside backend |
-| **Database** | Docker volume `myportfoliosite_postgres_data` | PostgreSQL data; inspect via `docker compose exec postgres psql` |
-| **Deploy log** | `~/prod-deploy.log` | Timestamped deploy history (from prod-deploy.sh) |
-| **Backup log** | `~/backup.log` | Backup run history |
-
----
-
-## Initial server setup (one-time)
-
-On a fresh Ubuntu Server install:
-
-```bash
-# Clone repo and run setup script (pass your domain as argument)
-git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite
-bash ~/MyPortfolioSite/scripts/deploy/server-setup.sh yourdomain.com
-```
-
-The setup script handles:
-
-1. Installing system packages (curl, git, certbot, rclone, etc.).
-2. Docker CE installation + group membership for the deploy user.
-3. SSH hardening (disables password auth; key-only).
-4. Creating `.env` from `.env.example` and prompting you to fill in secrets.
-5. Obtaining an initial SSL certificate via certbot standalone.
-6. Running `docker compose -f docker-compose.prod.yml up -d --build`.
-7. Wiring up cron jobs for backups and cert renewal.
-
-After setup:
-
-- Edit `~/MyPortfolioSite/.env` and ensure all required values are set.
-- Re-run `docker compose -f docker-compose.prod.yml up -d --build`.
-
----
-
-## Disk encryption and Dropbear unlock
-
-The server uses **LUKS full-disk encryption** with **Dropbear SSH** in the initramfs to allow remote unlock after reboots.
-
-### How disk unlock works
-
-1. On boot, the encrypted root filesystem is locked.
-2. A minimal Dropbear SSH server listens on port 2222.
-3. You SSH in as root and run `cryptroot-unlock`.
-4. Enter the disk encryption passphrase.
-5. The system decrypts the disk and boots the main OS.
-6. Normal SSH on port 22 becomes available.
-
-### Remote unlock procedure
-
-From another machine:
-
-```powershell
-# Connect to Dropbear on port 2222
-ssh -p 2222 root@<server-hostname>
-
-# In the Dropbear shell, type (do NOT copy-paste):
-cryptroot-unlock
-# Enter disk encryption passphrase manually
-
-# Wait 10–15 seconds for boot, then deploy normally:
-.\scripts\deploy\prod-deploy.ps1
-```
-
-The disk encryption passphrase is **not** stored in the repo or `.env`; keep it in a secure password manager.
-
----
-
-## Deployment
+## Deploy entry points
 
 ### From Windows
 
@@ -171,60 +60,66 @@ The disk encryption passphrase is **not** stored in the repo or `.env`; keep it 
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-- SSHes into the server and runs `scripts/deploy/prod-deploy.sh`.
-- Accepts `-Rollback <sha>` to roll back to a previous commit.
+- Connects to the server via SSH.
+- Runs `scripts/deploy/prod-deploy.sh`.
+- Optional rollback:
+
+  ```powershell
+  .\scripts\deploy\prod-deploy.ps1 -Rollback <sha>
+  ```
 
 ### From the server
 
 ```bash
 cd ~/MyPortfolioSite
 bash scripts/deploy/prod-deploy.sh
-# or: bash scripts/deploy/prod-deploy.sh --rollback <sha>
+# or
+bash scripts/deploy/prod-deploy.sh --rollback <sha>
 ```
 
-The deploy script (on the feature branch) uses the shared `deploy-lib.sh` to:
+On the feature branch, `prod-deploy.sh` uses `deploy-lib.sh` to:
 
-- Check prerequisites (docker, docker compose, git, curl).
+- Check prerequisites (docker, docker compose plugin, git, curl).
 - Ensure the repo exists and is on `main`.
-- Validate `.env` (including `JWT_SECRET` length, domain sanity).
+- Load and validate `.env`.
 - Fetch and reset to `origin/main`.
 - Rebuild containers via `docker compose -f docker-compose.prod.yml up -d --build`.
-- Wait for backend and HTTPS health checks.
-- Roll back to the previous commit if deploy/health fails.
+- Run backend and HTTPS health checks.
+- Roll back to the previous commit if deploy or health fails.
 
-Logs are written to `~/prod-deploy.log`.
+Deploy logs are written to `~/prod-deploy.log`.
 
 ---
 
-## Common operational commands
+## Prod-specific operational commands
 
 ### Service status and logs
 
 ```bash
-# Status of all containers
-docker compose -f docker-compose.prod.yml ps
+# Status of all prod containers
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml ps
 
 # Start all services (with rebuild)
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml up -d --build
 
 # Stop all services
-docker compose -f docker-compose.prod.yml down
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml down
 
 # Restart backend only
-docker compose -f docker-compose.prod.yml restart backend
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml restart backend
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f backend
-docker compose -f docker-compose.prod.yml logs -f nginx
-docker compose -f docker-compose.prod.yml logs --tail=50 postgres
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml logs -f backend
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml logs -f nginx
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml logs --tail=50 postgres
 ```
 
-### Database access
+### Database access (prod)
 
 ```bash
-# Open psql shell
-docker compose -f docker-compose.prod.yml exec postgres \
-    psql -U postgres portfolio_prod
+# Open psql shell for production DB
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml exec postgres \
+  psql -U postgres portfolio_prod
 
 # Inside psql:
 \dt           -- list tables
@@ -232,111 +127,103 @@ SELECT COUNT(*) FROM posts;
 \q            -- exit
 ```
 
-### SSL certificate renewal
+### SSL renewal (prod nginx)
 
 Normally handled by cron via `scripts/backup/certbot-renew.sh`. To renew manually:
 
 ```bash
+cd ~/MyPortfolioSite
+# Stop nginx to free port 80
 docker compose -f docker-compose.prod.yml stop nginx
 sudo certbot renew
+# Start nginx again
 docker compose -f docker-compose.prod.yml start nginx
 ```
 
 ---
 
-## Backups
-
-### Local backups (cron)
-
-- **Script:** `scripts/backup/db-backup.sh`
-- **Cron:** `0 2 * * * ~/MyPortfolioSite/scripts/backup/db-backup.sh >> ~/backup.log 2>&1`
-- **Runs as:** root (via `sudo crontab -e`)
-
-Each run:
-
-1. Performs `pg_dump` via `docker compose exec postgres` and gzips output to `~/backups/portfolio-YYYYMMDD-HHmmss.sql.gz`.
-2. Archives uploads volume to `~/backups/uploads-YYYYMMDD-HHmmss.tar.gz`.
-3. Prunes local backups older than 7 days.
-4. Triggers offsite sync (if configured).
-
-### Offsite backups (Backblaze B2 via rclone)
-
-- **Script:** `scripts/backup/offsite-sync.sh`
-- **Triggered by:** `db-backup.sh` (non-blocking).
-
-Configure with:
-
-```bash
-rclone config  # add remote named 'b2', type: b2
-# Set RCLONE_REMOTE=b2 and RCLONE_BUCKET=portfolio-backups in .env
-```
-
-Then:
-- DB dumps → `b2:portfolio-backups/db/` (last 30 days).
-- Uploads → `b2:portfolio-backups/uploads/` (incremental).
-
-### Restore from backup
-
-```bash
-# List backups
-ls -lht ~/backups/*.sql.gz
-
-# Restore a specific backup
-bash ~/MyPortfolioSite/scripts/backup/db-restore.sh \
-  ~/backups/portfolio-YYYYMMDD-HHmmss.sql.gz
-```
-
----
-
-## Troubleshooting
+## Prod-specific troubleshooting
 
 ### Backend not responding (502 from nginx)
 
-1. `docker compose -f docker-compose.prod.yml ps` — check containers are Up.
-2. `docker compose -f docker-compose.prod.yml logs --tail=50 backend` — check for errors.
-3. If backend is down: `docker compose -f docker-compose.prod.yml restart backend`.
-4. If DB is down: `docker compose -f docker-compose.prod.yml restart postgres`.
-5. After both are healthy: `docker compose -f docker-compose.prod.yml restart nginx`.
+1. Check container status:
 
-### Database connection errors
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml ps
+   ```
 
-Symptoms: `Error: connect ECONNREFUSED` or `ETIMEDOUT` in backend logs.
+2. Inspect backend logs:
 
-1. Check postgres: `docker compose -f docker-compose.prod.yml ps postgres`.
-2. Restart if needed: `docker compose -f docker-compose.prod.yml restart postgres`.
-3. Verify `.env` DB credentials match container credentials.
-4. Test from psql as shown above.
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml logs --tail=50 backend
+   ```
 
-### Nginx won't start (SSL issues)
+3. If backend is down or crash-looping:
 
-1. Logs: `docker compose -f docker-compose.prod.yml logs nginx`.
-2. Check certs: `ls /etc/letsencrypt/live/<domain>/`.
-3. If missing, stop nginx, obtain cert via certbot standalone, and restart nginx.
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml restart backend
+   ```
 
-### SSL renewal failing
+4. If postgres is down:
 
-1. Check renewal log: `tail ~/certbot-renew.log` (if configured).
-2. Manual test as shown above.
-3. Ensure port 80 is reachable from the internet (router port forwarding, UFW).
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml restart postgres
+   ```
 
-### Disk space issues
+5. After both are healthy, restart nginx:
 
-```bash
-df -h                           # which filesystem is full?
-docker system prune -f          # remove unused images/layers
-docker volume ls                # inspect volumes
-sudo journalctl --vacuum=100M   # trim systemd logs
-```
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml restart nginx
+   ```
 
----
+### Database connection errors (prod)
 
-## Update discipline
+Symptoms: `ECONNREFUSED` or `ETIMEDOUT` to postgres in prod backend logs.
 
-Update this document when:
+1. Verify postgres is running:
 
-- Service locations change (directory layout, hostnames).
-- New services are added to the Docker Compose stack.
-- Operational procedures change (backup schedule, deploy process).
-- A new troubleshooting pattern is discovered and resolved.
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml ps postgres
+   ```
 
-Do **not** update for every deploy or minor code change. This is a reference guide, not a changelog.
+2. Restart if needed:
+
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml restart postgres
+   ```
+
+3. Check `.env` DB credentials against container settings.
+4. Test with psql as shown above.
+
+### Nginx/SSL issues (prod)
+
+1. Check nginx logs:
+
+   ```bash
+   docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml logs nginx
+   ```
+
+2. Verify cert files exist:
+
+   ```bash
+   ls /etc/letsencrypt/live/<domain>/
+   ```
+
+3. If missing or invalid:
+   - Stop nginx.
+   - Obtain/renew cert with certbot.
+   - Start nginx again.
+
+### When to look at INFRASTRUCTURE instead
+
+Use `INFRASTRUCTURE.md` when the problem is clearly **host-level**:
+
+- Disk decryption / Dropbear unlock.
+- Global backup jobs and offsite sync.
+- Disk space issues, Docker daemon problems, or port conflicts affecting both dev and prod.
+
+Use this doc when the problem is specific to the **prod stack**:
+
+- Prod deploy failing.
+- Prod-only 502s or DB errors.
+- Prod SSL/HTTPS behaviour.
