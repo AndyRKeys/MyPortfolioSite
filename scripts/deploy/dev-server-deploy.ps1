@@ -1,8 +1,9 @@
 # Trigger a dev server deploy from Windows via SSH.
-# Connects to the Ubuntu Server and runs scripts/deploy/dev-server-deploy.sh remotely.
+# Connects to the Ubuntu Server and runs scripts/deploy/dev-server-deploy-wrapper.sh remotely.
 #
-# On first run the bash script will clone the repo automatically.
-# On subsequent runs it pulls the latest specified branch and rebuilds containers.
+# On first run the wrapper will clone the dev repo automatically.
+# On subsequent runs it updates the specified branch and then invokes
+# the main dev-server-deploy.sh script on the server.
 #
 # The script automatically detects your current git branch and deploys from it.
 # This enables rapid testing of feature/fix branches without creating a PR.
@@ -19,24 +20,23 @@ if ([string]::IsNullOrEmpty($Branch)) {
     Write-Host "Detected branch: $Branch"
 }
 
-# Bootstrap on first run: if the dev repo doesn't exist yet, clone it first.
-# Subsequent runs just invoke the deploy script directly.
+# Remote command: ensure dev repo exists, update to requested branch via
+# the wrapper script, then run the main deploy.
 $remoteCommand = @"
-DEPLOY_SCRIPT=~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh
+WRAPPER_SCRIPT=~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh
 DEPLOY_BRANCH="$Branch"
-if [ -f "`$DEPLOY_SCRIPT" ]; then
-    bash "`$DEPLOY_SCRIPT" "`$DEPLOY_BRANCH"
+if [ -f "`$WRAPPER_SCRIPT" ]; then
+    bash "`$WRAPPER_SCRIPT" "`$DEPLOY_BRANCH"
 else
     echo "[INFO] Dev repo not found — cloning for the first time..."
     git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
-    cd ~/MyPortfolioSite-dev && git checkout "`$DEPLOY_BRANCH"
-    bash scripts/deploy/dev-server-deploy.sh "`$DEPLOY_BRANCH"
+    bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh "`$DEPLOY_BRANCH"
 fi
 "@
 
 # Strip Windows CRLF line endings — bash on the server rejects them
 $remoteCommand = $remoteCommand -replace "`r`n", "`n"
 
-Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh $Branch"
+Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh $Branch"
 
 ssh $Hostname $remoteCommand
