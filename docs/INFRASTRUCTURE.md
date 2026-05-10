@@ -2,12 +2,12 @@
 
 _Last updated: 2026-05-10 — verified against live server post-migration_
 
-This document describes the host-level infrastructure for MyPortfolioSite on Ubuntu Server and points to environment-specific setup guides.
+This document describes the host-level infrastructure for MyPortfolioSite on Ubuntu Server and points to environment-specific guides.
 
 The same physical server hosts both environments:
 
-- **Dev environment** — `dev` branch, LAN-only, HTTP on port 3001.
-- **Prod environment** — `main` branch, public site, HTTPS on the configured domain.
+- **Dev environment** — `dev` branch, LAN-only, HTTP on port 3001 (see `DEV_ENVIRONMENT.md`).
+- **Prod environment** — `main` branch, public site, HTTPS on the configured domain (see `PROD_ENVIRONMENT.md`).
 
 Docker is installed via the official Docker CE apt packages on the server. Docker via snap is **not** supported; see `DOCKER_MIGRATION.md` for the migration story and helper scripts.
 
@@ -53,8 +53,8 @@ On the server, both environments live under the same home directory:
 
 For per-environment details, see:
 
-- `DEV_SERVER_SETUP.md` — dev compose, ports, dev env vars, dev deploy.
-- `PROD_SERVER_SETUP.md` — prod compose, domain/SSL specifics, prod deploy.
+- `DEV_ENVIRONMENT.md` — dev compose, ports, dev env vars, dev deploy.
+- `PROD_ENVIRONMENT.md` — prod compose, domain/SSL specifics, prod deploy.
 
 ---
 
@@ -171,14 +171,14 @@ These checks apply regardless of environment:
 
 For more detailed, environment-specific troubleshooting, see:
 
-- `DEV_SERVER_SETUP.md` (dev health, UFW, WebAuthn on LAN).
-- `PROD_SERVER_SETUP.md` (nginx/SSL, prod DB connection issues).
+- `DEV_ENVIRONMENT.md` (dev health, UFW, WebAuthn on LAN).
+- `PROD_ENVIRONMENT.md` (nginx/SSL, prod DB connection issues).
 
 ---
 
 ## Supporting documents
 
-- `DEV_SERVER_SETUP.md` — dev environment setup and operations.
-- `PROD_SERVER_SETUP.md` — prod environment setup and operations.
+- `DEV_ENVIRONMENT.md` — dev environment setup and operations.
+- `PROD_ENVIRONMENT.md` — production environment setup and operations.
 - `DOCKER_MIGRATION.md` — migrating from snap-based Docker to Docker CE.
 - `DEPLOYMENT_LESSONS_LEARNED.md` — lessons from the first production deployment (pre-flight checks, phase-based deploy, troubleshooting patterns).
