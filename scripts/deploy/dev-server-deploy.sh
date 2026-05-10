@@ -5,10 +5,11 @@
 # Run on the Ubuntu Server as the non-root user.
 #
 # Usage:
-#   bash scripts/deploy/dev-server-deploy.sh [branch]
+#   bash scripts/deploy/dev-server-deploy.sh [branch] [--reset-failures]
 # Examples:
-#   bash scripts/deploy/dev-server-deploy.sh              # Deploy from dev
-#   bash scripts/deploy/dev-server-deploy.sh fix/215      # Deploy from feature branch
+#   bash scripts/deploy/dev-server-deploy.sh                      # Deploy from dev
+#   bash scripts/deploy/dev-server-deploy.sh fix/215              # Deploy from feature branch
+#   bash scripts/deploy/dev-server-deploy.sh dev --reset-failures # Reset failure counter then deploy
 #
 # On first run the script will clone the repo and guide you through .env setup.
 # On subsequent runs it assumes the working tree is already on the desired
@@ -17,9 +18,24 @@
 
 set -euo pipefail
 
-# ── Branch parameter ───────────────────────────────────────────────────────────────────────
+# ── Branch parameter & flags ─────────────────────────────────────────────────────────────
 
-DEPLOY_BRANCH="${1:-dev}"
+DEPLOY_BRANCH="dev"
+RESET_FAILURES=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --reset-failures)
+            RESET_FAILURES=true
+            ;;
+        *)
+            # First non-flag argument is treated as branch name
+            if [ "$DEPLOY_BRANCH" = "dev" ] && [[ "$arg" != --* ]]; then
+                DEPLOY_BRANCH="$arg"
+            fi
+            ;;
+    esac
+done
 
 # ── Config ──────────────────────────────────────────────────────────────────────────────
 
@@ -65,6 +81,26 @@ get_failure_count() { cat "$FAILURE_COUNTER_FILE" 2>/dev/null || echo "0"; }
 increment_failure_count() { echo $(( $(get_failure_count) + 1 )) > "$FAILURE_COUNTER_FILE"; }
 reset_failure_count() { rm -f "$FAILURE_COUNTER_FILE"; }
 
+ask_yes_no() {
+    local prompt="$1"
+    local default="${2:-N}"
+
+    local suffix="[y/N]"
+    if [[ "$default" =~ ^[Yy]$ ]]; then
+        suffix="[Y/n]"
+    fi
+
+    while true; do
+        read -r -p "$prompt $suffix " reply
+        reply="${reply:-$default}"
+        case "$reply" in
+            [Yy]*) return 0 ;;
+            [Nn]*) return 1 ;;
+            *) echo "Please answer y or n." ;;
+        esac
+    done
+}
+
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
 log ""
@@ -73,6 +109,11 @@ log "${BOLD}║     Dev Server Deploy — $(timestamp)   ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
 log "[DEBUG] Script header: DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO' COMPOSE_FILE='$COMPOSE_FILE'" | tee -a "$LOG_FILE"
+
+if [ "$RESET_FAILURES" = true ]; then
+    info "Resetting consecutive failure counter on user request (--reset-failures)"
+    reset_failure_count
+fi
 
 # ── Section 1: Prerequisites ───────────────────────────────────────────────────────────
 
@@ -277,13 +318,7 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn ""
 fi
 
-# ── Section 5.5: Snap Docker self-healing hints ───────────────────────────────────────────
-
-# On some systems Docker is managed by snap and the daemon unit is snap.docker.dockerd
-# rather than docker.service. If docker info passes but individual containers
-# fail to stop with "permission denied" or become unkillable, a targeted
-# daemon restart can help. This script does not restart the daemon
-# automatically but will suggest it as part of later self-healing hints.
+# ── Section 5.5: Snap Docker self-healing info ───────────────────────────────────────────
 
 SNAP_DOCKER_UNIT="snap.docker.dockerd"
 
@@ -393,10 +428,16 @@ else
         warn "Self-heal Tier 2b: checking for stuck dev containers..."
         docker ps -a --format '{{.ID}} {{.Names}} {{.Status}}' | grep 'myportfoliosite-dev-' || true
 
-        warn "If you see containers that refuse to stop with 'permission denied', and this host uses"
-        warn "Snap Docker, a targeted daemon restart may be required:"        
-        warn "  sudo systemctl restart ${SNAP_DOCKER_UNIT}"
-        warn "Then re-run this deploy script."
+        if ask_yes_no "Snap-based Docker may need a daemon restart (this will briefly stop all containers). Restart ${SNAP_DOCKER_UNIT}?" "N"; then
+            warn "Restarting Snap Docker daemon unit: ${SNAP_DOCKER_UNIT}..."
+            if sudo systemctl restart "$SNAP_DOCKER_UNIT" 2>&1 | tee -a "$LOG_FILE"; then
+                ok "Snap Docker daemon restarted successfully"
+            else
+                warn "Failed to restart ${SNAP_DOCKER_UNIT}. Check systemctl status and logs."
+            fi
+        else
+            warn "Skipped Snap Docker daemon restart at user request."
+        fi
 
         docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE" || true
 
@@ -431,14 +472,14 @@ else
                 warn "══════════════════════════════════════════════════════"
             elif [ "$FAILURE_COUNT" -ge 2 ]; then
                 warn ""
-                warn "  ⚠️  2 consecutive failures — Docker daemon may need restart:"
-                warn "  sudo systemctl restart docker"
-                warn ""
-                warn "  On Snap-based installs the unit may be:"
-                warn "  sudo systemctl restart ${SNAP_DOCKER_UNIT}"
-                warn ""
-                warn "  This briefly interrupts BOTH dev and production services."
-                warn "  Then re-run the deploy script."
+                warn "  2 consecutive failures — Docker daemon may need restart."
+                if ask_yes_no "Restart docker.service now?" "N"; then
+                    sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE" || warn "docker.service restart failed"
+                fi
+                if ask_yes_no "Restart Snap Docker unit ${SNAP_DOCKER_UNIT} now (if using Snap)?" "N"; then
+                    sudo systemctl restart "$SNAP_DOCKER_UNIT" 2>&1 | tee -a "$LOG_FILE" || warn "${SNAP_DOCKER_UNIT} restart failed"
+                fi
+                warn "  If you restarted any daemon, re-run this deploy script."
                 warn ""
             fi
 
