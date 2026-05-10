@@ -101,6 +101,24 @@ ask_yes_no() {
     done
 }
 
+_wait_for_docker() {
+    local timeout=30
+    local interval=3
+    local attempts=$(( timeout / interval ))
+
+    info "Waiting for Docker daemon to become ready (up to ${timeout}s)..."
+    for i in $(seq 1 "$attempts"); do
+        if docker ps >/dev/null 2>&1; then
+            ok "Docker daemon is ready"
+            return 0
+        fi
+        sleep "$interval"
+    done
+
+    fail "Docker daemon did not become ready within ${timeout}s after restart"
+    return 1
+}
+
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
 log ""
@@ -108,7 +126,7 @@ log "${BOLD}╔═════════════════════�
 log "${BOLD}║     Dev Server Deploy — $(timestamp)   ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
-log "[DEBUG] Script header: DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO' COMPOSE_FILE='$COMPOSE_FILE'" | tee -a "$LOG_FILE"
+# log "[DEBUG] Script header: DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO' COMPOSE_FILE='$COMPOSE_FILE'" | tee -a "$LOG_FILE"
 
 if [ "$RESET_FAILURES" = true ]; then
     info "Resetting consecutive failure counter on user request (--reset-failures)"
@@ -155,9 +173,9 @@ ok "All prerequisites satisfied (docker, git, curl)"
 
 section "Checking repository"
 
-echo "[DEBUG] PWD before repo checks: $(pwd)" | tee -a "$LOG_FILE"
+# echo "[DEBUG] PWD before repo checks: $(pwd)" | tee -a "$LOG_FILE"
 
-echo "[DEBUG] Checking DEV_REPO at '$DEV_REPO'" | tee -a "$LOG_FILE"
+# echo "[DEBUG] Checking DEV_REPO at '$DEV_REPO'" | tee -a "$LOG_FILE"
 if [ ! -d "$DEV_REPO" ]; then
     info "Dev repo not found at $DEV_REPO — cloning..."
     git clone "$REPO_URL" "$DEV_REPO" || die "git clone failed. Check your internet connection."
@@ -169,7 +187,7 @@ else
     cd "$DEV_REPO"
 fi
 
-echo "[DEBUG] After cd DEV_REPO, PWD=$(pwd), HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')" | tee -a "$LOG_FILE"
+# echo "[DEBUG] After cd DEV_REPO, PWD=$(pwd), HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')" | tee -a "$LOG_FILE"
 
 if [ ! -f "${DEV_REPO}/.env" ]; then
     if [ -f "${DEV_REPO}/.env.dev-server.example" ]; then
@@ -200,7 +218,7 @@ section "Checking SSL certificates for HTTPS"
 # Extract LAN_IP from .env for certificate generation
 LAN_IP_FOR_CERTS=$(grep "^LAN_IP=" "${DEV_REPO}/.env" | cut -d'=' -f2 | tr -d ' ')
 
-echo "[DEBUG] LAN_IP_FOR_CERTS='$LAN_IP_FOR_CERTS'" | tee -a "$LOG_FILE"
+# echo "[DEBUG] LAN_IP_FOR_CERTS='$LAN_IP_FOR_CERTS'" | tee -a "$LOG_FILE"
 
 if [ -z "$LAN_IP_FOR_CERTS" ]; then
     warn "LAN_IP not yet configured in .env — skipping cert generation for now"
@@ -222,9 +240,9 @@ set -a
 source <(grep -E '^[A-Z_]+=.' "${DEV_REPO}/.env" | grep -v '^#') 2>/dev/null || true
 set +a
 
-echo "[DEBUG] After sourcing .env: LAN_IP='${LAN_IP:-}' WEBAUTHN_ORIGIN='${WEBAUTHN_ORIGIN:-}' FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
+# echo "[DEBUG] After sourcing .env: LAN_IP='${LAN_IP:-}' WEBAUTHN_ORIGIN='${WEBAUTHN_ORIGIN:-}' FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
 
-env | grep -E '^(LAN_IP|WEBAUTHN_ORIGIN|FRONTEND_URL)=' | sed 's/^/[DEBUG][env] /' | tee -a "$LOG_FILE"
+# env | grep -E '^(LAN_IP|WEBAUTHN_ORIGIN|FRONTEND_URL)=' | sed 's/^/[DEBUG][env] /' | tee -a "$LOG_FILE"
 
 ENV_ERRORS=()
 
@@ -331,18 +349,19 @@ REBUILD_NEEDED="--build"
 if git rev-parse HEAD^ &>/dev/null; then
     PREV_SHA=$(git rev-parse HEAD^)
     NEW_SHA=$(git rev-parse HEAD)
-    echo "[DEBUG] PREV_SHA='$PREV_SHA' NEW_SHA='$NEW_SHA'" | tee -a "$LOG_FILE"
+    # echo "[DEBUG] PREV_SHA='$PREV_SHA' NEW_SHA='$NEW_SHA'" | tee -a "$LOG_FILE"
 
     PREV_PACKAGE_HASH=$(git show "$PREV_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
     NEW_PACKAGE_HASH=$(git show "$NEW_SHA:backend/package.json" 2>/dev/null | sha256sum | awk '{print $1}')
-    echo "[DEBUG] PREV_PACKAGE_HASH='$PREV_PACKAGE_HASH' NEW_PACKAGE_HASH='$NEW_PACKAGE_HASH'" | tee -a "$LOG_FILE"
+    # echo "[DEBUG] PREV_PACKAGE_HASH='$PREV_PACKAGE_HASH' NEW_PACKAGE_HASH='$NEW_PACKAGE_HASH'" | tee -a "$LOG_FILE"
 
     if [ "$PREV_PACKAGE_HASH" = "$NEW_PACKAGE_HASH" ]; then
         info "package.json unchanged — skipping rebuild (faster deploy)"
         REBUILD_NEEDED=""
     fi
 else
-    echo "[DEBUG] No previous commit available for package.json hash comparison" | tee -a "$LOG_FILE"
+    # echo "[DEBUG] No previous commit available for package.json hash comparison" | tee -a "$LOG_FILE"
+    :
 fi
 
 # Clean shutdown before rebuild to avoid port conflicts and stale state
@@ -364,13 +383,13 @@ fi
 
 section "Waiting for site to become healthy"
 
-echo "[DEBUG] Entering health check with FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
+# echo "[DEBUG] Entering health check with FRONTEND_URL='${FRONTEND_URL:-}'" | tee -a "$LOG_FILE"
 
 ATTEMPTS=$(( HEALTH_TIMEOUT / HEALTH_INTERVAL ))
 
 # -k to trust self-signed certificate on dev server
 _health_ok() {
-    echo "[DEBUG] _health_ok curl to '${FRONTEND_URL}/api/health'" | tee -a "$LOG_FILE"
+    # echo "[DEBUG] _health_ok curl to '${FRONTEND_URL}/api/health'" | tee -a "$LOG_FILE"
     curl -sfk --max-time 4 "${FRONTEND_URL}/api/health" > /dev/null 2>&1
 }
 
@@ -432,6 +451,10 @@ else
             warn "Restarting Snap Docker daemon unit: ${SNAP_DOCKER_UNIT}..."
             if sudo systemctl restart "$SNAP_DOCKER_UNIT" 2>&1 | tee -a "$LOG_FILE"; then
                 ok "Snap Docker daemon restarted successfully"
+                if ! _wait_for_docker; then
+                    increment_failure_count
+                    die "Aborting deploy because Docker never became ready after Snap daemon restart"
+                fi
             else
                 warn "Failed to restart ${SNAP_DOCKER_UNIT}. Check systemctl status and logs."
             fi
@@ -474,10 +497,24 @@ else
                 warn ""
                 warn "  2 consecutive failures — Docker daemon may need restart."
                 if ask_yes_no "Restart docker.service now?" "N"; then
-                    sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE" || warn "docker.service restart failed"
+                    if sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"; then
+                        if ! _wait_for_docker; then
+                            increment_failure_count
+                            die "Aborting deploy because Docker never became ready after docker.service restart"
+                        fi
+                    else
+                        warn "docker.service restart failed"
+                    fi
                 fi
                 if ask_yes_no "Restart Snap Docker unit ${SNAP_DOCKER_UNIT} now (if using Snap)?" "N"; then
-                    sudo systemctl restart "$SNAP_DOCKER_UNIT" 2>&1 | tee -a "$LOG_FILE" || warn "${SNAP_DOCKER_UNIT} restart failed"
+                    if sudo systemctl restart "$SNAP_DOCKER_UNIT" 2>&1 | tee -a "$LOG_FILE"; then
+                        if ! _wait_for_docker; then
+                            increment_failure_count
+                            die "Aborting deploy because Docker never became ready after Snap daemon restart"
+                        fi
+                    else
+                        warn "${SNAP_DOCKER_UNIT} restart failed"
+                    fi
                 fi
                 warn "  If you restarted any daemon, re-run this deploy script."
                 warn ""
