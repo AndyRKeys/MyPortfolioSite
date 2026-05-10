@@ -7,18 +7,33 @@
 # deploy script never updates itself mid-run.
 #
 # Usage:
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh [branch]
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh [branch] [--reset-failures]
 # Examples:
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh              # default branch
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh feature/219-dev-server-https
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh                        # default branch, no reset
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh feature/219-dev-server-https --reset-failures
 
 set -euo pipefail
 
-DEPLOY_BRANCH="${1:-dev}"
+DEPLOY_BRANCH="dev"
+RESET_FAILURES_FLAG=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --reset-failures)
+      RESET_FAILURES_FLAG="--reset-failures"
+      ;;
+    *)
+      if [ "$DEPLOY_BRANCH" = "dev" ] && [[ "$arg" != --* ]]; then
+        DEPLOY_BRANCH="$arg"
+      fi
+      ;;
+  esac
+done
+
 DEV_REPO="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
 
-echo "[DEBUG][wrapper] DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO'" >&2
+echo "[DEBUG][wrapper] DEPLOY_BRANCH='$DEPLOY_BRANCH' RESET_FAILURES_FLAG='$RESET_FAILURES_FLAG' DEV_REPO='$DEV_REPO'" >&2
 
 # Ensure dev repo exists
 if [ ! -d "$DEV_REPO/.git" ]; then
@@ -43,6 +58,6 @@ fi
 
 echo "[DEBUG][wrapper] HEAD is now at $(git rev-parse --short HEAD) on branch '$DEPLOY_BRANCH'" >&2
 
-# Now run the actual deploy script from the updated working tree, always
-# resetting the failure counter for wrapper-driven runs.
-exec bash "$DEV_REPO/scripts/deploy/dev-server-deploy.sh" "$DEPLOY_BRANCH" --reset-failures
+# Now run the actual deploy script from the updated working tree, optionally
+# passing through --reset-failures if requested by the caller.
+exec bash "$DEV_REPO/scripts/deploy/dev-server-deploy.sh" "$DEPLOY_BRANCH" ${RESET_FAILURES_FLAG}
