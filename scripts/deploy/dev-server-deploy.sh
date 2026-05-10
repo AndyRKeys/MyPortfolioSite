@@ -277,6 +277,16 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
     warn ""
 fi
 
+# ── Section 5.5: Snap Docker self-healing hints ───────────────────────────────────────────
+
+# On some systems Docker is managed by snap and the daemon unit is snap.docker.dockerd
+# rather than docker.service. If docker info passes but individual containers
+# fail to stop with "permission denied" or become unkillable, a targeted
+# daemon restart can help. This script does not restart the daemon
+# automatically but will suggest it as part of later self-healing hints.
+
+SNAP_DOCKER_UNIT="snap.docker.dockerd"
+
 # ── Section 6: Docker build & up ───────────────────────────────────────────────────────────
 
 section "Building and starting dev services"
@@ -375,6 +385,19 @@ else
         # ── Self-heal Tier 2: full stack down + up (no rebuild)
         warn "Self-heal Tier 2: full stack restart (no rebuild)..."
         docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$LOG_FILE" || true
+
+        # Extra cleanup for stuck or orphaned containers, including Snap-managed daemons
+        warn "Self-heal Tier 2a: removing dev stack orphans (if any)..."
+        docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+
+        warn "Self-heal Tier 2b: checking for stuck dev containers..."
+        docker ps -a --format '{{.ID}} {{.Names}} {{.Status}}' | grep 'myportfoliosite-dev-' || true
+
+        warn "If you see containers that refuse to stop with 'permission denied', and this host uses"
+        warn "Snap Docker, a targeted daemon restart may be required:"        
+        warn "  sudo systemctl restart ${SNAP_DOCKER_UNIT}"
+        warn "Then re-run this deploy script."
+
         docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE" || true
 
         if _wait_for_health "after full restart"; then
@@ -410,6 +433,9 @@ else
                 warn ""
                 warn "  ⚠️  2 consecutive failures — Docker daemon may need restart:"
                 warn "  sudo systemctl restart docker"
+                warn ""
+                warn "  On Snap-based installs the unit may be:"
+                warn "  sudo systemctl restart ${SNAP_DOCKER_UNIT}"
                 warn ""
                 warn "  This briefly interrupts BOTH dev and production services."
                 warn "  Then re-run the deploy script."
