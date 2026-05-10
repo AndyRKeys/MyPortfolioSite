@@ -37,6 +37,6 @@ fi
 # Strip Windows CRLF line endings — bash on the server rejects them
 $remoteCommand = $remoteCommand -replace "`r`n", "`n"
 
-Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh `$Branch"
+Write-Host "bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy.sh $Branch"
 
 ssh $Hostname $remoteCommand
