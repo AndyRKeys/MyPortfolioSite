@@ -398,7 +398,7 @@ _wait_for_health() {
     info "Polling ${FRONTEND_URL}/api/health — ${HEALTH_TIMEOUT}s timeout [$label]..."
     for i in $(seq 1 "$ATTEMPTS"); do
         if _health_ok; then return 0; fi
-        if [ "$i" -eq "$ATTEMPTS" ]; then return 1; fi
+        if [ "$i" -eq "$ATTEMPTS"); then return 1; fi
         info "  attempt $i/$ATTEMPTS — not ready, retrying in ${HEALTH_INTERVAL}s..."
         sleep "$HEALTH_INTERVAL"
     done
@@ -496,7 +496,17 @@ else
                 warn "══════════════════════════════════════════════════════"
                 warn "  ⚠️  3+ consecutive failures — nuclear rebuild"
                 warn ""
-                warn "  bash ${DEV_REPO}/scripts/setup/nuclear-rebuild.sh"
+                if ask_yes_no "Run nuclear rebuild script now? (bash ${DEV_REPO}/scripts/setup/nuclear-rebuild.sh)" "N"; then
+                    warn "Running nuclear rebuild script..."
+                    if bash "${DEV_REPO}/scripts/setup/nuclear-rebuild.sh" 2>&1 | tee -a "$LOG_FILE"; then
+                        ok "Nuclear rebuild completed. Re-run this deploy script to start fresh."
+                    else
+                        warn "Nuclear rebuild script exited with errors. Check the log above and ${DEV_REPO}/scripts/setup/nuclear-rebuild.sh."
+                    fi
+                else
+                    warn "Skipped automatic nuclear rebuild. When ready, run:"
+                    warn "  bash ${DEV_REPO}/scripts/setup/nuclear-rebuild.sh"
+                fi
                 warn ""
                 warn "  This script:"
                 warn "    • Stops and removes DEV containers, images, networks"
