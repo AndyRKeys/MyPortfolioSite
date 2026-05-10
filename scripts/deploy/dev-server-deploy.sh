@@ -5,12 +5,19 @@
 # Run on the Ubuntu Server as the non-root user.
 #
 # Usage:
-#   bash scripts/deploy/dev-server-deploy.sh
+#   bash scripts/deploy/dev-server-deploy.sh [branch]
+# Examples:
+#   bash scripts/deploy/dev-server-deploy.sh              # Deploy from dev
+#   bash scripts/deploy/dev-server-deploy.sh fix/215      # Deploy from feature branch
 #
 # On first run the script will clone the repo and guide you through .env setup.
-# On subsequent runs it pulls the latest dev branch and rebuilds containers.
+# On subsequent runs it pulls the latest specified branch and rebuilds containers.
 
 set -euo pipefail
+
+# ── Branch parameter ───────────────────────────────────────────────────────────────────────
+
+DEPLOY_BRANCH="${1:-dev}"
 
 # ── Config ──────────────────────────────────────────────────────────────────────────────
 
@@ -189,27 +196,14 @@ ok "All required env vars set and valid (LAN_IP=${LAN_IP})"
 
 section "Checking firewall (UFW)"
 
-NEED_UFW_ENABLE=false
-NEED_UFW_RULE=false
-
-if command -v ufw &>/dev/null; then
-    UFW_STATUS=$(timeout 5 sudo ufw status 2>/dev/null || echo "Error: UFW check timed out")
-    if echo "$UFW_STATUS" | grep -q "Status: active"; then
-        ok "UFW is active"
-        if echo "$UFW_STATUS" | grep -q "3001"; then
-            ok "UFW rule for port 3001 is present"
-        else
-            warn "UFW is active but rule for port 3001 not found — will offer setup after deploy"
-            NEED_UFW_RULE=true
-        fi
-    elif echo "$UFW_STATUS" | grep -q "Status: inactive"; then
-        warn "UFW is installed but inactive — will offer to enable after deploy"
-        NEED_UFW_ENABLE=true
-    else
-        warn "Could not determine UFW status (ufw may not be responding) — skipping firewall checks"
-    fi
+if command -v ufw &>/dev/null && timeout 5 sudo ufw status 2>/dev/null | grep -q "3001"; then
+    ok "UFW rule for port 3001 is present"
 else
-    info "UFW not installed (optional)"
+    warn "No UFW rule found for port 3001."
+    warn "The dev site may not be reachable from other LAN devices."
+    warn "To open port 3001 to your LAN:"
+    warn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+    warn "Continuing anyway — this is a warning, not an error."
 fi
 
 # ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
@@ -218,6 +212,8 @@ section "Checking Docker maintenance setup"
 
 NEED_CRON=false
 NEED_AUTOSTART=false
+NEED_UFW_ENABLE=false
+NEED_UFW_RULE=false
 
 # Check for Docker system prune cron job
 if sudo crontab -l 2>/dev/null | grep -q "docker system prune"; then
@@ -244,15 +240,15 @@ fi
 
 # ── Section 6: Git update ───────────────────────────────────────────────────────────────────
 
-section "Updating to latest dev branch"
+section "Updating to latest $DEPLOY_BRANCH branch"
 
 cd "$DEV_REPO"
 
 PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
 info "Current commit: $PREV_SHA"
 
-git fetch origin dev 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
-git reset --hard origin/dev 2>&1 | tee -a "$LOG_FILE"
+git fetch origin "$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE" || die "git fetch failed. Check your internet connection."
+git reset --hard "origin/$DEPLOY_BRANCH" 2>&1 | tee -a "$LOG_FILE"
 
 NEW_SHA=$(git rev-parse HEAD)
 if [ "$NEW_SHA" = "$PREV_SHA" ]; then
@@ -330,6 +326,7 @@ section "Deploy complete"
 
 ok ""
 ok "  Site:    ${DEV_URL}"
+ok "  Branch:  $DEPLOY_BRANCH"
 ok "  Commit:  $(git rev-parse --short HEAD)"
 ok "  Log:     $LOG_FILE"
 ok ""
@@ -343,47 +340,10 @@ log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
 
-# ── Section 10: Post-deploy configuration setup ──────────────────────────────────────────────
+# ── Section 10: Post-deploy maintenance setup ─────────────────────────────────────────────────
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
-    section "Optional configuration setup"
-
-    if [ "$NEED_UFW_ENABLE" = true ] && [ -t 0 ]; then
-        echo ""
-        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW firewall is installed but not active."
-        echo "        It must be enabled for the firewall rules to take effect."
-        read -r -p "        Enable UFW now? [y/N] " _ufw_enable_resp
-        if [[ "$_ufw_enable_resp" =~ ^[Yy]$ ]]; then
-            if sudo ufw enable 2>&1 | tee -a "$LOG_FILE"; then
-                ok "UFW enabled"
-                log "[$(timestamp)] UFW enabled by deploy script" | tee -a "$LOG_FILE"
-                NEED_UFW_RULE=true
-            else
-                warn "UFW enable failed — run manually: sudo ufw enable"
-            fi
-        else
-            warn "Skipped — run manually when ready: sudo ufw enable"
-        fi
-    fi
-
-    if [ "$NEED_UFW_RULE" = true ] && [ -t 0 ]; then
-        echo ""
-        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW rule for port 3001 is not configured."
-        echo "        The dev site won't be reachable from other LAN devices without this rule."
-        read -r -p "        Set up UFW rule now? [y/N] " _ufw_rule_resp
-        if [[ "$_ufw_rule_resp" =~ ^[Yy]$ ]]; then
-            if sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only' 2>&1 | tee -a "$LOG_FILE"; then
-                ok "UFW rule added for 192.168.0.0/16 on port 3001"
-                log "[$(timestamp)] UFW rule added by deploy script" | tee -a "$LOG_FILE"
-                warn "Note: If your LAN uses a different subnet (e.g. 10.x.x.x), run:"
-                warn "  sudo ufw allow from YOUR_SUBNET to any port 3001 comment 'Dev site LAN-only'"
-            else
-                warn "UFW rule setup failed — run manually: sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-            fi
-        else
-            warn "Skipped — run manually when ready: sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-        fi
-    fi
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ]; then
+    section "Optional maintenance setup"
 
     if [ "$NEED_CRON" = true ] && [ -t 0 ]; then
         echo ""
@@ -417,11 +377,9 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABL
     fi
 
     if [ ! -t 0 ]; then
-        warn "Running non-interactively — skipping setup prompts."
+        warn "Running non-interactively — skipping maintenance prompts."
         warn "Set up missing items manually:"
-        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw allow 22/tcp && sudo ufw enable"
-        [ "$NEED_UFW_RULE" = true ]  && warn "  UFW rule:     sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-        [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
-        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+        [ "$NEED_CRON" = true ]      && warn "  Cron:      sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
+        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart: sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
     fi
 fi
