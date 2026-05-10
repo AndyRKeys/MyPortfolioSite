@@ -189,13 +189,25 @@ ok "All required env vars set and valid (LAN_IP=${LAN_IP})"
 
 section "Checking firewall (UFW)"
 
-NEED_UFW=false
+NEED_UFW_ENABLE=false
+NEED_UFW_RULE=false
 
-if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "3001"; then
-    ok "UFW rule for port 3001 is present"
+if command -v ufw &>/dev/null; then
+    UFW_STATUS=$(sudo ufw status 2>/dev/null)
+    if echo "$UFW_STATUS" | grep -q "Status: active"; then
+        ok "UFW is active"
+        if echo "$UFW_STATUS" | grep -q "3001"; then
+            ok "UFW rule for port 3001 is present"
+        else
+            warn "UFW is active but rule for port 3001 not found — will offer setup after deploy"
+            NEED_UFW_RULE=true
+        fi
+    else
+        warn "UFW is installed but inactive — will offer to enable after deploy"
+        NEED_UFW_ENABLE=true
+    fi
 else
-    warn "No UFW rule found for port 3001 — will offer setup after deploy"
-    NEED_UFW=true
+    info "UFW not installed (optional)"
 fi
 
 # ── Section 5: Maintenance checks ───────────────────────────────────────────────────────────
@@ -221,7 +233,7 @@ else
     NEED_AUTOSTART=true
 fi
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
     warn ""
     warn "Some configuration items are missing. Deploy will continue and you"
     warn "will be prompted to set them up once the site is healthy."
@@ -329,17 +341,35 @@ log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
 log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 log ""
 
-# ── Section 10: Post-deploy maintenance setup ─────────────────────────────────────────────────
+# ── Section 10: Post-deploy configuration setup ──────────────────────────────────────────────
 
-if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW" = true ]; then
+if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW_ENABLE" = true ] || [ "$NEED_UFW_RULE" = true ]; then
     section "Optional configuration setup"
 
-    if [ "$NEED_UFW" = true ] && [ -t 0 ]; then
+    if [ "$NEED_UFW_ENABLE" = true ] && [ -t 0 ]; then
         echo ""
-        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW firewall rule for port 3001 is not configured."
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW firewall is installed but not active."
+        echo "        It must be enabled for the firewall rules to take effect."
+        read -r -p "        Enable UFW now? [y/N] " _ufw_enable_resp
+        if [[ "$_ufw_enable_resp" =~ ^[Yy]$ ]]; then
+            if sudo ufw enable 2>&1 | tee -a "$LOG_FILE"; then
+                ok "UFW enabled"
+                log "[$(timestamp)] UFW enabled by deploy script" | tee -a "$LOG_FILE"
+                NEED_UFW_RULE=true
+            else
+                warn "UFW enable failed — run manually: sudo ufw enable"
+            fi
+        else
+            warn "Skipped — run manually when ready: sudo ufw enable"
+        fi
+    fi
+
+    if [ "$NEED_UFW_RULE" = true ] && [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}${BOLD}[SETUP]${RESET} UFW rule for port 3001 is not configured."
         echo "        The dev site won't be reachable from other LAN devices without this rule."
-        read -r -p "        Set up UFW rule now? [y/N] " _ufw_resp
-        if [[ "$_ufw_resp" =~ ^[Yy]$ ]]; then
+        read -r -p "        Set up UFW rule now? [y/N] " _ufw_rule_resp
+        if [[ "$_ufw_rule_resp" =~ ^[Yy]$ ]]; then
             if sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only' 2>&1 | tee -a "$LOG_FILE"; then
                 ok "UFW rule added for 192.168.0.0/16 on port 3001"
                 log "[$(timestamp)] UFW rule added by deploy script" | tee -a "$LOG_FILE"
@@ -387,8 +417,9 @@ if [ "$NEED_CRON" = true ] || [ "$NEED_AUTOSTART" = true ] || [ "$NEED_UFW" = tr
     if [ ! -t 0 ]; then
         warn "Running non-interactively — skipping setup prompts."
         warn "Set up missing items manually:"
-        [ "$NEED_UFW" = true ]       && warn "  UFW:       sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-        [ "$NEED_CRON" = true ]      && warn "  Cron:      sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
-        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart: sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
+        [ "$NEED_UFW_ENABLE" = true ] && warn "  UFW enable:   sudo ufw enable"
+        [ "$NEED_UFW_RULE" = true ]  && warn "  UFW rule:     sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+        [ "$NEED_CRON" = true ]      && warn "  Cron:         sudo crontab -e  (add: 0 2 * * 0 /usr/bin/docker system prune -f --volumes >> /var/log/docker-prune.log 2>&1)"
+        [ "$NEED_AUTOSTART" = true ] && warn "  Autostart:    sudo bash $DEV_REPO/scripts/setup/install-dev-autostart.sh"
     fi
 fi

@@ -13,7 +13,14 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-DEV_REPO="${HOME}/MyPortfolioSite-dev"
+# When run via 'sudo bash', $HOME is /root — resolve the actual user's home instead
+if [ -n "${SUDO_USER:-}" ]; then
+    ACTUAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    ACTUAL_HOME="$HOME"
+fi
+
+DEV_REPO="${ACTUAL_HOME}/MyPortfolioSite-dev"
 
 if [ ! -d "$DEV_REPO" ]; then
     echo "Error: Dev repo not found at $DEV_REPO"
