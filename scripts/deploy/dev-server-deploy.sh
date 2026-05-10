@@ -317,14 +317,14 @@ fi
 
 section "Waiting for site to become healthy"
 
-DEV_URL="http://${LAN_IP}:3001"
+# DEV_URL="http://${LAN_IP}:3001"
 ATTEMPTS=$(( HEALTH_TIMEOUT / HEALTH_INTERVAL ))
 
-info "Polling ${DEV_URL}/api/health (${HEALTH_TIMEOUT}s timeout)..."
+info "Polling ${FRONTEND_URL}/api/health (${HEALTH_TIMEOUT}s timeout)..."
 
 for i in $(seq 1 "$ATTEMPTS"); do
-    if curl -sf --max-time 4 "${DEV_URL}/api/health" > /dev/null 2>&1; then
-        ok "✓ Dev site healthy at ${DEV_URL}"
+    if curl -sf --max-time 4 "${FRONTEND_URL}/api/health" > /dev/null 2>&1; then
+        ok "✓ Dev site healthy at ${FRONTEND_URL}"
         break
     fi
     if [ "$i" -eq "$ATTEMPTS" ]; then
@@ -355,7 +355,7 @@ done
 section "Deploy complete"
 
 ok ""
-ok "  Site:    ${DEV_URL}"
+ok "  Site:    ${FRONTEND_URL}"
 ok "  Branch:  $DEPLOY_BRANCH"
 ok "  Commit:  $(git rev-parse --short HEAD)"
 ok "  Log:     $LOG_FILE"
