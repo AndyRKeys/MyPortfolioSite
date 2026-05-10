@@ -30,7 +30,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: prod
+      target: dev
     restart: unless-stopped
     environment:
       PORT: ${PORT:-8081}
