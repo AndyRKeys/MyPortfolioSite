@@ -146,6 +146,8 @@ Once you are satisfied that the stacks are healthy and running under Docker CE, 
 
 This is optional but recommended to avoid future confusion.
 
+**Important:** Only run this after both stacks are confirmed healthy. Do not include it in any automated flow — it must remain a manual, gated final step.
+
 ## Post-migration checks
 
 After migration:
@@ -157,3 +159,50 @@ After migration:
 - Confirm that the previous `permission denied` behaviour when stopping containers no longer occurs.
 
 If Docker enters a bad permission/state again, prefer a full system reboot over incremental daemon restarts, as described in `DEPLOYMENT_LESSONS_LEARNED.md`.
+
+## Post-migration gotchas (2026-05-11)
+
+The following were encountered during the first live migration run and are documented here so they don't catch you again.
+
+### docker.socket not started — `/run/docker.sock` missing
+
+After Docker CE is installed and `systemctl status docker` looks healthy, all `docker` commands may still fail with:
+
+```
+Cannot connect to the Docker daemon at unix:///run/docker.sock
+```
+
+This happens because systemd socket activation means `docker.socket` must be started before the socket file is created. Fix:
+
+```bash
+sudo systemctl stop docker docker.socket
+sudo systemctl start docker.socket
+sudo systemctl start docker
+# Verify
+ls -la /run/docker.sock
+```
+
+The warning *"Stopping docker.service but its triggering units are still active: docker.socket"* is the diagnostic clue that the socket unit is the root activation point.
+
+### Duplicate apt source file
+
+After running the migration script, `apt update` may warn about a duplicate Docker apt source. Remove the stale file:
+
+```bash
+sudo rm /etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
+sudo apt update
+```
+
+This file is left behind by any previous manual Docker CE install attempt and is safe to delete once the migration script's source entry is in place.
+
+### Health check responses that look wrong but are correct
+
+After migration, when verifying both stacks:
+
+| Environment | Command | Expected response | Meaning |
+|---|---|---|---|
+| Prod | `curl http://andykeys.me/health` | `301 Moved Permanently` | HTTP→HTTPS redirect is working ✅ |
+| Prod | `curl -L https://andykeys.me/health` | `200 OK` with JSON body | Actual health response ✅ |
+| Dev | `curl http://192.168.68.81:3001/health` | Security headers, no body | nginx proxying correctly ✅ |
+
+A 301 from prod `/health` is a pass, not a failure. Always use `curl -L` when checking prod health, or use HTTPS directly.
