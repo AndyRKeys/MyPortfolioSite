@@ -1,10 +1,10 @@
-# Dev Server Setup
+# Dev Environment
 
-Sets up the `dev` branch as a second environment on the Ubuntu Server, accessible LAN-only at `http://<LAN_IP>:3001`.
+Sets up and operates the `dev` branch as a second environment on the Ubuntu Server, accessible LAN-only at `http://<LAN_IP>:3001`.
 
 The deploy script handles cloning, `.env` creation, building, and health-checking automatically. You only need to do three things manually before the first run.
 
-Docker on the dev server is expected to be installed via the official Docker CE apt packages (not via snap). See `docs/DOCKER_MIGRATION.md` if you are migrating from snap-based Docker.
+Docker on the dev server is expected to be installed via the official Docker CE apt packages (not via snap). See `DOCKER_MIGRATION.md` if you are migrating from snap-based Docker.
 
 ---
 
