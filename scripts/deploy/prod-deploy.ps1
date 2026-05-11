@@ -6,10 +6,17 @@
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
-# Usage: .\prod-deploy.ps1 [-Hostname <name>] [-Rollback <sha>]
+# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Rollback <sha>]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Rollback = ''
 )
+
 $remoteArgs = if ($Rollback) { "--rollback $Rollback" } else { "" }
-ssh $Hostname "bash ~/MyPortfolioSite/scripts/deploy/prod-deploy.sh $remoteArgs"
+
+$remoteCommand = @"
+cd ~/MyPortfolioSite
+bash scripts/deploy/prod-deploy.sh $remoteArgs
+"@
+
+ssh $Hostname $remoteCommand

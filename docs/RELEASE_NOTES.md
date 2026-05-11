@@ -1,5 +1,58 @@
 # Release Notes
 
+## Release 2026-05-11 — Docker CE Migration
+
+**Released:** 2026-05-11
+**Branch:** release/2026-05-11
+**Closes:** [#221](https://github.com/AndyRKeys/MyPortfolioSite/issues/221), [#213](https://github.com/AndyRKeys/MyPortfolioSite/issues/213)
+
+### Summary
+
+Migrates both the dev and prod servers from snap-based Docker to Docker CE (apt), eliminating the AppArmor `permission denied` errors that caused repeated deploy failures. Aligns the prod deploy script with the dev deploy script via a new shared library, and restructures the infrastructure docs into per-environment files.
+
+### Scripts
+
+- **`scripts/setup/migrate-from-snap-docker.sh`** — guided interactive migration: inventory, env backup, stop stacks, stop snap daemon, install Docker CE, add user to docker group, recreate stacks, optionally remove snap
+- **`scripts/setup/docker-migration-inventory.sh`** — non-destructive host inspection; logs snap vs apt Docker, data dirs, conflicting services, port usage
+- **`scripts/setup/docker-env-discovery.sh`** — locates dev/prod project roots and `.env` files
+- **`scripts/setup/docker-env-backup.sh`** — backs up and restores dev/prod `.env` files to `~/docker-migration-backup/<timestamp>/`
+- **`scripts/setup/docker-migration-checklist.sh`** — captures Docker volume/network/container state before migration
+- **`scripts/deploy/deploy-lib.sh`** — new shared library used by both `dev-deploy.sh` and `prod-deploy.sh`; provides coloured logging, prerequisite checks, `.env` validation (placeholder detection, length checks), `compose_up_with_rollback`, and `wait_for_health`
+- **`scripts/deploy/dev-deploy.sh`** + **`dev-deploy.ps1`** — rewritten to use `deploy-lib.sh`; replaces old `dev-server-deploy.sh`
+- **`scripts/deploy/prod-deploy.sh`** — rewritten to use `deploy-lib.sh`; now matches dev deploy in terms of env validation, structured phase logging, and automatic rollback
+
+### Documentation
+
+- **`docs/INFRASTRUCTURE.md`** — slimmed down to host-level concerns only (hardware, Dropbear disk unlock, shared backup strategy, generic troubleshooting); points to per-environment docs
+- **`docs/DEV_ENVIRONMENT.md`** *(new)* — dev environment setup, compose file, ports, env vars, deploy entry points, useful commands, troubleshooting
+- **`docs/PROD_ENVIRONMENT.md`** *(new)* — production environment setup, compose file, SSL, env vars, deploy entry points, operational commands
+- **`docs/DOCKER_MIGRATION.md`** *(new)* — explains the snap vs apt situation, migration script walkthrough, recommended 7-step sequence, and post-migration checks
+- **`docs/DEV_SERVER_SETUP.md`** — updated to reflect HTTP-only dev environment (no self-signed cert); references new `DOCKER_MIGRATION.md`
+
+### Migration performed on live server
+
+On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
+
+1. Ran `migrate-from-snap-docker.sh` — inventoried host, backed up `.env` files, stopped both stacks, stopped `snap.docker.dockerd`
+2. Docker CE 29.4.3 confirmed installed via apt; daemon started via `systemctl start/restart docker.socket docker`
+3. Prod stack brought up: `docker compose -f docker-compose.prod.yml up -d --build` ✓
+4. Dev stack brought up: `docker compose -f docker-compose.dev-server.yml up -d --build` ✓
+5. Both stacks confirmed healthy via `docker ps` and `curl` health checks
+6. Duplicate Docker apt source removed; `sudo snap remove --purge docker` completed
+
+| Stack | Health check | Result |
+|---|---|---|
+| Prod | `curl http://localhost/health` | 301 → HTTPS (expected) ✓ |
+| Dev | `curl http://localhost:3001/health` | Security headers returned ✓ |
+
+### Breaking Changes / Deployment Notes
+
+- Deploy scripts renamed: `dev-server-deploy.sh` → `dev-deploy.sh`, `dev-server-deploy.ps1` → `dev-deploy.ps1`
+- Docker via snap is no longer supported on this project; use Docker CE (apt) only
+- No application code changes; no DB migration required
+
+---
+
 ## Release 2026-06-10
 
 **Released:** 2026-06-10  

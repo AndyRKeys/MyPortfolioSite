@@ -1,4 +1,4 @@
-# Dev environment on Ubuntu Server — LAN-only, port 3001, no SSL.
+# Dev environment on Ubuntu Server — LAN-only, port 3001, HTTPS with self-signed cert.
 # Usage: docker compose -f docker-compose.dev-server.yml up -d --build
 #
 # Run from ~/MyPortfolioSite-dev (the dev-branch checkout).
@@ -6,6 +6,7 @@
 #
 # Prerequisites:
 #   - ~/MyPortfolioSite-dev/.env created from .env.dev-server.example
+#   - Self-signed certificate generated: bash scripts/setup/generate-dev-certs.sh $LAN_IP
 #   - UFW rule allows LAN access to port 3001:
 #       sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'
 
@@ -30,7 +31,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: prod
+      target: dev
     restart: unless-stopped
     environment:
       PORT: ${PORT:-8081}
@@ -61,6 +62,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    ports:
+      - "8081:8081"
 
   nginx-dev:
     image: nginx:alpine
@@ -69,6 +72,7 @@ services:
       - "3001:3001"
     volumes:
       - ./scripts/config/nginx-dev-server.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/certs:/etc/nginx/certs:ro
       - .:/usr/share/nginx/html:ro
       - uploads_dev_data:/usr/share/nginx/html/uploads:ro
     environment:
