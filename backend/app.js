@@ -27,10 +27,16 @@ export function createApp() {
   const app = express();
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
+
+  // Extract host+port from ALLOWED_ORIGIN for flexible protocol matching
+  const allowedOriginHostPort = ALLOWED_ORIGIN.replace(/^https?:\/\//, '');
+
   app.use(cors({
     origin: (origin, cb) => {
       if (!origin || origin === ALLOWED_ORIGIN ||
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+          // Dev server: accept both http and https for same host:port during transition
+          origin?.replace(/^https?:\/\//, '') === allowedOriginHostPort) {
         cb(null, true);
       } else {
         cb(new Error(`CORS: origin ${origin} not allowed`));
