@@ -45,6 +45,7 @@ services:
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
+      - ./scripts:/app/scripts:ro
       - /app/node_modules
     depends_on:
       postgres:
