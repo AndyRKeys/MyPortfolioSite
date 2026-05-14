@@ -1,34 +1,37 @@
 # Trigger a dev server deploy from Windows via SSH.
-# Connects to the Ubuntu Server and runs scripts/deploy/dev-deploy.sh remotely.
-# Auto-detects current local git branch for deployment.
+# Connects to the Ubuntu Server and runs scripts/deploy/dev-server-deploy-wrapper.sh remotely.
+# The wrapper updates the branch first, then execs dev-deploy.sh with the latest code.
 #
-# On first run the bash script will clone the repo automatically.
-# On subsequent runs it pulls the latest branch and rebuilds containers.
+# IMPORTANT: Use this script, not dev-deploy.ps1, to ensure the wrapper runs and
+# the deploy always executes the current version of the deploy scripts.
 #
-# Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>]
+# Usage: .\scripts\deploy\dev-server-deploy.ps1 [-Hostname <name>] [-Branch <branch>]
 param(
     [string]$Hostname = 'ak-home-server',
-    [string]$Branch
+    [string]$Branch = ''
 )
 
-# Auto-detect current branch if not specified
-if (-not $Branch) {
-    $Branch = git branch --show-current
-    if (-not $Branch) {
-        Write-Error "Could not determine current git branch. Specify -Branch explicitly."
-        exit 1
-    }
+# Detect current branch if not specified
+if ([string]::IsNullOrEmpty($Branch)) {
+    $Branch = git rev-parse --abbrev-ref HEAD
     Write-Host "Detected branch: $Branch" -ForegroundColor Cyan
 }
 
-$DEPLOY_SCRIPT = "~/MyPortfolioSite-dev/scripts/deploy/dev-deploy.sh"
+Write-Host "Deploying branch '$Branch' to dev server via wrapper..." -ForegroundColor Green
 
 $remoteCommand = @"
-cd ~/MyPortfolioSite-dev
-bash $DEPLOY_SCRIPT $Branch
+WRAPPER=~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh
+DEPLOY_BRANCH="$Branch"
+if [ -f "`$WRAPPER" ]; then
+    bash "`$WRAPPER" "`$DEPLOY_BRANCH"
+else
+    echo "[INFO] Dev repo not found — cloning for the first time..."
+    git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
+    bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh "`$DEPLOY_BRANCH"
+fi
 "@
 
-Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
-Write-Host $remoteCommand -ForegroundColor Yellow
+# Strip CRLF — bash on the server rejects Windows line endings
+$remoteCommand = $remoteCommand -replace "`r`n", "`n"
 
 ssh $Hostname $remoteCommand
