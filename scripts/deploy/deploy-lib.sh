@@ -235,7 +235,6 @@ ensure_dev_certs() {
   local cert_dir="${script_dir}/../config/certs"
   local cert_file="${cert_dir}/dev-server.crt"
   local key_file="${cert_dir}/dev-server.key"
-  local lan_ip_marker="${cert_dir}/dev-server.lan_ip"
 
   dsection "Checking SSL certificates for HTTPS on port 3001"
 
@@ -243,27 +242,24 @@ ensure_dev_certs() {
     ddie "Certificate generation script not found at $cert_script"
   fi
 
-  # Idempotency check: only regenerate if certs are missing or LAN_IP changed
+  # Idempotency check: only regenerate if certs are missing or LAN_IP doesn't match cert CN/SAN
   local should_regenerate=false
-  if [ -f "$cert_file" ] && [ -f "$key_file" ] && [ -f "$lan_ip_marker" ]; then
-    local prev_lan_ip
-    prev_lan_ip=$(cat "$lan_ip_marker" 2>/dev/null || true)
-    if [ "$prev_lan_ip" = "$lan_ip" ]; then
-      dok "SSL certificates present and LAN_IP unchanged ($lan_ip) — skipping regeneration"
-      # Still verify cert is valid (don't skip verification)
+  if [ -f "$cert_file" ] && [ -f "$key_file" ]; then
+    # Check if existing certificate CN/SAN matches current LAN_IP (from .env)
+    if openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP:" | grep -q "$lan_ip"; then
+      dok "SSL certificates present and CN/SAN matches $lan_ip — skipping regeneration"
     else
-      dwarn "LAN_IP changed ($prev_lan_ip → $lan_ip), regenerating dev certificates..."
+      dwarn "Certificate CN/SAN doesn't match current LAN_IP ($lan_ip), regenerating..."
       should_regenerate=true
     fi
   else
-    dwarn "Dev certificates or metadata missing, generating fresh dev certificates..."
+    dwarn "Dev certificates missing, generating fresh dev certificates..."
     should_regenerate=true
   fi
 
   # Generate certificates if needed
   if [ "$should_regenerate" = true ]; then
     if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
-      echo "$lan_ip" > "$lan_ip_marker"
       dinfo "Certificate generation passed"
     else
       ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
