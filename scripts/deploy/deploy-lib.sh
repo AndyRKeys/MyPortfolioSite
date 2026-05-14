@@ -561,11 +561,10 @@ test_error_logger() {
       dwarn "  ✗ error-logger.js not found in frontend HTML (script tag missing?)"
     fi
 
-    # Show recent logs anyway
+    # Show recent logs anyway (avoid subshell issues with tee by using sed directly)
     dwarn "Recent backend logs:"
-    echo "$logs" | grep -E "error|Error|FRONTEND|CSP|console" | tail -10 | while read line; do
-      dwarn "    $line"
-    done
+    echo "$logs" | grep -E "error|Error|FRONTEND|CSP|console" | tail -10 | \
+      sed "s/^/[$(_deploy_timestamp)] ${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET}  /" | tee -a "$LOG_FILE"
 
     # Check if /debug/errors endpoint is reachable
     local debug_status=$(curl -sk --max-time 5 "${protocol}://${host_port}/api/debug/errors" 2>&1 | grep -c "message\|error" || true)
