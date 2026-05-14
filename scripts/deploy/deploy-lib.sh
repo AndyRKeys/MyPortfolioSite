@@ -235,6 +235,7 @@ ensure_dev_certs() {
   local cert_dir="${script_dir}/../config/certs"
   local cert_file="${cert_dir}/dev-server.crt"
   local key_file="${cert_dir}/dev-server.key"
+  local lan_ip_marker="${cert_dir}/dev-server.lan_ip"
 
   dsection "Checking SSL certificates for HTTPS on port 3001"
 
@@ -242,11 +243,31 @@ ensure_dev_certs() {
     ddie "Certificate generation script not found at $cert_script"
   fi
 
-  # Generate certificates if needed
-  if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
-    dinfo "Certificate generation passed"
+  # Idempotency check: only regenerate if certs are missing or LAN_IP changed
+  local should_regenerate=false
+  if [ -f "$cert_file" ] && [ -f "$key_file" ] && [ -f "$lan_ip_marker" ]; then
+    local prev_lan_ip
+    prev_lan_ip=$(cat "$lan_ip_marker" 2>/dev/null || true)
+    if [ "$prev_lan_ip" = "$lan_ip" ]; then
+      dok "SSL certificates present and LAN_IP unchanged ($lan_ip) — skipping regeneration"
+      # Still verify cert is valid (don't skip verification)
+    else
+      dwarn "LAN_IP changed ($prev_lan_ip → $lan_ip), regenerating dev certificates..."
+      should_regenerate=true
+    fi
   else
-    ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
+    dwarn "Dev certificates or metadata missing, generating fresh dev certificates..."
+    should_regenerate=true
+  fi
+
+  # Generate certificates if needed
+  if [ "$should_regenerate" = true ]; then
+    if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
+      echo "$lan_ip" > "$lan_ip_marker"
+      dinfo "Certificate generation passed"
+    else
+      ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
+    fi
   fi
 
   # Verify certificate files exist
