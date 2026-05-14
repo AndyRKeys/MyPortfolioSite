@@ -119,6 +119,8 @@ wait_for_health backend-dev
 
 test_error_logger
 
+test_error_logger_all_pages
+
 test_csp_reporting
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────

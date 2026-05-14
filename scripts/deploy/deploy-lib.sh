@@ -520,7 +520,7 @@ wait_for_health() {
 # ── Error Logger Test ──────────────────────────────────────────────────────────
 
 test_error_logger() {
-  dsection "Testing frontend error logger (headless browser)"
+  dsection "Testing frontend error logger (single endpoint test)"
 
   # Extract base URL from HEALTH_URL (https://192.168.68.81:3001/api/health -> https://192.168.68.81:3001)
   local base_url=$(echo "$HEALTH_URL" | sed -E 's|/api/health.*||')
@@ -533,6 +533,24 @@ test_error_logger() {
     dok "✓ Error logger test passed"
   else
     dwarn "⚠ Error logger test failed or had warnings"
+    dwarn "  See output above for details"
+  fi
+}
+
+test_error_logger_all_pages() {
+  dsection "Testing error logger across all site pages"
+
+  # Extract base URL from HEALTH_URL
+  local base_url=$(echo "$HEALTH_URL" | sed -E 's|/api/health.*||')
+
+  dinfo "Running comprehensive page coverage test..."
+  dinfo "  Testing all pages for error-logger deployment"
+
+  # Run comprehensive test inside the backend container
+  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | tee -a "$LOG_FILE"; then
+    dok "✓ Error logger site-wide test passed"
+  else
+    dwarn "⚠ Error logger site-wide test failed or had warnings"
     dwarn "  See output above for details"
   fi
 }
