@@ -208,6 +208,9 @@ ensure_dev_certs() {
   local lan_ip="$1"
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local cert_script="${script_dir}/../setup/generate-dev-certs.sh"
+  local cert_dir="${script_dir}/../config/certs"
+  local cert_file="${cert_dir}/dev-server.crt"
+  local key_file="${cert_dir}/dev-server.key"
 
   dsection "Checking SSL certificates for HTTPS on port 3001"
 
@@ -215,11 +218,46 @@ ensure_dev_certs() {
     ddie "Certificate generation script not found at $cert_script"
   fi
 
+  # Generate certificates if needed
   if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
-    dok "SSL certificates ready for $lan_ip"
+    dinfo "Certificate generation passed"
   else
     ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
   fi
+
+  # Verify certificate files exist
+  if ! [ -f "$cert_file" ]; then
+    ddie "Certificate file not found at $cert_file after generation"
+  fi
+  if ! [ -f "$key_file" ]; then
+    ddie "Certificate key file not found at $key_file after generation"
+  fi
+
+  # Verify certificate validity
+  if ! openssl x509 -in "$cert_file" -noout >/dev/null 2>&1; then
+    ddie "Certificate at $cert_file is invalid or corrupted"
+  fi
+
+  # Verify certificate hasn't expired
+  local expiry_date
+  expiry_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+  if [ -z "$expiry_date" ]; then
+    dwarn "Could not verify certificate expiry date"
+  else
+    dinfo "Certificate expires: $expiry_date"
+  fi
+
+  # Verify certificate CN/SAN matches LAN_IP
+  if ! openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP:" | grep -q "$lan_ip"; then
+    dwarn "Certificate may not have correct CN/SAN for $lan_ip"
+  fi
+
+  # Verify file permissions (nginx needs read access)
+  if ! [ -r "$cert_file" ] || ! [ -r "$key_file" ]; then
+    ddie "Certificate files exist but are not readable (permissions issue)"
+  fi
+
+  dok "SSL certificates verified and ready for $lan_ip"
 }
 
 # ── Compose and rollback ───────────────────────────────────────────────────────
