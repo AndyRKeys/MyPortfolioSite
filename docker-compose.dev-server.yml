@@ -54,6 +54,7 @@ services:
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads_dev_data:/app/uploads
+      - ./scripts:/app/scripts:ro
     depends_on:
       postgres-dev:
         condition: service_healthy
