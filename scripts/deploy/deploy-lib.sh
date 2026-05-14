@@ -489,3 +489,67 @@ wait_for_health() {
     sleep "$interval"
   done
 }
+
+# ── Error Logger Test ──────────────────────────────────────────────────────────
+
+test_error_logger() {
+  dsection "Testing frontend error logger"
+
+  # Extract host from HEALTH_URL (https://192.168.68.81:3001/api/health -> 192.168.68.81:3001)
+  local host_port=$(echo "$HEALTH_URL" | sed -E 's|^https?://([^/]+).*|\1|')
+  local protocol=$(echo "$HEALTH_URL" | sed -E 's|^(https?)://.*|\1|')
+  local test_url="${protocol}://${host_port}/debug/test-errors"
+
+  dinfo "Triggering test errors at $test_url..."
+
+  # Visit test-errors page to trigger test errors
+  if [ "$HEALTH_INSECURE" = "1" ]; then
+    curl -sk --max-time 10 "$test_url" > /dev/null 2>&1
+  else
+    curl -s --max-time 10 "$test_url" > /dev/null 2>&1
+  fi
+
+  # Wait for errors to be logged
+  sleep 2
+
+  # Check logs for test error markers
+  local logs=$(docker compose -f "$COMPOSE_FILE" logs backend 2>&1 | tail -50)
+  local error_count=$(echo "$logs" | grep -c "FRONTEND ERROR.*Test error" || true)
+
+  if [ "$error_count" -ge 2 ]; then
+    dok "✓ Error logger working ($error_count test errors captured)"
+  else
+    dwarn "⚠ Error logger test: expected 2+ errors, got $error_count"
+    dwarn "Recent logs:"
+    echo "$logs" | grep -E "FRONTEND|CSP" | tail -5 | while read line; do
+      dwarn "  $line"
+    done
+  fi
+}
+
+# ── CSP Violation Test ────────────────────────────────────────────────────────
+
+test_csp_reporting() {
+  dsection "Testing CSP violation reporting"
+
+  # Extract host from HEALTH_URL
+  local host_port=$(echo "$HEALTH_URL" | sed -E 's|^https?://([^/]+).*|\1|')
+  local protocol=$(echo "$HEALTH_URL" | sed -E 's|^(https?)://.*|\1|')
+  local test_url="${protocol}://${host_port}"
+
+  dinfo "CSP report-uri configured at /api/debug/csp-violations"
+  dinfo "CSP violations will be logged when resources violate policy"
+
+  # Check if CSP header includes report-uri
+  if [ "$HEALTH_INSECURE" = "1" ]; then
+    local csp_header=$(curl -skI --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" || true)
+  else
+    local csp_header=$(curl -sI --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" || true)
+  fi
+
+  if echo "$csp_header" | grep -q "report-uri"; then
+    dok "✓ CSP report-uri is configured"
+  else
+    dwarn "⚠ CSP header doesn't include report-uri (violations won't be logged)"
+  fi
+}

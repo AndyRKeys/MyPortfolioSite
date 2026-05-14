@@ -108,6 +108,28 @@ console.warn = function(...args) {
   }
 };
 
+// Capture CSP (Content-Security-Policy) violations
+// These occur when a resource is blocked by security policy (e.g., loading from disallowed domain)
+window.addEventListener('securitypolicyviolation', (event) => {
+  const cspKey = `csp:${event.violatedDirective}:${event.blockedURI}`;
+  if (seenErrors.has(cspKey)) return;
+  seenErrors.add(cspKey);
+  if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
+
+  console.warn(`CSP Violation: ${event.violatedDirective} blocked ${event.blockedURI}`);
+
+  logToBackend({
+    type: 'csp-violation',
+    timestamp: new Date().toISOString(),
+    'violated-directive': event.violatedDirective,
+    'blocked-uri': event.blockedURI,
+    'document-uri': event.documentURI,
+    'source-file': event.sourceFile,
+    'line-number': event.lineNumber,
+    'column-number': event.columnNumber,
+  });
+});
+
 // Provide manual export function for debugging
 window.exportErrors = function() {
   const errors = JSON.parse(localStorage.getItem('frontendErrors') || '[]');

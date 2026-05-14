@@ -115,6 +115,12 @@ compose_up_with_rollback backend-dev
 
 wait_for_health backend-dev
 
+# ── Post-deployment Tests ──────────────────────────────────────────────────────────────
+
+test_error_logger
+
+test_csp_reporting
+
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 
 dsection "Deploy complete"
