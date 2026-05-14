@@ -5,6 +5,8 @@
 
 import { API_BASE } from './config.js';
 
+console.log('[error-logger] Initializing global error logger');
+
 // Track errors to avoid logging duplicates (same error multiple times)
 const seenErrors = new Set();
 const MAX_STORED_ERRORS = 100;
@@ -12,15 +14,16 @@ const MAX_STORED_ERRORS = 100;
 // Send error to backend
 async function logToBackend(errorData) {
   try {
+    console.log(`[error-logger] Sending ${errorData.type} to ${API_BASE}/debug/errors`);
     await fetch(`${API_BASE}/debug/errors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(errorData),
-    }).catch(() => {
-      // Silently fail if backend unavailable (don't create infinite loop)
+    }).catch((err) => {
+      console.error('[error-logger] Failed to send error:', err);
     });
   } catch (e) {
-    // Ignore errors in error logging
+    console.error('[error-logger] Error in logToBackend:', e);
   }
 }
 

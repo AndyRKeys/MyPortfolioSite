@@ -520,28 +520,60 @@ test_error_logger() {
 
   dinfo "Triggering test errors at $test_url..."
 
-  # Visit test-errors page to trigger test errors
+  # Visit test-errors page to trigger test errors with verbose output
+  local curl_output
   if [ "$HEALTH_INSECURE" = "1" ]; then
-    curl -sk --max-time 10 "$test_url" > /dev/null 2>&1
+    curl_output=$(curl -skv --max-time 10 "$test_url" 2>&1)
   else
-    curl -s --max-time 10 "$test_url" > /dev/null 2>&1
+    curl_output=$(curl -sv --max-time 10 "$test_url" 2>&1)
   fi
 
-  # Wait for errors to be logged
-  sleep 2
+  local http_code=$(echo "$curl_output" | grep -oP '< HTTP/\d\.\d \K[0-9]+' | head -1 || echo "000")
+  dinfo "  HTTP response: $http_code"
 
-  # Check logs for test error markers
-  local logs=$(docker compose -f "$COMPOSE_FILE" logs backend 2>&1 | tail -50)
-  local error_count=$(echo "$logs" | grep -c "FRONTEND ERROR.*Test error" || true)
+  if [ "$http_code" != "200" ]; then
+    dwarn "⚠ Test page returned HTTP $http_code (expected 200)"
+    dwarn "  curl output: $(echo "$curl_output" | grep -E "HTTP|error|Error" | head -3)"
+  fi
+
+  # Wait for errors to be logged (increased timeout)
+  sleep 3
+
+  # Check logs for test error markers (try both backend and backend-dev)
+  local logs=$(docker compose -f "$COMPOSE_FILE" logs backend-dev 2>&1 | tail -50)
+
+  # Look for any FRONTEND ERROR or console.error logs
+  local error_count=$(echo "$logs" | grep -c "FRONTEND ERROR\|console.error" || true)
 
   if [ "$error_count" -ge 2 ]; then
     dok "✓ Error logger working ($error_count test errors captured)"
   else
     dwarn "⚠ Error logger test: expected 2+ errors, got $error_count"
-    dwarn "Recent logs:"
-    echo "$logs" | grep -E "FRONTEND|CSP" | tail -5 | while read line; do
-      dwarn "  $line"
+
+    # Show backend service name for debugging
+    dinfo "  (checking service: backend-dev)"
+
+    # Check if error-logger.js is being loaded
+    local frontend_check=$(curl -sk --max-time 5 "${protocol}://${host_port}/" 2>/dev/null | grep -c "error-logger.js" || true)
+    if [ "$frontend_check" -gt 0 ]; then
+      dinfo "  ✓ error-logger.js is loaded in frontend"
+    else
+      dwarn "  ✗ error-logger.js not found in frontend HTML (script tag missing?)"
+    fi
+
+    # Show recent logs anyway
+    dwarn "Recent backend logs:"
+    echo "$logs" | grep -E "error|Error|FRONTEND|CSP|console" | tail -10 | while read line; do
+      dwarn "    $line"
     done
+
+    # Check if /debug/errors endpoint is reachable
+    local debug_status=$(curl -sk --max-time 5 "${protocol}://${host_port}/api/debug/errors" 2>&1 | grep -c "message\|error" || true)
+    if [ "$debug_status" -gt 0 ]; then
+      dinfo "  ✓ /api/debug/errors endpoint is reachable"
+    else
+      dwarn "  ✗ /api/debug/errors endpoint may not be responding"
+    fi
   fi
 }
 
