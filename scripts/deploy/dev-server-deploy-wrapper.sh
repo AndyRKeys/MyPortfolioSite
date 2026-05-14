@@ -1,39 +1,23 @@
 #!/usr/bin/env bash
-# dev-server-deploy-wrapper.sh — Wrapper to update branch then run dev deploy.
+# dev-server-deploy-wrapper.sh — Bootstrap wrapper for dev deploys.
 #
-# This script lives in MyPortfolioSite-dev and should be the main entrypoint
-# for dev deploys. It ensures the working tree is updated to the requested
-# branch *before* invoking the main dev-server-deploy.sh script, so the
-# deploy script never updates itself mid-run.
+# Solves the self-updating script problem: updates the working tree to the
+# requested branch BEFORE invoking dev-deploy.sh, so the deploy always runs
+# the latest version of the script, not the version that was loaded before the pull.
+#
+# This is the correct entrypoint for dev deploys. Call this, not dev-deploy.sh directly.
 #
 # Usage:
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh [branch] [--reset-failures]
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh [branch]
 # Examples:
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh                        # default branch, no reset
-#   bash scripts/deploy/dev-server-deploy-wrapper.sh feature/219-dev-server-https --reset-failures
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh                 # defaults to dev
+#   bash scripts/deploy/dev-server-deploy-wrapper.sh fix/my-branch   # feature branch
 
 set -euo pipefail
 
-DEPLOY_BRANCH="dev"
-RESET_FAILURES_FLAG=""
-
-for arg in "$@"; do
-  case "$arg" in
-    --reset-failures)
-      RESET_FAILURES_FLAG="--reset-failures"
-      ;;
-    *)
-      if [ "$DEPLOY_BRANCH" = "dev" ] && [[ "$arg" != --* ]]; then
-        DEPLOY_BRANCH="$arg"
-      fi
-      ;;
-  esac
-done
-
+DEPLOY_BRANCH="${1:-dev}"
 DEV_REPO="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
-
-echo "[DEBUG][wrapper] DEPLOY_BRANCH='$DEPLOY_BRANCH' RESET_FAILURES_FLAG='$RESET_FAILURES_FLAG' DEV_REPO='$DEV_REPO'" >&2
 
 # Ensure dev repo exists
 if [ ! -d "$DEV_REPO/.git" ]; then
@@ -43,21 +27,20 @@ fi
 
 cd "$DEV_REPO"
 
-# Update working tree to the requested branch
-# If the branch does not exist locally, try to create it tracking origin.
+# Switch working tree to requested branch before running the deploy script.
+# If the branch does not exist locally, create it tracking origin.
 if ! git show-ref --verify --quiet "refs/heads/$DEPLOY_BRANCH"; then
-  echo "[DEBUG][wrapper] Local branch '$DEPLOY_BRANCH' missing — creating from origin" >&2
+  echo "[INFO] Branch '$DEPLOY_BRANCH' not found locally — fetching from origin..."
   git fetch origin
   git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
 else
-  echo "[DEBUG][wrapper] Updating existing branch '$DEPLOY_BRANCH' from origin" >&2
   git fetch origin "$DEPLOY_BRANCH"
   git checkout "$DEPLOY_BRANCH"
   git reset --hard "origin/$DEPLOY_BRANCH"
 fi
 
-echo "[DEBUG][wrapper] HEAD is now at $(git rev-parse --short HEAD) on branch '$DEPLOY_BRANCH'" >&2
+echo "[INFO] HEAD is now at $(git rev-parse --short HEAD) on branch '$DEPLOY_BRANCH'"
 
-# Now run the actual deploy script from the updated working tree, optionally
-# passing through --reset-failures if requested by the caller.
-exec bash "$DEV_REPO/scripts/deploy/dev-server-deploy.sh" "$DEPLOY_BRANCH" ${RESET_FAILURES_FLAG}
+# exec replaces this shell process — dev-deploy.sh runs with the updated code,
+# deploy-lib.sh functions and any new additions are all picked up correctly.
+exec bash "$DEV_REPO/scripts/deploy/dev-deploy.sh" "$DEPLOY_BRANCH"
