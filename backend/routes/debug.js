@@ -66,35 +66,8 @@ router.get('/test-errors', (req, res) => {
   <title>Error Logger Test</title>
   <!-- Load error logger first so it captures all errors -->
   <script type="module" src="/resources/java/error-logger.js"></script>
-  <script type="module">
-    import { API_BASE } from '/resources/java/config.js';
-
-    // Wait for error logger to load, then trigger test errors
-    setTimeout(() => {
-      console.log('Testing error logger...');
-
-      // Test 1: console.error
-      console.error('Test error #1: console.error triggered');
-
-      // Test 2: console.warn
-      console.warn('Test error #2: console.warn triggered');
-
-      // Test 3: uncaught error
-      setTimeout(() => {
-        throw new Error('Test error #3: uncaught JavaScript error');
-      }, 100);
-
-      // Test 4: unhandled rejection
-      setTimeout(() => {
-        Promise.reject(new Error('Test error #4: unhandled promise rejection'));
-      }, 200);
-
-      // Report back after errors are logged
-      setTimeout(() => {
-        fetch(\`\${API_BASE}/debug/test-complete\`, { method: 'POST' }).catch(() => {});
-      }, 1000);
-    }, 500);
-  </script>
+  <!-- Load test script from external file to comply with CSP (no inline scripts) -->
+  <script type="module" src="/resources/java/test-errors.js"></script>
 </head>
 <body>
   <h1>Error Logger Test in Progress</h1>
