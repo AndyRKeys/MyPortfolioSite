@@ -27,7 +27,7 @@ if [ -f "`$WRAPPER" ]; then
 else
     echo "[INFO] Dev repo not found — cloning for the first time..."
     git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
-    bash ~/MyPortfolioSite-dev/scripts/deploy/dev-server-deploy-wrapper.sh "`$DEPLOY_BRANCH"
+    bash ~/MyPortfolioSite-dev/scripts/deploy/dev-deploy-wrapper.sh "`$DEPLOY_BRANCH"
 fi
 "@
 
