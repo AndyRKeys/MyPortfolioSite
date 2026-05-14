@@ -72,6 +72,7 @@ services:
       - "3001:3001"
     volumes:
       - ./scripts/config/nginx-dev-server.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - ./scripts/config/certs:/etc/nginx/certs:ro
       - .:/usr/share/nginx/html:ro
       - uploads_dev_data:/usr/share/nginx/html/uploads:ro

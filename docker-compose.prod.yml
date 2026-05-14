@@ -73,6 +73,7 @@ services:
       - "443:443"
     volumes:
       - ./scripts/config/nginx-portfolio.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - .:/usr/share/nginx/html:ro
       - uploads_data:/usr/share/nginx/html/uploads:ro
       # SSL certs managed by host Certbot — mounted read-only
