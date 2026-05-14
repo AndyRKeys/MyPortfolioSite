@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:error-logger": "node ../scripts/tests/test-error-logger.js"
+    "test:error-logger": "node ./scripts/tests/test-error-logger.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^7.4.0",
