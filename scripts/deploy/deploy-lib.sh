@@ -611,7 +611,8 @@ test_csp_reporting() {
       dok "✓ CSP report-uri is configured"
     else
       dwarn "⚠ CSP header present but report-uri not found"
-      dinfo "  CSP header: $(echo "$csp_header" | cut -c1-100)..."
+      dinfo "  Full CSP header:"
+      echo "$csp_header" | tee -a "$LOG_FILE" | sed 's/^/    /'
     fi
   else
     dwarn "⚠ CSP header not found (not being sent by server)"
