@@ -62,7 +62,7 @@ extra_env_checks() {
 
 init_log_banner "Dev Server Deploy"
 
-require_tools docker git curl
+require_tools docker git curl openssl
 
 ensure_repo_cloned
 
@@ -71,10 +71,6 @@ ensure_env_file
 load_env
 
 validate_env
-
-# ── Certificate generation (HTTPS with self-signed cert) ────────────────────────────────
-
-ensure_dev_certs "$LAN_IP"
 
 # ── UFW check (dev-specific) ───────────────────────────────────────────────────────────
 
@@ -96,6 +92,12 @@ update_to_branch
 
 show_deployment_info
 
+# ── Certificates and nginx pre-flight ─────────────────────────────────────────────────
+# Done after git update so we always use the latest cert generation script and
+# so that cert files are verified against the working tree that will be deployed.
+
+ensure_dev_certs "$LAN_IP"
+
 # ── Docker build & up ─────────────────────────────────────────────────────────────────
 
 # Health URL depends on LAN_IP, so set it after env load
@@ -103,6 +105,8 @@ HEALTH_URL="https://${LAN_IP}:3001/api/health"
 HEALTH_URL_2=""     # dev doesn't use a second health URL
 HEALTH_INSECURE=1   # self-signed cert — skip curl SSL verification
 NGINX_SERVICE=nginx-dev
+
+check_nginx_config nginx-dev
 
 compose_up_with_rollback backend-dev
 

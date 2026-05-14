@@ -23,6 +23,8 @@
 #   HEALTH_TIMEOUT — seconds to wait for health
 #   HEALTH_INTERVAL— seconds between health checks
 #   HEALTH_URL_2   — optional secondary health URL (e.g. HTTPS)
+#   NGINX_SERVICE  — compose service name for nginx (enables nginx log capture + startup check)
+#   HEALTH_INSECURE— set to 1 to skip TLS cert verification (dev self-signed certs)
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
@@ -278,6 +280,28 @@ ensure_dev_certs() {
   dok "SSL certificates verified and ready for $lan_ip"
 }
 
+# ── Nginx config pre-flight ────────────────────────────────────────────────────
+
+check_nginx_config() {
+  local nginx_service="${1:-nginx}"
+
+  dsection "Pre-flight: nginx configuration test"
+
+  # Runs nginx -t inside a throw-away container using the same compose env and
+  # volume mounts, so template substitution and cert paths are tested for real.
+  if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
+      2>&1 | tee -a "$LOG_FILE"; then
+    dfail ""
+    dfail "Nginx config test failed. Common causes:"
+    dfail "  • SSL cert or key file missing at the path mounted into the container"
+    dfail "  • Syntax error in nginx config template"
+    dfail "  • Environment variable not set (check .env and COMPOSE_FILE)"
+    ddie "Fix the nginx config then re-run."
+  fi
+
+  dok "Nginx config test passed"
+}
+
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
@@ -297,6 +321,26 @@ compose_up_with_rollback() {
     fi
 
     ddie "Deploy failed — see above for details."
+  fi
+
+  # If NGINX_SERVICE is set, verify it actually started — nginx exits immediately
+  # on config errors, so catching it here avoids a silent 60s health check timeout.
+  if [ -n "${NGINX_SERVICE:-}" ]; then
+    sleep 2  # allow nginx to finish initialising or fail-fast
+    local nginx_state
+    nginx_state=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$NGINX_SERVICE" 2>/dev/null \
+      || docker compose -f "$COMPOSE_FILE" ps "$NGINX_SERVICE" 2>/dev/null | awk 'NR==2{print $4}' \
+      || echo "unknown")
+
+    if [[ "$nginx_state" != "running" ]]; then
+      dfail "Nginx container is not running (state: $nginx_state)"
+      dfail ""
+      dfail "Nginx logs:"
+      docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      ddie "Nginx failed to start — check the nginx config and cert paths above."
+    fi
+
+    dok "Nginx container is running"
   fi
 }
 
@@ -342,6 +386,22 @@ wait_for_health() {
     if [ "$i" -eq "$attempts" ]; then
       dfail "Health check failed after ${timeout}s"
       dfail ""
+
+      # Diagnostic curl — show HTTP code and connection error without full verbose noise
+      local diag_http diag_err diag_tmp
+      diag_tmp=$(mktemp)
+      diag_http=$(curl -s --max-time 4 $curl_opts \
+        -o /dev/null -w "%{http_code}" \
+        --stderr "$diag_tmp" \
+        "$url" 2>/dev/null || echo "000")
+      diag_err=$(cat "$diag_tmp" 2>/dev/null || true)
+      rm -f "$diag_tmp"
+      dfail "Last curl attempt: HTTP $diag_http"
+      if [ -n "$diag_err" ]; then
+        dfail "curl error: $diag_err"
+      fi
+      dfail ""
+
       dfail "Backend logs — $backend_service (last 50 lines):"
       docker compose -f "$COMPOSE_FILE" logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
 
