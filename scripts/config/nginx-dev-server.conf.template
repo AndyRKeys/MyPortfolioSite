@@ -47,6 +47,7 @@ server {
     location /health {
         proxy_pass http://${BACKEND_HOST}:${APP_PORT}/health;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # Uploaded media served directly by Nginx from repo-root uploads/ dir
