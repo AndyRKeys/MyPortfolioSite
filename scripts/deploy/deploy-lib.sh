@@ -46,7 +46,8 @@ fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
-# Redact sensitive info from logs (IP addresses, usernames, passwords hints)
+# Redact sensitive info from logs (IP addresses, usernames, service names, hostnames)
+# See docs/LOGGING.md for what should be redacted and why
 _redact_sensitive() {
   local text="$1"
   # Redact IP addresses (keep format readable but obscure actual IPs)
@@ -57,6 +58,14 @@ _redact_sensitive() {
   text=$(echo "$text" | sed -E 's|/root|/home/[USER]|g')
   # Redact URLs with IPs
   text=$(echo "$text" | sed -E 's|https?://\[REDACTED_IP\]:[0-9]+|[REDACTED_URL]|g')
+  # Redact container/service names (myportfoliosite-dev-*, backend-dev, etc.)
+  text=$(echo "$text" | sed -E 's/myportfoliosite(-dev)?-[a-z0-9_-]+/[REDACTED_CONTAINER]/g')
+  # Redact service names in docker compose output (backend-dev, nginx-dev, postgres-dev)
+  text=$(echo "$text" | sed -E 's/(backend|nginx|postgres)-(dev|prod|local)(-[0-9])?/[REDACTED_SERVICE]/g')
+  # Redact hostnames (modnar3, user machines, etc.) — but keep localhost
+  text=$(echo "$text" | sed -E 's|/home/[a-z_][a-z0-9_-]*@[a-z0-9.-]+|/home/[USER]@[REDACTED_HOST]|g')
+  # Redact project directory names (MyPortfolioSite-dev)
+  text=$(echo "$text" | sed -E 's|/[a-z_][a-z0-9_-]*/MyPortfolioSite(-dev)?|/home/[USER]/[REDACTED_PROJECT]|g')
   echo "$text"
 }
 
