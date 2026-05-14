@@ -4,7 +4,21 @@
 # Used automatically by docker-compose.yml in local dev (source is volume-mounted).
 FROM node:20-alpine AS dev
 
+# Install system dependencies for Puppeteer (headless browser testing)
+RUN apk add --no-cache \
+  ca-certificates \
+  chromium \
+  nss \
+  freetype \
+  harfbuzz \
+  ttf-freefont \
+  libstdc++
+
 WORKDIR /app
+
+# Tell Puppeteer to use system Chromium instead of downloading its own
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 COPY package*.json ./
 RUN npm install --silent
