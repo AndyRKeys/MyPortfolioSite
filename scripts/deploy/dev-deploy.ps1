@@ -24,9 +24,11 @@ if (-not $Branch) {
 $DEPLOY_SCRIPT = "~/MyPortfolioSite-dev/scripts/deploy/dev-deploy.sh"
 
 $remoteCommand = @"
-bash "$DEPLOY_SCRIPT" $Branch
+cd ~/MyPortfolioSite-dev
+bash $DEPLOY_SCRIPT $Branch
 "@
 
 Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
+Write-Host $remoteCommand -ForegroundColor Yellow
 
 ssh $Hostname $remoteCommand
