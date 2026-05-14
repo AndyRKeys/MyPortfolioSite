@@ -303,7 +303,22 @@ check_nginx_config() {
     ddie "Fix the nginx config then re-run."
   fi
 
+  # Dump the rendered config to the log so any future nginx startup failure can
+  # be compared against what the pre-flight actually tested.
+  dinfo "Rendered nginx config (for reference):"
+  docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null \
+    | tee -a "$LOG_FILE" || true
+
   dok "Nginx config test passed"
+
+  # Remove any existing nginx container so docker compose up MUST create a fresh
+  # one. Without this, compose reuses a running/restarting container whose
+  # entrypoint-rendered config may be stale (generated before the template was
+  # updated). A fresh container always runs the entrypoint against the current
+  # template file.
+  dinfo "Removing existing $nginx_service container to ensure clean start..."
+  docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
 }
 
 # ── Rollback helper ───────────────────────────────────────────────────────────
