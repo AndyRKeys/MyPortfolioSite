@@ -17,11 +17,24 @@ if (!url) {
 }
 
 // When running inside a Docker container, use the internal service hostname
-// Otherwise use the provided URL (for external testing)
-const isInsideDocker = process.env.DOCKER_HOST || process.env.HOSTNAME === 'myportfoliosite-dev-backend-dev-1' ||
-                       (process.env.PATH && process.env.PATH.includes('app'));
+// Check for Docker by looking for /.dockerenv or docker in cgroup
+import fs from 'fs';
+let isInsideDocker = false;
+try {
+  isInsideDocker = fs.existsSync('/.dockerenv');
+} catch (e) {
+  // Fallback: check cgroup
+  try {
+    const cgroup = fs.readFileSync('/proc/cgroup', 'utf8');
+    isInsideDocker = cgroup.includes('docker') || cgroup.includes('/docker');
+  } catch (e) {
+    isInsideDocker = false;
+  }
+}
+
 const baseUrl = isInsideDocker ? 'https://nginx-dev:3001' : url;
 const testUrl = `${baseUrl}/api/debug/test-errors`;
+console.log(`[debug] Docker detected: ${isInsideDocker}, Using URL: ${testUrl}`);
 
 let browser;
 let results = {
