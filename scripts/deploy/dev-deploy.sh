@@ -72,6 +72,18 @@ load_env
 
 validate_env
 
+# ── Certificate generation (HTTPS with self-signed cert) ────────────────────────────────
+
+dsection "Checking SSL certificates for HTTPS on port 3001"
+
+CERT_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../setup/generate-dev-certs.sh"
+
+if bash "$CERT_SCRIPT" "$LAN_IP" 2>&1 | tee -a "$LOG_FILE"; then
+  dok "SSL certificates ready for $LAN_IP"
+else
+  ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
+fi
+
 # ── UFW check (dev-specific) ───────────────────────────────────────────────────────────
 
 dsection "Checking firewall (UFW)"
