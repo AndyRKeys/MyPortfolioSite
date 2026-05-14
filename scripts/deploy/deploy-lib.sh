@@ -561,10 +561,17 @@ test_error_logger() {
       dwarn "  ✗ error-logger.js not found in frontend HTML (script tag missing?)"
     fi
 
-    # Show recent logs anyway (avoid subshell issues with tee by using sed directly)
+    # Show recent logs (grep may return 1 if no matches, so use || true)
     dwarn "Recent backend logs:"
-    echo "$logs" | grep -E "error|Error|FRONTEND|CSP|console" | tail -10 | \
-      sed "s/^/[$(_deploy_timestamp)] ${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET}  /" | tee -a "$LOG_FILE"
+    local filtered=$(echo "$logs" | grep -E "error|Error|FRONTEND|CSP|console" | tail -10 || echo "")
+    if [ -z "$filtered" ]; then
+      dwarn "    (no error-related logs found)"
+    else
+      # Output each line with proper logging (avoids subshell issues)
+      while IFS= read -r logline; do
+        dwarn "    $logline"
+      done <<< "$filtered"
+    fi
 
     # Check if /debug/errors endpoint is reachable
     local debug_status=$(curl -sk --max-time 5 "${protocol}://${host_port}/api/debug/errors" 2>&1 | grep -c "message\|error" || true)
