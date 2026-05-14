@@ -23,8 +23,12 @@
 #   HEALTH_TIMEOUT — seconds to wait for health
 #   HEALTH_INTERVAL— seconds between health checks
 #   HEALTH_URL_2   — optional secondary health URL (e.g. HTTPS)
-#   NGINX_SERVICE  — compose service name for nginx (enables nginx log capture + startup check)
-#   HEALTH_INSECURE— set to 1 to skip TLS cert verification (dev self-signed certs)
+#   NGINX_SERVICE    — compose service name for nginx (enables nginx log capture + startup check)
+#   HEALTH_INSECURE  — set to 1 to skip TLS cert verification (dev self-signed certs)
+#   ROLLBACK_BRANCH  — branch to roll back to on failure (e.g. dev, main).
+#                      If set and different from BRANCH, fetches and checks out this branch
+#                      instead of reverting to PRE_SHA, giving a known-stable baseline.
+#                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
@@ -302,6 +306,35 @@ check_nginx_config() {
   dok "Nginx config test passed"
 }
 
+# ── Rollback helper ───────────────────────────────────────────────────────────
+
+_do_rollback() {
+  local reason="$1"
+
+  cd "$REPO_DIR"
+
+  if [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
+    # Roll back to a known-stable branch (e.g. dev or main) rather than a
+    # previous commit on the same potentially-broken feature branch.
+    dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
+    git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
+
+  elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
+    # Same branch deploy: revert to the previous commit.
+    dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
+    git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
+
+  else
+    dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
+    dwarn "Manual intervention required — check container logs above."
+  fi
+}
+
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
@@ -313,13 +346,7 @@ compose_up_with_rollback() {
   if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
-
-    if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-      dwarn "Rolling back to previous commit ($PRE_SHA)..."
-      git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-      docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    fi
-
+    _do_rollback "docker compose up failed"
     ddie "Deploy failed — see above for details."
   fi
 
@@ -337,6 +364,7 @@ compose_up_with_rollback() {
       dfail ""
       dfail "Nginx logs:"
       docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      _do_rollback "nginx failed to start"
       ddie "Nginx failed to start — check the nginx config and cert paths above."
     fi
 
@@ -412,12 +440,7 @@ wait_for_health() {
         docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
       fi
 
-      if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-        dwarn "Rolling back to previous commit (${PRE_SHA:0:7})..."
-        git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-        docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-        dwarn "Rolled back — verify the service is healthy before investigating the failed update."
-      fi
+      _do_rollback "health check timed out"
 
       ddie "Deploy failed — see log at $LOG_FILE"
     fi

@@ -102,9 +102,10 @@ ensure_dev_certs "$LAN_IP"
 
 # Health URL depends on LAN_IP, so set it after env load
 HEALTH_URL="https://${LAN_IP}:3001/api/health"
-HEALTH_URL_2=""     # dev doesn't use a second health URL
-HEALTH_INSECURE=1   # self-signed cert — skip curl SSL verification
+HEALTH_URL_2=""       # dev doesn't use a second health URL
+HEALTH_INSECURE=1     # self-signed cert — skip curl SSL verification
 NGINX_SERVICE=nginx-dev
+ROLLBACK_BRANCH=dev   # fall back to stable dev branch if feature branch deploy fails
 
 check_nginx_config nginx-dev
 

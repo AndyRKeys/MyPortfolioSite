@@ -116,6 +116,7 @@ mkdir -p "$REPO_DIR/uploads"
 
 # Primary health is backend HTTP; secondary is public HTTPS if DOMAIN + certs exist
 HEALTH_URL="http://localhost:${PORT:-8080}/health"
+ROLLBACK_BRANCH=main  # fall back to stable main branch if non-main deploy fails
 
 # Only set secondary health URL if certs exist for DOMAIN
 if [ -n "${DOMAIN:-}" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
