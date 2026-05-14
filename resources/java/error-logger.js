@@ -138,15 +138,3 @@ window.addEventListener('securitypolicyviolation', (event) => {
     'column-number': event.columnNumber,
   });
 });
-
-// Provide manual export function for debugging
-window.exportErrors = function() {
-  const errors = JSON.parse(localStorage.getItem('frontendErrors') || '[]');
-  console.log('Frontend errors:', errors);
-  const blob = new Blob([JSON.stringify(errors, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `errors-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-};

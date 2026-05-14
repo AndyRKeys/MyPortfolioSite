@@ -117,8 +117,6 @@ wait_for_health backend-dev
 
 # ── Post-deployment Tests ──────────────────────────────────────────────────────────────
 
-test_error_logger
-
 test_error_logger_all_pages
 
 test_csp_reporting
