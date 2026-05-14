@@ -100,7 +100,9 @@ show_deployment_info
 
 # Health URL depends on LAN_IP, so set it after env load
 HEALTH_URL="https://${LAN_IP}:3001/api/health"
-HEALTH_URL_2=""  # dev doesn't use a second health URL
+HEALTH_URL_2=""     # dev doesn't use a second health URL
+HEALTH_INSECURE=1   # self-signed cert — skip curl SSL verification
+NGINX_SERVICE=nginx-dev
 
 compose_up_with_rollback backend-dev
 

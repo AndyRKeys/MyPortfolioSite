@@ -308,6 +308,9 @@ wait_for_health() {
   local url2="${HEALTH_URL_2:-}"
   local timeout="${HEALTH_TIMEOUT:-60}"
   local interval="${HEALTH_INTERVAL:-5}"
+  # Set HEALTH_INSECURE=1 in caller to skip SSL cert verification (e.g. dev self-signed certs)
+  local curl_opts=""
+  [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_opts="--insecure"
 
   dsection "Phase 6: HTTP/HTTPS health checks"
 
@@ -316,15 +319,17 @@ wait_for_health() {
     return
   fi
 
+  [ -n "$curl_opts" ] && dwarn "SSL verification disabled for health check (self-signed cert)"
+
   local attempts=$(( timeout / interval ))
   dinfo "Polling $url (${timeout}s timeout)..."
 
   for i in $(seq 1 "$attempts"); do
-    if curl -sf --max-time 4 "$url" > /dev/null 2>&1; then
+    if curl -sf --max-time 4 $curl_opts "$url" > /dev/null 2>&1; then
       dok "Primary health check OK: $url"
       if [ -n "$url2" ]; then
         local code
-        code=$(curl -sf -o /dev/null -w "%{http_code}" "$url2" 2>/dev/null || echo "000")
+        code=$(curl -sf -o /dev/null -w "%{http_code}" $curl_opts "$url2" 2>/dev/null || echo "000")
         if [ "$code" = "200" ]; then
           dok "Secondary health check OK: $url2"
         else
@@ -337,8 +342,15 @@ wait_for_health() {
     if [ "$i" -eq "$attempts" ]; then
       dfail "Health check failed after ${timeout}s"
       dfail ""
-      dfail "Logs for $backend_service (last 50 lines):"
+      dfail "Backend logs — $backend_service (last 50 lines):"
       docker compose -f "$COMPOSE_FILE" logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
+
+      # Nginx logs are critical for diagnosing SSL/config failures
+      if [ -n "${NGINX_SERVICE:-}" ]; then
+        dfail ""
+        dfail "Nginx logs — $NGINX_SERVICE (last 30 lines):"
+        docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      fi
 
       if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
         dwarn "Rolling back to previous commit (${PRE_SHA:0:7})..."
