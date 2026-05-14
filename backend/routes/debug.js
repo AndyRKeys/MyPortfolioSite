@@ -8,7 +8,15 @@ const router = Router();
  * No auth required — needs to work for public site errors
  */
 router.post('/errors', (req, res) => {
+  // Log receipt of any request (for diagnostics if request is malformed)
+  console.log(`[error-logger] Received POST to /debug/errors`);
+
   const { type, message, timestamp, url, filename, lineno, colno, stack } = req.body;
+
+  if (!type || !message) {
+    console.warn(`[error-logger] Malformed error report: missing type or message. Received: ${JSON.stringify(req.body)}`);
+    return res.json({ received: false, error: 'Missing type or message' });
+  }
 
   // Log to server console with context
   const context = `[${type}] ${url} ${filename ? `@ ${filename}:${lineno}:${colno}` : ''}`;

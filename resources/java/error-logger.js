@@ -15,15 +15,21 @@ const MAX_STORED_ERRORS = 100;
 async function logToBackend(errorData) {
   try {
     console.log(`[error-logger] Sending ${errorData.type} to ${API_BASE}/debug/errors`);
-    await fetch(`${API_BASE}/debug/errors`, {
+    const response = await fetch(`${API_BASE}/debug/errors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(errorData),
-    }).catch((err) => {
-      console.error('[error-logger] Failed to send error:', err);
     });
+
+    if (!response.ok) {
+      console.error(`[error-logger] Server responded with HTTP ${response.status}: ${response.statusText}`);
+      const text = await response.text();
+      if (text) console.error(`[error-logger] Response body: ${text}`);
+    } else {
+      console.log(`[error-logger] ${errorData.type} sent successfully`);
+    }
   } catch (e) {
-    console.error('[error-logger] Error in logToBackend:', e);
+    console.error('[error-logger] Fetch failed:', e.message);
   }
 }
 
