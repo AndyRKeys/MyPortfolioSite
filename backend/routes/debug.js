@@ -56,6 +56,8 @@ router.get('/test-errors', (req, res) => {
 <html>
 <head>
   <title>Error Logger Test</title>
+  <!-- Load error logger first so it captures all errors -->
+  <script type="module" src="/resources/java/error-logger.js"></script>
   <script type="module">
     import { API_BASE } from '/resources/java/config.js';
 

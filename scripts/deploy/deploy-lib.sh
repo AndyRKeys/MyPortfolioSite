@@ -597,15 +597,23 @@ test_csp_reporting() {
   dinfo "CSP violations will be logged when resources violate policy"
 
   # Check if CSP header includes report-uri
+  local curl_opts=""
   if [ "$HEALTH_INSECURE" = "1" ]; then
-    local csp_header=$(curl -skI --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" || true)
+    curl_opts="-sk"
   else
-    local csp_header=$(curl -sI --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" || true)
+    curl_opts="-s"
   fi
 
-  if echo "$csp_header" | grep -q "report-uri"; then
-    dok "✓ CSP report-uri is configured"
+  local csp_header=$(curl $curl_opts -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
+
+  if [ -n "$csp_header" ]; then
+    if echo "$csp_header" | grep -q "report-uri"; then
+      dok "✓ CSP report-uri is configured"
+    else
+      dwarn "⚠ CSP header present but report-uri not found"
+      dinfo "  CSP header: $(echo "$csp_header" | cut -c1-100)..."
+    fi
   else
-    dwarn "⚠ CSP header doesn't include report-uri (violations won't be logged)"
+    dwarn "⚠ CSP header not found (not being sent by server)"
   fi
 }
