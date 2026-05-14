@@ -5,7 +5,10 @@
 # Run on the Ubuntu Server as the non-root user.
 #
 # Usage:
-#   bash scripts/deploy/dev-deploy.sh
+#   bash scripts/deploy/dev-deploy.sh [branch]
+# Examples:
+#   bash scripts/deploy/dev-deploy.sh              # Deploy from dev
+#   bash scripts/deploy/dev-deploy.sh fix/my-fix   # Deploy from feature branch
 
 set -euo pipefail
 
@@ -13,7 +16,7 @@ set -euo pipefail
 
 REPO_DIR="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
-BRANCH="dev"
+BRANCH="${1:-dev}"
 COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
 ENV_FILE="${REPO_DIR}/.env"
 ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
@@ -90,7 +93,7 @@ update_to_branch
 # ── Docker build & up ─────────────────────────────────────────────────────────────────
 
 # Health URL depends on LAN_IP, so set it after env load
-HEALTH_URL="http://${LAN_IP}:3001/api/health"
+HEALTH_URL="https://${LAN_IP}:3001/api/health"
 HEALTH_URL_2=""  # dev doesn't use a second health URL
 
 compose_up_with_rollback backend-dev
@@ -103,7 +106,7 @@ wait_for_health backend-dev
 
 dsection "Deploy complete"
 
-dok "  Site:    http://${LAN_IP}:3001"
+dok "  Site:    https://${LAN_IP}:3001"
 dok "  Commit:  $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
 dok "  Log:     $LOG_FILE"
 

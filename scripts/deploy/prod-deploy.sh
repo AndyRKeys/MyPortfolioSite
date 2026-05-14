@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # prod-deploy.sh — Production deploy script for andykeys.me (Docker Compose).
 #
-# Fetches latest main, rebuilds images, and restarts containers with health checks
-# and rollback behaviour shared via deploy-lib.sh.
+# Fetches latest main (or specified branch), rebuilds images, and restarts containers
+# with health checks and rollback behaviour shared via deploy-lib.sh.
 # Run on the Ubuntu Server as the non-root deploy user.
 #
 # Usage:
 #   bash scripts/deploy/prod-deploy.sh
+#   bash scripts/deploy/prod-deploy.sh --branch main
 #   bash scripts/deploy/prod-deploy.sh --rollback <sha>
 
 set -euo pipefail
@@ -57,6 +58,8 @@ extra_env_checks() {
 ROLLBACK_SHA=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --branch)
+      BRANCH="$2"; shift 2 ;;
     --rollback)
       ROLLBACK_SHA="$2"; shift 2 ;;
     *)
