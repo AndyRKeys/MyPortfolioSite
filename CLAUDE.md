@@ -231,6 +231,14 @@ const result = await pool.query('SELECT * FROM posts WHERE id = $1', [postId]);
 const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
+**Deployment scripts (DRY principle):**
+- Avoid duplicating logic across `dev-deploy.sh`, `prod-deploy.sh`, and PowerShell wrappers
+- Extract reusable functions into `scripts/deploy/deploy-lib.sh` (shared helpers)
+- Each `*-deploy.sh` script should focus on environment-specific logic, not repetition
+- Examples of reusable functions: `ensure_repo_cloned()`, `update_to_branch()`, `validate_env()`, `ensure_dev_certs()`
+- PowerShell wrappers (`.ps1`) should be thin — they primarily SSH and pass args to bash scripts
+- If you find yourself writing the same deploy logic in two scripts, extract it into `deploy-lib.sh`
+
 ### Testing
 
 **Vitest suite:**
