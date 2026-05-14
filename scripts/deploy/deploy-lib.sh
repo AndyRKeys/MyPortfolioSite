@@ -516,7 +516,7 @@ test_error_logger() {
   # Extract host from HEALTH_URL (https://192.168.68.81:3001/api/health -> 192.168.68.81:3001)
   local host_port=$(echo "$HEALTH_URL" | sed -E 's|^https?://([^/]+).*|\1|')
   local protocol=$(echo "$HEALTH_URL" | sed -E 's|^(https?)://.*|\1|')
-  local test_url="${protocol}://${host_port}/debug/test-errors"
+  local test_url="${protocol}://${host_port}/api/debug/test-errors"
 
   dinfo "Triggering test errors at $test_url..."
 
