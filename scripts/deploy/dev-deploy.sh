@@ -94,6 +94,8 @@ fi
 
 update_to_branch
 
+show_deployment_info
+
 # ── Docker build & up ─────────────────────────────────────────────────────────────────
 
 # Health URL depends on LAN_IP, so set it after env load

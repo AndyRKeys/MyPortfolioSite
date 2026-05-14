@@ -137,6 +137,24 @@ update_to_branch() {
   fi
 }
 
+show_deployment_info() {
+  dsection "Deployment details"
+
+  cd "$REPO_DIR"
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  dinfo "Branch: $current_branch"
+
+  local commit_sha
+  commit_sha=$(git rev-parse --short HEAD)
+  dinfo "Commit: $commit_sha"
+
+  local commit_msg
+  commit_msg=$(git log -1 --pretty=%B HEAD)
+  dinfo "Message: $commit_msg"
+}
+
 # ── Env helpers ────────────────────────────────────────────────────────────────
 
 ensure_env_file() {

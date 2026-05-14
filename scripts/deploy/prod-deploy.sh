@@ -106,6 +106,8 @@ fi
 
 update_to_branch
 
+show_deployment_info
+
 # ── Ensure uploads dir exists ──────────────────────────────────────────────────────────
 
 mkdir -p "$REPO_DIR/uploads"
