@@ -1,9 +1,16 @@
 # Nginx config for dev environment on Ubuntu Server.
-# HTTPS-only on port 3001 with self-signed certificate for WebAuthn support.
-# Note: HTTP redirect is intentionally absent — both HTTP and HTTPS cannot share port 3001.
-# Clients must connect directly via https://LAN_IP:3001
+# HTTPS on port 3001 with self-signed certificate for WebAuthn support.
+# HTTP on port 80 redirects to HTTPS on port 3001.
 # Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST
 
+# HTTP → HTTPS redirect
+server {
+    listen 80;
+    server_name ${DOMAIN} localhost;
+    return 301 https://$host:3001$request_uri;
+}
+
+# HTTPS server
 server {
     listen 3001 ssl;
     server_name ${DOMAIN} localhost;
