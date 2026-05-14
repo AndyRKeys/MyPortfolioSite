@@ -45,7 +45,25 @@ else
 fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
-_deploy_log_raw()   { echo -e "[$(_deploy_timestamp)] $*" | tee -a "$LOG_FILE"; }
+
+# Redact sensitive info from logs (IP addresses, usernames, passwords hints)
+_redact_sensitive() {
+  local text="$1"
+  # Redact IP addresses (keep format readable but obscure actual IPs)
+  text=$(echo "$text" | sed -E 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[REDACTED_IP]/g')
+  # Redact home directory usernames
+  text=$(echo "$text" | sed -E "s|/home/[a-z_][a-z0-9_-]*|/home/[USER]|g")
+  # Redact root home
+  text=$(echo "$text" | sed -E 's|/root|/home/[USER]|g')
+  # Redact URLs with IPs
+  text=$(echo "$text" | sed -E 's|https?://\[REDACTED_IP\]:[0-9]+|[REDACTED_URL]|g')
+  echo "$text"
+}
+
+_deploy_log_raw()   {
+  local msg="$(_redact_sensitive "$*")"
+  echo -e "[$(_deploy_timestamp)] $msg" | tee -a "$LOG_FILE";
+}
 
 dlog()     { _deploy_log_raw "$*"; }
 dinfo()    { _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*"; }
