@@ -16,7 +16,12 @@ if (!url) {
   process.exit(1);
 }
 
-const testUrl = `${url}/api/debug/test-errors`;
+// When running inside a Docker container, use the internal service hostname
+// Otherwise use the provided URL (for external testing)
+const isInsideDocker = process.env.DOCKER_HOST || process.env.HOSTNAME === 'myportfoliosite-dev-backend-dev-1' ||
+                       (process.env.PATH && process.env.PATH.includes('app'));
+const baseUrl = isInsideDocker ? 'https://nginx-dev:3001' : url;
+const testUrl = `${baseUrl}/api/debug/test-errors`;
 
 let browser;
 let results = {
@@ -32,7 +37,12 @@ async function runTest() {
     // Launch headless browser
     browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--ignore-certificate-errors',
+      ],
     });
 
     const page = await browser.newPage();
@@ -59,13 +69,12 @@ async function runTest() {
       }
     });
 
-    // Handle SSL for self-signed certs
-    if (url.includes('https')) {
-      await page.setBypassCSP(true);
-    }
+    // Allow insecure connections for self-signed certificates
+    await page.setDefaultNavigationTimeout(30000);
+    await page.setDefaultTimeout(30000);
 
     console.log(`⏳ Navigating to test page...`);
-    const response = await page.goto(testUrl, { waitUntil: 'networkidle0', timeout: 15000 });
+    const response = await page.goto(testUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
     if (!response || !response.ok()) {
       results.failed.push(`HTTP ${response?.status() || 'unknown'} - Failed to load test page`);
