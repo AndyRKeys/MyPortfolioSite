@@ -202,6 +202,26 @@ validate_env() {
   dok "All required env vars set and valid."
 }
 
+# ── Dev certificates (HTTPS with self-signed) ──────────────────────────────────
+
+ensure_dev_certs() {
+  local lan_ip="$1"
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local cert_script="${script_dir}/../setup/generate-dev-certs.sh"
+
+  dsection "Checking SSL certificates for HTTPS on port 3001"
+
+  if ! [ -f "$cert_script" ]; then
+    ddie "Certificate generation script not found at $cert_script"
+  fi
+
+  if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
+    dok "SSL certificates ready for $lan_ip"
+  else
+    ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
+  fi
+}
+
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
