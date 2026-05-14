@@ -36,8 +36,6 @@ export function createApp() {
     origin: (origin, cb) => {
       if (!origin || origin === ALLOWED_ORIGIN ||
           /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-          // Dev server: accept both http and https for same host:port during transition
-          origin?.replace(/^https?:\/\//, '') === allowedOriginHostPort ||
           // Docker internal: allow nginx service names for dev/test (nginx-dev, nginx-local, etc.)
           /^https?:\/\/nginx-(dev|local)(:\d+)?$/.test(origin)) {
         cb(null, true);
