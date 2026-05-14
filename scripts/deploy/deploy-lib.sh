@@ -303,22 +303,30 @@ check_nginx_config() {
     ddie "Fix the nginx config then re-run."
   fi
 
-  # Dump the rendered config to the log so any future nginx startup failure can
-  # be compared against what the pre-flight actually tested.
-  dinfo "Rendered nginx config (for reference):"
-  docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
-    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null \
-    | tee -a "$LOG_FILE" || true
-
   dok "Nginx config test passed"
 
-  # Remove any existing nginx container so docker compose up MUST create a fresh
-  # one. Without this, compose reuses a running/restarting container whose
-  # entrypoint-rendered config may be stale (generated before the template was
-  # updated). A fresh container always runs the entrypoint against the current
-  # template file.
-  dinfo "Removing existing $nginx_service container to ensure clean start..."
-  docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
+  # Compare what the template renders NOW against what is live in the running
+  # container. Only remove the container if they differ — or if no container is
+  # running. This avoids unnecessary recreation on deploys where nginx config
+  # hasn't changed, while still guaranteeing a fresh start when it has.
+  local new_config current_config
+  new_config=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+  current_config=$(docker compose -f "$COMPOSE_FILE" exec -T "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+
+  if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
+    dok "Nginx config unchanged — container will be reused"
+  else
+    if [ -z "$current_config" ]; then
+      dinfo "No running nginx container — will be created fresh by compose up"
+    else
+      dinfo "Nginx config changed — removing container for clean start"
+    fi
+    dinfo "Rendered nginx config:"
+    echo "$new_config" | tee -a "$LOG_FILE"
+    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
+  fi
 }
 
 # ── Rollback helper ───────────────────────────────────────────────────────────
