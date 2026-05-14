@@ -539,8 +539,8 @@ test_error_logger() {
   # Wait for errors to be logged (increased timeout)
   sleep 3
 
-  # Check logs for test error markers (try both backend and backend-dev)
-  local logs=$(docker compose -f "$COMPOSE_FILE" logs backend-dev 2>&1 | tail -50)
+  # Check logs for test error markers (docker compose logs may fail, so handle gracefully)
+  local logs=$(docker compose -f "$COMPOSE_FILE" logs backend-dev 2>&1 | tail -50 || echo "")
 
   # Look for any FRONTEND ERROR or console.error logs
   local error_count=$(echo "$logs" | grep -c "FRONTEND ERROR\|console.error" || true)
