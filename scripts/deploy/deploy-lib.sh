@@ -304,6 +304,29 @@ check_nginx_config() {
   fi
 
   dok "Nginx config test passed"
+
+  # Compare what the template renders NOW against what is live in the running
+  # container. Only remove the container if they differ — or if no container is
+  # running. This avoids unnecessary recreation on deploys where nginx config
+  # hasn't changed, while still guaranteeing a fresh start when it has.
+  local new_config current_config
+  new_config=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+  current_config=$(docker compose -f "$COMPOSE_FILE" exec -T "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+
+  if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
+    dok "Nginx config unchanged — container will be reused"
+  else
+    if [ -z "$current_config" ]; then
+      dinfo "No running nginx container — will be created fresh by compose up"
+    else
+      dinfo "Nginx config changed — removing container for clean start"
+    fi
+    dinfo "Rendered nginx config:"
+    echo "$new_config" | tee -a "$LOG_FILE"
+    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
+  fi
 }
 
 # ── Rollback helper ───────────────────────────────────────────────────────────
