@@ -30,13 +30,16 @@ Write-Host "Seeding dev-server database from branch '$Branch'..." -ForegroundCol
 # Step 2: run seeder via a login shell so docker is in PATH
 # Non-interactive SSH shells don't source /etc/profile or ~/.bashrc, so docker
 # may not be on PATH. 'bash -l -c' forces a login shell that loads the full environment.
+# The seeder uses relative paths for docker-compose.yml, so cd to repo root first.
 $remoteCommand = @"
 set -e
-SEEDER="`$HOME/MyPortfolioSite-dev/scripts/dev/seed-dev-data.sh"
+REPO="`$HOME/MyPortfolioSite-dev"
+SEEDER="`$REPO/scripts/dev/seed-dev-data.sh"
 if [ ! -f "`$SEEDER" ]; then
     echo "[ERROR] Seeder not found at `$SEEDER on branch $Branch." >&2
     exit 1
 fi
+cd "`$REPO"
 bash -l -c "bash '`$SEEDER'"
 "@
 
