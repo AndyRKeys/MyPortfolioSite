@@ -70,7 +70,6 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "80:80"
       - "3001:3001"
     volumes:
       - ./scripts/config/nginx-dev-server.conf.template:/etc/nginx/templates/default.conf.template
