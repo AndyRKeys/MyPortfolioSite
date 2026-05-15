@@ -94,20 +94,20 @@ echo "Seeding blog posts..."
 # ╔═══ DECISION 1 — PORTFOLIO INTRO — CHOOSE ONE, delete the other ════════════╗
 # Both are the "why I built this / vanilla JS / Node+Postgres" opener.
 # ── 1A  [#203]  "Building a Personal Portfolio in 2026" (2026-05-01) ──
-seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/posts" <<'JSON'
-{
-  "title": "Building a Personal Portfolio in 2026",
-  "body_markdown": "# Building a Personal Portfolio in 2026\n\nWhen I decided to create a new portfolio site, I wanted something that reflected my values: **simplicity, performance, and security**.\n\n## Why vanilla JavaScript?\n\nNo frameworks. No build step. Just HTML, CSS, and JavaScript—served directly by Nginx. This approach keeps the site lightning-fast and easy to understand. Frontend logic lives in self-contained ES modules: `script.js`, `blog.js`, `travel.js`, `admin.js`.\n\n## The backend\n\nNode.js with Express handles the API. PostgreSQL stores the data. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
-  "post_date": "2026-05-01",
-  "publish": true
-}
-JSON
+# seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/posts" <<'JSON'
+# {
+#   "title": "Building a Personal Portfolio in 2026",
+#   "body_markdown": "# Building a Personal Portfolio in 2026\n\nWhen I decided to create a new portfolio site, I wanted something that reflected my values: **simplicity, performance, and security**.\n\n## Why vanilla JavaScript?\n\nNo frameworks. No build step. Just HTML, CSS, and JavaScript—served directly by Nginx. This approach keeps the site lightning-fast and easy to understand. Frontend logic lives in self-contained ES modules: `script.js`, `blog.js`, `travel.js`, `admin.js`.\n\n## The backend\n\nNode.js with Express handles the API. PostgreSQL stores the data. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
+#   "post_date": "2026-05-01",
+#   "publish": true
+# }
+# JSON
 # ── 1B  [.sh]   "Building a Portfolio with Node and Postgres" (2026-04-10) ──
 seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/posts" <<'JSON'
 {
   "title": "Building a Portfolio with Node and Postgres",
-  "body_markdown": "## Getting started\n\nEvery developer needs a portfolio. Mine started as a simple static site and grew into a full-stack project with a Node.js backend, PostgreSQL database, and passkey authentication.\n\n## The stack\n\n- **Frontend**: Vanilla HTML/CSS/JS — no framework\n- **Backend**: Node.js with Express\n- **Database**: PostgreSQL\n- **Auth**: WebAuthn passkeys\n- **Hosting**: Raspberry Pi 3\n\n## Why a Pi?\n\nRunning on a Pi keeps costs near zero, teaches real server management, and is a great conversation starter.\n\n## What I learned\n\nSchema design matters early. I went through two migrations in the first month — posts started as two separate tables before I unified them.",
-  "post_date": "2026-04-10",
+  "body_markdown": "## Getting started\n\nEvery developer needs a portfolio. Mine started as a simple static site and grew into a full-stack project with a Node.js backend, PostgreSQL database, and passkey authentication.\n\n## The stack\n\n- **Frontend**: Vanilla HTML/CSS/JS — no framework\n- **Backend**: Node.js with Express\n- **Database**: PostgreSQL\n- **Auth**: WebAuthn passkeys\n- **Hosting**: Raspberry Pi 3\n\n## Why a Pi?\n\nRunning on a Pi keeps costs near zero, teaches real server management, and is a great conversation starter.\n\n## What I learned\n\nSchema design matters early. I went through two migrations in the first month — posts started as two separate tables before I unified them. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
+  "post_date": "2026-05-01",
   "publish": true
 }
 JSON
@@ -116,13 +116,13 @@ JSON
 # ╔═══ DECISION 2 — PASSWORDLESS AUTH — CHOOSE ONE ═══════════════════════════╗
 # ── 2A  [#203]  "Authentication Without Passwords: WebAuthn & JWT" (2026-05-02) ──
 seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/posts" <<'JSON'
-{
-  "title": "Authentication Without Passwords: WebAuthn & JWT",
-  "body_markdown": "# Authentication Without Passwords: WebAuthn & JWT\n\nPasswords are the weakest link in security. So I built a system where you sign in with your device's biometrics or PIN—no password needed.\n\n## How it works\n\n1. **Registration** — You create an account and register a FIDO2 passkey via WebAuthn\n2. **Sign-in** — Browser runs the WebAuthn ceremony; your device confirms your identity\n3. **Token issuance** — Backend verifies the ceremony and issues a JWT valid for 7 days\n4. **Protected routes** — Every admin API checks for a valid JWT before executing\n\n## Email magic links as backup\n\nNot everyone has a passkey yet. For those users, we offer email magic links:\n- Request a link, a random token is stored (bcrypt hashed)\n- Click the link, the token is verified (constant-time comparison)\n- JWT issued automatically\n\n## Why this matters\n\nWebAuthn is phishing-resistant. A malicious site can't intercept your passkey. Your device won't complete the ceremony for the wrong origin. Combined with HTTPS, this is security that actually works.",
-  "post_date": "2026-05-02",
-  "publish": true
-}
-JSON
+# {
+#   "title": "Authentication Without Passwords: WebAuthn & JWT",
+#   "body_markdown": "# Authentication Without Passwords: WebAuthn & JWT\n\nPasswords are the weakest link in security. So I built a system where you sign in with your device's biometrics or PIN—no password needed.\n\n## How it works\n\n1. **Registration** — You create an account and register a FIDO2 passkey via WebAuthn\n2. **Sign-in** — Browser runs the WebAuthn ceremony; your device confirms your identity\n3. **Token issuance** — Backend verifies the ceremony and issues a JWT valid for 7 days\n4. **Protected routes** — Every admin API checks for a valid JWT before executing\n\n## Email magic links as backup\n\nNot everyone has a passkey yet. For those users, we offer email magic links:\n- Request a link, a random token is stored (bcrypt hashed)\n- Click the link, the token is verified (constant-time comparison)\n- JWT issued automatically\n\n## Why this matters\n\nWebAuthn is phishing-resistant. A malicious site can't intercept your passkey. Your device won't complete the ceremony for the wrong origin. Combined with HTTPS, this is security that actually works.",
+#   "post_date": "2026-05-02",
+#   "publish": true
+# }
+# JSON
 # ── 2B  [.sh]   "Why I Chose Passkeys Over Passwords" (2026-04-18) ──
 seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JSON'
 {
@@ -135,14 +135,14 @@ JSON
 # ╚═══ END DECISION 2 ════════════════════════════════════════════════════════╝
 
 # ── KEEP [.sh] (unique — no overlap) ──
-seed_item "Blog: What I Got Wrong About SQL Indexes (published)" "/posts" <<'JSON'
-{
-  "title": "What I Got Wrong About SQL Indexes",
-  "body_markdown": "## Indexes are not free\n\nI used to think: just add an index and queries go fast. Turns out indexes cost write performance and storage, so you need to be deliberate.\n\n## What actually matters\n\nIndex the columns in your `WHERE` and `ORDER BY` clauses. For this site the main query is:\n\n```sql\nWHERE post_type = 'blog' AND published_at IS NOT NULL\nORDER BY post_date DESC\n```\n\nSo the right index is a composite on `(post_type, published_at, post_date)`.\n\n## EXPLAIN ANALYZE\n\nAlways check your query plans. `EXPLAIN ANALYZE` in psql will tell you if your index is actually being used.",
-  "post_date": "2026-04-25",
-  "publish": true
-}
-JSON
+# seed_item "Blog: What I Got Wrong About SQL Indexes (published)" "/posts" <<'JSON'
+# {
+#   "title": "What I Got Wrong About SQL Indexes",
+#   "body_markdown": "## Indexes are not free\n\nI used to think: just add an index and queries go fast. Turns out indexes cost write performance and storage, so you need to be deliberate.\n\n## What actually matters\n\nIndex the columns in your `WHERE` and `ORDER BY` clauses. For this site the main query is:\n\n```sql\nWHERE post_type = 'blog' AND published_at IS NOT NULL\nORDER BY post_date DESC\n```\n\nSo the right index is a composite on `(post_type, published_at, post_date)`.\n\n## EXPLAIN ANALYZE\n\nAlways check your query plans. `EXPLAIN ANALYZE` in psql will tell you if your index is actually being used.",
+#   "post_date": "2026-04-25",
+#   "publish": true
+# }
+# JSON
 
 # ── KEEP [.sh] (unique — no overlap) ──
 seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <<'JSON'
@@ -230,36 +230,36 @@ seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" 
   "publish": true
 }
 JSON
-# ── 3B  [.sh]   "Deploying to a Raspberry Pi with PM2 and Nginx" (2026-05-03) ──
-seed_item "Blog: Deploying to a Raspberry Pi with PM2 and Nginx (published)" "/posts" <<'JSON'
-{
-  "title": "Deploying to a Raspberry Pi with PM2 and Nginx",
-  "body_markdown": "## The setup\n\nNginx handles TLS termination and static files. PM2 keeps the Node process running and restarts it after crashes or reboots.\n\n## The deploy script\n\nA single bash script: fetch latest main, run `npm install --omit=dev`, apply schema migrations if needed, restart PM2, run a health check. If the health check fails, PM2 rolls back automatically.\n\n## Lessons learned\n\n- `certbot --nginx` makes SSL trivial\n- PM2 startup scripts survive Pi reboots\n- Keep deploy logs — `~/deploy.log` records every deploy SHA for rollback",
-  "post_date": "2026-05-03",
-  "publish": true
-}
-JSON
+# # ── 3B  [.sh]   "Deploying to a Raspberry Pi with PM2 and Nginx" (2026-05-03) ──
+# seed_item "Blog: Deploying to a Raspberry Pi with PM2 and Nginx (published)" "/posts" <<'JSON'
+# {
+#   "title": "Deploying to a Raspberry Pi with PM2 and Nginx",
+#   "body_markdown": "## The setup\n\nNginx handles TLS termination and static files. PM2 keeps the Node process running and restarts it after crashes or reboots.\n\n## The deploy script\n\nA single bash script: fetch latest main, run `npm install --omit=dev`, apply schema migrations if needed, restart PM2, run a health check. If the health check fails, PM2 rolls back automatically.\n\n## Lessons learned\n\n- `certbot --nginx` makes SSL trivial\n- PM2 startup scripts survive Pi reboots\n- Keep deploy logs — `~/deploy.log` records every deploy SHA for rollback",
+#   "post_date": "2026-05-03",
+#   "publish": true
+# }
+# JSON
 # ╚═══ END DECISION 3 ════════════════════════════════════════════════════════╝
 
 # ╔═══ DECISION 4 — PI → UBUNTU MIGRATION — CHOOSE ONE ══════════════════════╗
-# ── 4A  [#203]  "Migrating Infrastructure: Raspberry Pi to Ubuntu Server" (2026-05-09) ──
-seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
+── 4A  [#203]  "Migrating Infrastructure: Raspberry Pi to Ubuntu Server" (2026-05-09) ──
+seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
 {
   "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
-  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n\n- **Zero downtime** — users shouldn't know the site moved\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access:\n```bash\nsudo ufw allow from 192.168.0.0/16 to any port 3001\n```\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
+  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access:\n```bash\n```\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
   "post_date": "2026-05-09",
   "publish": true
 }
 JSON
 # ── 4B  [new]   "Goodbye Raspberry Pi, Hello Ubuntu Server" (2026-05-08) ──
-seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
-{
-  "title": "Goodbye Raspberry Pi, Hello Ubuntu Server",
-  "body_markdown": "## Outgrowing the Pi\n\nThe Raspberry Pi 3 served this site well for over a year, but the cracks were showing: `npm install` took minutes, image uploads were sluggish, and running tests on-device was painful.\n\n## The new home\n\nI repurposed an Ubuntu Server box (an old gaming PC) as the new host. Same site, far more headroom.\n\n## The real work was Docker\n\nProd had been running on PM2 directly on the Pi while dev used Docker Compose — a structural mismatch that caused \"works on dev, breaks on prod\" surprises. The migration was the chance to put prod in Docker too, so both environments finally run identical containers.\n\n## Lessons\n\n- A structural difference between dev and prod is technical debt, even when both \"work\"\n- Migrating hosting is a good forcing function to delete accumulated cruft\n- Keep the old host running until the new one is proven",
-  "post_date": "2026-05-08",
-  "publish": true
-}
-JSON
+# seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
+# {
+#   "title": "Goodbye Raspberry Pi, Hello Ubuntu Server",
+#   "body_markdown": "## Outgrowing the Pi\n\nThe Raspberry Pi 3 served this site well for a few weeks, but the cracks were showing: `npm install` took minutes, image uploads were sluggish, and running tests on-device was painful.\n\n## The new home\n\nI repurposed an Ubuntu Server box (an old gaming PC) as the new host. Same site, far more headroom.\n\n## The real work was Docker\n\nProd had been running on PM2 directly on the Pi while dev used Docker Compose — a structural mismatch that caused \"works on dev, breaks on prod\" surprises. The migration was the chance to put prod in Docker too, so both environments finally run identical containers.\n\n## Lessons\n\n- A structural difference between dev and prod is technical debt, even when both \"work\"\n- Migrating hosting is a good forcing function to delete accumulated cruft\n- Keep the old host running until the new one is proven",
+#   "post_date": "2026-05-08",
+#   "publish": true
+# }
+# JSON
 # ╚═══ END DECISION 4 ════════════════════════════════════════════════════════╝
 
 # ── KEEP [new] (unique — no overlap) ──
