@@ -37,18 +37,53 @@ fail=0
 # available. Use dynamic import() instead.
 
 if [ -z "$TOKEN" ]; then
+  echo "[SEED] Generating JWT from backend container '$BACKEND_SVC'..." >&2
+
+  JWT_DEBUG=$(mktemp)
   TOKEN=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SVC" node --input-type=module <<'JSEOF' \
-    2>/dev/null | tr -d '\r' | grep -E '^eyJ' | tail -1
+    2>"$JWT_DEBUG" | tr -d '\r' | grep -E '^eyJ' | tail -1
 import jwt from 'jsonwebtoken';
-if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET\n'); process.exit(1); }
-console.log(jwt.sign({ userId: 'dev-seed-user' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
+if (!process.env.JWT_SECRET) {
+  console.error('[SEED JWT] ERROR: JWT_SECRET is not set in backend container');
+  process.stderr.write('NO_SECRET\n');
+  process.exit(1);
+}
+console.error(`[SEED JWT] Generated token with secret length: ${process.env.JWT_SECRET.length} chars`);
+const token = jwt.sign({ userId: 'dev-seed-user' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+console.log(token);
 JSEOF
   )
+  JWT_EXIT=$?
+
+  if [ -f "$JWT_DEBUG" ] && [ -s "$JWT_DEBUG" ]; then
+    echo "[SEED JWT] Backend messages:" >&2
+    cat "$JWT_DEBUG" | sed 's/^/  /' >&2
+  fi
+
+  if [ $JWT_EXIT -ne 0 ]; then
+    echo "[SEED JWT] JWT generation failed with exit code $JWT_EXIT" >&2
+  elif [ -z "$TOKEN" ]; then
+    echo "[SEED JWT] WARNING: Got exit 0 but no token (output grep failed)" >&2
+  else
+    echo "[SEED JWT] ✓ Token generated (${#TOKEN} chars, expires in 1h)" >&2
+  fi
+
+  rm -f "$JWT_DEBUG"
 fi
 
 if [ -z "$TOKEN" ]; then
-  echo "ERROR: Could not generate JWT. Is the '$BACKEND_SVC' container running?" >&2
-  echo "  Deploy first: bash scripts/deploy/dev-deploy.sh <branch>" >&2
+  echo "" >&2
+  echo "ERROR: Could not generate JWT. Troubleshooting checklist:" >&2
+  echo "" >&2
+  echo "  1. Container running?" >&2
+  docker compose -f "$COMPOSE_FILE" ps "$BACKEND_SVC" 2>/dev/null | tail -1 >&2
+  echo "" >&2
+  echo "  2. JWT_SECRET set?" >&2
+  docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SVC" env 2>/dev/null | grep JWT_SECRET || echo "    [NOT SET]" >&2
+  echo "" >&2
+  echo "  3. Deploy first:" >&2
+  echo "    bash scripts/deploy/dev-deploy.sh <branch>" >&2
+  echo "" >&2
   exit 1
 fi
 
