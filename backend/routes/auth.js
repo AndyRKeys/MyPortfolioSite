@@ -286,9 +286,16 @@ router.post('/passkey/login/finish', validate(PasskeyLoginFinishSchema), async (
 router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
   try {
     const { email } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Gate magic link to admin email only — prevents email bombing/enumeration
+    if (normalizedEmail !== (process.env.ADMIN_EMAIL || '').toLowerCase().trim()) {
+      // Return generic response to avoid email enumeration
+      return res.json({ sent: true });
+    }
 
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
-      email.toLowerCase().trim(),
+      normalizedEmail,
     ]);
 
     if (userResult.rows.length) {
@@ -298,7 +305,7 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
          VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
-      await sendMagicLink(email.toLowerCase().trim(), token).catch(err => {
+      await sendMagicLink(normalizedEmail, token).catch(err => {
         console.error('Failed to send magic link:', err.message);
       });
     }
