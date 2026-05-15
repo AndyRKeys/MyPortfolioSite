@@ -27,7 +27,9 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Seeding dev-server database from branch '$Branch'..." -ForegroundColor Green
 
-# Step 2: run seeder
+# Step 2: run seeder via a login shell so docker is in PATH
+# Non-interactive SSH shells don't source /etc/profile or ~/.bashrc, so docker
+# may not be on PATH. 'bash -l -c' forces a login shell that loads the full environment.
 $remoteCommand = @"
 set -e
 SEEDER="`$HOME/MyPortfolioSite-dev/scripts/dev/seed-dev-data.sh"
@@ -35,7 +37,7 @@ if [ ! -f "`$SEEDER" ]; then
     echo "[ERROR] Seeder not found at `$SEEDER on branch $Branch." >&2
     exit 1
 fi
-bash "`$SEEDER"
+bash -l -c "bash '`$SEEDER'"
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
