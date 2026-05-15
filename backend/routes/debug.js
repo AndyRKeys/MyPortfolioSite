@@ -2,27 +2,81 @@ import { Router } from 'express';
 
 const router = Router();
 
+// ── Environment checks ────────────────────────────────────────────────────────
+// Debug endpoints are only enabled in dev environments.
+// Production should not expose error logs or test endpoints.
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Simple in-memory rate limiter for POST endpoints (errors, csp-violations).
+// Prevents log flooding from unauthenticated clients.
+// Key: IP address, value: { count, resetTime }
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 60 seconds
+const RATE_LIMIT_MAX = 50; // 50 errors per minute per IP
+
+function getRateLimitKey(req) {
+  return req.ip || req.connection.remoteAddress;
+}
+
+function checkRateLimit(req) {
+  const key = getRateLimitKey(req);
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now > entry.resetTime) {
+    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return true;
+  }
+
+  if (entry.count < RATE_LIMIT_MAX) {
+    entry.count++;
+    return true;
+  }
+
+  return false;
+}
+
+// ── Sanitize log output ───────────────────────────────────────────────────────
+// Prevent log injection by truncating/escaping user input before logging.
+function sanitizeForLog(str, maxLen = 200) {
+  if (typeof str !== 'string') return '[non-string]';
+  return str.slice(0, maxLen).replace(/[\n\r]/g, '\\n');
+}
+
 /**
  * POST /debug/errors — Receive frontend errors from error-logger.js
  * Logs them server-side for debugging
- * No auth required — needs to work for public site errors
+ * Rate-limited to prevent log flooding; available on dev and production
  */
 router.post('/errors', (req, res) => {
-  // Log receipt of any request (for diagnostics if request is malformed)
+  // Rate limit check
+  if (!checkRateLimit(req)) {
+    return res.status(429).json({ received: false, error: 'Rate limited' });
+  }
+
   console.log(`[error-logger] Received POST to /debug/errors`);
 
   const { type, message, timestamp, url, filename, lineno, colno, stack } = req.body;
 
   if (!type || !message) {
-    console.warn(`[error-logger] Malformed error report: missing type or message. Received: ${JSON.stringify(req.body)}`);
+    // Sanitize the body before logging to prevent injection
+    const bodySample = sanitizeForLog(JSON.stringify(req.body));
+    console.warn(`[error-logger] Malformed error report: ${bodySample}`);
     return res.json({ received: false, error: 'Missing type or message' });
   }
 
-  // Log to server console with context
-  const context = `[${type}] ${url} ${filename ? `@ ${filename}:${lineno}:${colno}` : ''}`;
-  console.error(`\n🔴 FRONTEND ERROR: ${context}\n  Message: ${message}\n  Time: ${timestamp}`);
+  // Sanitize all fields before logging
+  const typeLog = sanitizeForLog(type, 50);
+  const messageLog = sanitizeForLog(message, 200);
+  const urlLog = sanitizeForLog(url, 300);
+  const filenameLog = filename ? sanitizeForLog(filename, 100) : null;
+
+  const context = `[${typeLog}] ${urlLog}${filenameLog ? ` @ ${filenameLog}:${lineno}:${colno}` : ''}`;
+  console.error(`\n🔴 FRONTEND ERROR: ${context}\n  Message: ${messageLog}\n  Time: ${timestamp}`);
   if (stack) {
-    console.error(`  Stack: ${stack.split('\n').slice(0, 3).join('\n    ')}`);
+    const stackLines = sanitizeForLog(stack, 300).split('\\n').slice(0, 3);
+    console.error(`  Stack: ${stackLines.join('\n    ')}`);
   }
 
   res.json({ received: true });
@@ -31,13 +85,24 @@ router.post('/errors', (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports
  * Browser sends these when a resource violates Content-Security-Policy
- * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy-Report-Only
+ * Rate-limited to prevent log flooding; available on dev and production
  */
 router.post('/csp-violations', (req, res) => {
+  // Rate limit check
+  if (!checkRateLimit(req)) {
+    return res.status(429).json({ received: false, error: 'Rate limited' });
+  }
+
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 
-  console.warn(`\n⚠️  CSP VIOLATION: ${url}\n  Directive: ${directive}\n  Blocked: ${blocked}\n  Source: ${source}`);
+  // Sanitize before logging
+  const urlLog = sanitizeForLog(url, 200);
+  const directiveLog = sanitizeForLog(directive, 100);
+  const blockedLog = sanitizeForLog(blocked, 200);
+  const sourceLog = source ? sanitizeForLog(source, 200) : 'unknown';
+
+  console.warn(`\n⚠️  CSP VIOLATION: ${urlLog}\n  Directive: ${directiveLog}\n  Blocked: ${blockedLog}\n  Source: ${sourceLog}`);
 
   res.json({ received: true });
 });
@@ -47,6 +112,10 @@ router.post('/csp-violations', (req, res) => {
  * Later: could add admin dashboard to view these
  */
 router.get('/errors', (req, res) => {
+  if (!IS_DEV) {
+    return res.status(403).json({ error: 'Debug endpoints not available in production' });
+  }
+
   res.json({
     message: 'Frontend error logging is active. Check server console for errors.',
     timestamp: new Date().toISOString(),
@@ -54,11 +123,15 @@ router.get('/errors', (req, res) => {
 });
 
 /**
- * GET /debug/test-errors — Trigger test errors for verification
+ * GET /debug/test-errors — Trigger test errors for verification (dev only)
  * Used by post-deployment tests to verify error logging is working
  * Returns HTML that triggers multiple error types
  */
 router.get('/test-errors', (req, res) => {
+  if (!IS_DEV) {
+    return res.status(403).json({ error: 'Debug endpoints not available in production' });
+  }
+
   res.send(`
 <!DOCTYPE html>
 <html>
@@ -78,10 +151,14 @@ router.get('/test-errors', (req, res) => {
 });
 
 /**
- * POST /debug/test-complete — Signal that test errors have been logged
+ * POST /debug/test-complete — Signal that test errors have been logged (dev only)
  * Used by deployment script to verify logging completed
  */
 router.post('/test-complete', (req, res) => {
+  if (!IS_DEV) {
+    return res.status(403).json({ error: 'Debug endpoints not available in production' });
+  }
+
   console.log('✅ Error logger test complete');
   res.json({ status: 'test-complete' });
 });
