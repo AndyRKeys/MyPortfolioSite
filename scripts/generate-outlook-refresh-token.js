@@ -5,13 +5,12 @@
  * Usage:
  * 1. Set CLIENT_ID and CLIENT_SECRET below (from Azure AD app registration)
  * 2. Run: node scripts/generate-outlook-refresh-token.js
- * 3. Open the URL in a browser and authorize
+ * 3. Open the displayed URL in a browser and authorize
  * 4. Copy the refresh token to your .env as OUTLOOK_REFRESH_TOKEN
  */
 
 import { createServer } from 'http';
 import { parse } from 'url';
-import open from 'open';
 
 // ── REPLACE THESE WITH YOUR AZURE AD CREDENTIALS ──────────────────────────────
 const CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
@@ -46,14 +45,16 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(3001, async () => {
+server.listen(3001, () => {
   console.log('[Token Gen] ℹ Callback server listening on http://localhost:3001');
 
   const authUri = `${AUTH_URL}?client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPE)}&prompt=login&login_hint=${encodeURIComponent(EMAIL)}`;
 
-  console.log('[Token Gen] Opening browser for authorization...');
-  await open(authUri);
-  console.log('[Token Gen] (If browser doesn\'t open, visit: ' + authUri + ')');
+  console.log('[Token Gen] ℹ Open this URL in your browser to authorize:');
+  console.log('[Token Gen] ');
+  console.log(authUri);
+  console.log('[Token Gen] ');
+  console.log('[Token Gen] Waiting for authorization...');
 });
 
 async function exchangeCodeForToken() {
