@@ -6,7 +6,7 @@
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch   = '',
-    [string]$RepoPath = '~/MyPortfolioSite-dev'
+    [string]$RepoPath = '$HOME/MyPortfolioSite-dev'
 )
 
 # Detect current branch if not specified
@@ -18,7 +18,8 @@ if ([string]::IsNullOrEmpty($Branch)) {
 Write-Host "Switching dev server to branch '$Branch'..." -ForegroundColor Green
 
 # Step 1: switch branch via wrapper
-ssh $Hostname "bash '$RepoPath/scripts/deploy/switch-branch.sh' '$Branch' '$RepoPath'"
+# Note: RepoPath uses $HOME (expanded by remote bash) not ~ (not expanded in quoted SSH strings)
+ssh $Hostname "bash `"`$HOME/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh`" '$Branch' `"`$HOME/MyPortfolioSite-dev`""
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Branch switch failed (exit $LASTEXITCODE). Aborting seed." -ForegroundColor Red
     exit $LASTEXITCODE
@@ -27,14 +28,14 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Seeding dev-server database from branch '$Branch'..." -ForegroundColor Green
 
 # Step 2: run seeder
-$seeder = "$RepoPath/scripts/dev/seed-dev-data.sh"
 $remoteCommand = @"
 set -e
-if [ ! -f "$seeder" ]; then
-    echo "[ERROR] Seeder not found at $seeder on branch $Branch." >&2
+SEEDER="`$HOME/MyPortfolioSite-dev/scripts/dev/seed-dev-data.sh"
+if [ ! -f "`$SEEDER" ]; then
+    echo "[ERROR] Seeder not found at `$SEEDER on branch $Branch." >&2
     exit 1
 fi
-bash "$seeder"
+bash "`$SEEDER"
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
