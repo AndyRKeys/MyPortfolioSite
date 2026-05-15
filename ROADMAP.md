@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-15_
 
 ## 1. Vision and goals
 
@@ -94,6 +94,38 @@ The goals for the project are:
 - Refine visual design (consistent components, design tokens, responsive behavior).
 - Make admin flows (creating posts, editing content) smoother and more discoverable.
 
+### 4.4 Professionalised CI/CD pipeline (GitHub + open-source tooling)
+
+Deployments are still script-driven and manual, which has caused real incidents (e.g. orphan containers serving stale code after a compose service rename — see issue #253). The goal is a reproducible, observable pipeline using only GitHub-native and open-source tools — no paid SaaS, consistent with the self-hosted ethos.
+
+**Continuous Integration (on every PR to `dev`):**
+
+- GitHub Actions workflow running the existing Vitest suite inside the backend container, plus lint/format checks.
+- Block merge on red CI; surface results on the PR.
+- Optional: build the Docker images on CI to catch Dockerfile/dependency breakage before it reaches the server.
+
+**Continuous Delivery (controlled, not fully automatic):**
+
+- Build versioned images and publish to **GitHub Container Registry (GHCR)** — free for this use, keeps the existing Docker Compose model.
+- A **self-hosted GitHub Actions runner** on the home server (it has no public ingress for cloud runners) that pulls the tagged image and runs the existing `deploy-lib.sh` flow — wrapped, not replaced.
+- Promotion model mirrors the branch strategy: merge to `dev` → auto-deploy to the LAN dev environment; tagging a `release/*` / merge to `main` → gated prod deploy requiring manual approval (GitHub Environments with required reviewers — that approver is me, consistent with "only you merge to main").
+- Deploy step always uses `--remove-orphans` and fails loudly on orphan/port-conflict warnings (prevention baked in, ref #253 / #232).
+
+**Observability of the pipeline:**
+
+- Deploy run summary (what was built, image digest, health-check result, rollback if unhealthy) posted back to the PR / release and surfaced in the admin deploy console.
+- Keep the existing rollback/last-good-state logic; CI/CD wraps it rather than reinventing it.
+
+**Open-source tool candidates (all self-hostable / free):**
+
+- GitHub Actions + self-hosted runner (orchestration)
+- GHCR (image registry)
+- Trivy or Grype (image vulnerability scan in CI)
+- act (local workflow testing before pushing)
+- Existing Vitest + shell smoke tests (no new test framework)
+
+**Outcome:** Push-button, auditable releases with the human gate kept for prod; stale-code/orphan classes of incident designed out; the home-lab, no-paid-SaaS philosophy preserved. Sequencing: land after dual-environment hosting (3.1) is stable and likely alongside the mini PC migration (5.1), since a beefier host makes a self-hosted runner + image builds comfortable.
+
 ## 5. Longer-term ideas
 
 ### 5.1 Move from Pi to mini PC
@@ -133,3 +165,4 @@ The goals for the project are:
 ## 7. Change log
 
 - **2026-05-07** – Initial roadmap drafting, based on issues #15, #151, #159 and current architecture.
+- **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
