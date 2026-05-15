@@ -4,21 +4,45 @@ let transporter;
 
 function getTransporter() {
   if (!transporter) {
-    transporter = nodemailer.createTransport({
+    const isOAuth2 = !!(process.env.OUTLOOK_CLIENT_ID && process.env.OUTLOOK_CLIENT_SECRET && process.env.OUTLOOK_REFRESH_TOKEN);
+
+    const config = {
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT || '587'),
       secure: false,
-      auth: {
+    };
+
+    if (isOAuth2) {
+      config.auth = {
+        type: 'OAuth2',
+        user: process.env.OUTLOOK_EMAIL,
+        clientId: process.env.OUTLOOK_CLIENT_ID,
+        clientSecret: process.env.OUTLOOK_CLIENT_SECRET,
+        refreshToken: process.env.OUTLOOK_REFRESH_TOKEN,
+        accessUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      };
+    } else {
+      config.auth = {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
-      },
-    });
+      };
+    }
+
+    transporter = nodemailer.createTransport(config);
   }
   return transporter;
 }
 
-export function isEmailConfigured() {
+function isOAuth2Configured() {
+  return !!(process.env.OUTLOOK_CLIENT_ID && process.env.OUTLOOK_CLIENT_SECRET && process.env.OUTLOOK_REFRESH_TOKEN && process.env.OUTLOOK_EMAIL);
+}
+
+function isBasicAuthConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+export function isEmailConfigured() {
+  return isOAuth2Configured() || isBasicAuthConfigured();
 }
 
 function redactEmail(email) {
@@ -31,17 +55,27 @@ export async function sendMagicLink(to, token) {
   console.log(`[email] sendMagicLink called for ${redactEmail(to)}`);
 
   if (!isEmailConfigured()) {
-    console.warn('[email] SMTP not configured — SMTP_HOST, SMTP_USER, SMTP_PASS must all be set');
-    console.warn(`[email]   SMTP_HOST: ${process.env.SMTP_HOST || 'NOT SET'}`);
-    console.warn(`[email]   SMTP_USER: ${process.env.SMTP_USER ? 'set' : 'NOT SET'}`);
-    console.warn(`[email]   SMTP_PASS: ${process.env.SMTP_PASS ? 'set' : 'NOT SET'}`);
-    throw new Error('SMTP not configured');
+    console.warn('[email] Email not configured');
+    if (isOAuth2Configured()) {
+      console.warn('[email]   OAuth2: OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET, OUTLOOK_REFRESH_TOKEN, OUTLOOK_EMAIL must all be set');
+    } else if (isBasicAuthConfigured()) {
+      console.warn('[email]   Basic Auth: SMTP_HOST, SMTP_USER, SMTP_PASS must all be set');
+    } else {
+      console.warn('[email]   Neither OAuth2 nor Basic Auth configured');
+    }
+    throw new Error('Email not configured');
   }
 
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = isOAuth2Configured()
+    ? process.env.OUTLOOK_EMAIL
+    : (process.env.SMTP_FROM || process.env.SMTP_USER);
   const url = `${process.env.FRONTEND_URL}/login.html?token=${token}`;
 
-  console.log(`[email] SMTP config: host=${process.env.SMTP_HOST} port=${process.env.SMTP_PORT || 587} user=${redactEmail(process.env.SMTP_USER)}`);
+  if (isOAuth2Configured()) {
+    console.log(`[email] OAuth2 config: user=${redactEmail(process.env.OUTLOOK_EMAIL)}`);
+  } else {
+    console.log(`[email] SMTP config: host=${process.env.SMTP_HOST} port=${process.env.SMTP_PORT || 587} user=${redactEmail(process.env.SMTP_USER)}`);
+  }
   console.log(`[email] Sending from: ${redactEmail(from)} to: ${redactEmail(to)}`);
   console.log(`[email] Login URL: ${process.env.FRONTEND_URL}/login.html?token=[redacted]`);
 
