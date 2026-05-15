@@ -1,34 +1,35 @@
 import nodemailer from 'nodemailer';
+import { escapeHtml } from './html.js';
 
 let transporter;
 
 function getTransporter() {
   if (!transporter) {
-    const isOAuth2 = !!(process.env.OUTLOOK_CLIENT_ID && process.env.OUTLOOK_CLIENT_SECRET && process.env.OUTLOOK_REFRESH_TOKEN);
-
-    const config = {
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-    };
-
-    if (isOAuth2) {
-      config.auth = {
-        type: 'OAuth2',
-        user: process.env.OUTLOOK_EMAIL,
-        clientId: process.env.OUTLOOK_CLIENT_ID,
-        clientSecret: process.env.OUTLOOK_CLIENT_SECRET,
-        refreshToken: process.env.OUTLOOK_REFRESH_TOKEN,
-        accessUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-      };
+    if (isOAuth2Configured()) {
+      transporter = nodemailer.createTransport({
+        host: 'smtp.office365.com',
+        port: 587,
+        secure: false,
+        auth: {
+          type: 'OAuth2',
+          user: process.env.OUTLOOK_EMAIL,
+          clientId: process.env.OUTLOOK_CLIENT_ID,
+          clientSecret: process.env.OUTLOOK_CLIENT_SECRET,
+          refreshToken: process.env.OUTLOOK_REFRESH_TOKEN,
+          accessUrl: 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
+        },
+      });
     } else {
-      config.auth = {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      };
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
     }
-
-    transporter = nodemailer.createTransport(config);
   }
   return transporter;
 }
@@ -49,6 +50,21 @@ function redactEmail(email) {
   if (!email || !email.includes('@')) return '[invalid]';
   const [user, domain] = email.split('@');
   return `${user.slice(0, 2)}***@${domain}`;
+}
+
+export async function sendContactEmail({ name, email, message }) {
+  const from = isOAuth2Configured()
+    ? process.env.OUTLOOK_EMAIL
+    : (process.env.SMTP_FROM || process.env.SMTP_USER);
+
+  await getTransporter().sendMail({
+    from:    `"AK Portfolio" <${from}>`,
+    to:      from,
+    replyTo: email,
+    subject: `Portfolio contact from ${name}`,
+    text:    `Name: ${name}\nEmail: ${email}\n\n${message}`,
+    html:    `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p><hr><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`,
+  });
 }
 
 export async function sendMagicLink(to, token) {
