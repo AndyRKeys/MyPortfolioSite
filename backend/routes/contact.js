@@ -3,42 +3,15 @@ import nodemailer from 'nodemailer';
 import { pool } from '../db/pool.js';
 import { escapeHtml } from '../utils/html.js';
 import { validate, ContactSchema } from '../middleware/validate.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
-// Rate limiting for contact form — kept in code (not in docs) to prevent spam bots from auto-tuning
-// Current limits: 3 requests per hour per IP address
-const RATE_LIMIT    = 3;
-const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-async function checkRateLimit(ip) {
-  try {
-    const now         = new Date();
-    const windowStart = new Date(now.getTime() - RATE_WINDOW_MS);
-
-    const result = await pool.query(
-      `INSERT INTO rate_limits (ip, count, window_start)
-       VALUES ($1, 1, $2)
-       ON CONFLICT (ip) DO UPDATE
-         SET
-           count = CASE
-             WHEN rate_limits.window_start < $3 THEN 1
-             ELSE rate_limits.count + 1
-           END,
-           window_start = CASE
-             WHEN rate_limits.window_start < $3 THEN $2
-             ELSE rate_limits.window_start
-           END
-       RETURNING count`,
-      [ip, now, windowStart]
-    );
-
-    return result.rows[0].count <= RATE_LIMIT;
-  } catch (err) {
-    console.error('Rate limit DB error (failing open):', err.message);
-    return true;
-  }
-}
+const contactRateLimit = createRateLimiter({
+  limit: 3,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  message: 'Too many requests. Please try again later.',
+});
 
 function isSmtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
@@ -56,15 +29,10 @@ function getTransporter() {
   });
 }
 
-router.post('/', validate(ContactSchema), async (req, res) => {
+router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
     return res.json({ success: true });
-  }
-
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
-  if (!await checkRateLimit(ip)) {
-    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
   }
 
   const { name, email, message } = req.body;
