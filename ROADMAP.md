@@ -72,6 +72,16 @@ The goals for the project are:
 
 **Outcome:** Less friction around making and deploying changes, more confidence when experimenting.
 
+### 3.4 Automated test gate (CI-only — precursor to §4.4)
+
+Promoted ahead of the full CI/CD pipeline (§4.4): the test-gate half needs no self-hosted runner, GHCR, or beefier host, so it can land now and start catching regressions immediately. Today the Vitest suite and `Test-Regression.ps1` only run when invoked manually on the dev server; nothing blocks a red change from reaching `dev`. Security-sensitive PRs (e.g. the `email_tokens` bcrypt work, #134) are exactly where an automated gate pays off.
+
+- GitHub Actions workflow on every PR to `dev`: run the existing Vitest suite in the backend container (Postgres as a service container), plus lint/format checks.
+- Block merge on red CI; surface results on the PR.
+- No deployment, registry, or runner work in scope here — this is purely the merge-time safety net. The build/publish/deploy automation stays in §4.4 and still sequences after dual-environment hosting (3.1).
+
+**Outcome:** Regressions caught at PR time instead of by hand, with zero new infrastructure — a cheap, reversible first step that de-risks everything in §4.4.
+
 ## 4. Medium-term directions
 
 ### 4.1 AI Lab v2
@@ -97,6 +107,8 @@ The goals for the project are:
 ### 4.4 Professionalised CI/CD pipeline (GitHub + open-source tooling)
 
 Deployments are still script-driven and manual, which has caused real incidents (e.g. orphan containers serving stale code after a compose service rename — see issue #253). The goal is a reproducible, observable pipeline using only GitHub-native and open-source tools — no paid SaaS, consistent with the self-hosted ethos.
+
+> **Note:** The Continuous Integration test gate below has been promoted to a near-term priority as **§3.4** — it needs no extra infrastructure and lands first. §4.4 now focuses on the Continuous Delivery half (versioned image build/publish, self-hosted runner, gated prod deploy), which still sequences after dual-environment hosting (3.1) and likely alongside the mini PC migration (5.1). The CI section is retained here for completeness of the end-state picture.
 
 **Continuous Integration (on every PR to `dev`):**
 
@@ -230,3 +242,4 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 - **2026-05-07** – Initial roadmap drafting, based on issues #15, #151, #159 and current architecture.
 - **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
 - **2026-05-15** – Added §4.5 Open-source tooling adoption (Dependabot/Renovate, gitleaks, ESLint/Prettier, Uptime Kuma, Grafana/Loki, migration tooling) and §5.5 Future development suggestions, cross-referencing existing open issues.
+- **2026-05-15** – Promoted the CI test gate out of §4.4 into near-term priority §3.4 (Automated test gate); it needs no new infrastructure and lands before the full CD pipeline. §4.4 re-scoped to the Continuous Delivery half.
