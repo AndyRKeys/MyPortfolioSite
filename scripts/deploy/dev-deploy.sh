@@ -21,6 +21,7 @@ COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
 ENV_FILE="${REPO_DIR}/.env"
 ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
 LOG_FILE="${HOME}/dev-deploy.log"
+LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-dev"  # Track last successful dev deployment
 HEALTH_TIMEOUT=60   # seconds to wait for the site to become healthy
 HEALTH_INTERVAL=5   # seconds between health check attempts
 
@@ -133,7 +134,13 @@ dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
 dlog ""
-dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}║           Dev deploy complete ✓          ║${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
+  dlog "${DEPLOY_BOLD}║        Dev rolled back (recovered)       ║${DEPLOY_RESET}"
+  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+else
+  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
+  dlog "${DEPLOY_BOLD}║           Dev deploy complete ✓          ║${DEPLOY_RESET}"
+  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+fi
 dlog ""

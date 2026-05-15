@@ -29,11 +29,16 @@
 #                      If set and different from BRANCH, fetches and checks out this branch
 #                      instead of reverting to PRE_SHA, giving a known-stable baseline.
 #                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
+#   LAST_GOOD_STATE_FILE — (optional) path to save/restore last successful deployment state
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
 
 set -euo pipefail
+
+# ── Deployment state tracking ─────────────────────────────────────────────────
+
+DEPLOY_ROLLED_BACK=0  # Set to 1 if we rolled back instead of deploying the intended branch
 
 # ── Colours and logging ───────────────────────────────────────────────────────
 
@@ -85,6 +90,45 @@ ddie() {
   dfail "$*"
   dlog "See full log at: $LOG_FILE"
   exit 1
+}
+
+# ── Last-good state tracking ──────────────────────────────────────────────────
+
+_save_last_good_state() {
+  local branch="$1"
+  local sha="$2"
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ]; then
+    return  # State tracking disabled if file path not set
+  fi
+
+  if echo "BRANCH=$branch" > "$state_file"; then
+    echo "SHA=$sha" >> "$state_file"
+    dinfo "Saved last-good state: $branch@${sha:0:7}"
+  else
+    dwarn "Could not save last-good state to $state_file"
+  fi
+}
+
+_restore_last_good_state() {
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ] || [ ! -f "$state_file" ]; then
+    return 1  # No saved state
+  fi
+
+  # Source the state file to get BRANCH and SHA variables
+  set +u
+  source "$state_file" 2>/dev/null || return 1
+  set -u
+
+  if [ -n "${BRANCH:-}" ] && [ -n "${SHA:-}" ]; then
+    echo "$BRANCH" "$SHA"
+    return 0
+  fi
+
+  return 1
 }
 
 init_log_banner() {
@@ -380,7 +424,16 @@ _do_rollback() {
 
   cd "$REPO_DIR"
 
-  if [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
+  # Try to restore last-good state first
+  if _restore_last_good_state > /dev/null 2>&1; then
+    read -r rollback_branch rollback_sha < <(_restore_last_good_state)
+    dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
+    git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
     # Roll back to a known-stable branch (e.g. dev or main) rather than a
     # previous commit on the same potentially-broken feature branch.
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
@@ -388,6 +441,7 @@ _do_rollback() {
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
 
   elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
     # Same branch deploy: revert to the previous commit.
@@ -395,6 +449,7 @@ _do_rollback() {
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
 
   else
     dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
@@ -475,6 +530,14 @@ wait_for_health() {
           dwarn "Secondary health check returned $code for $url2"
         fi
       fi
+
+      # Save this as the last-good deployment
+      cd "$REPO_DIR"
+      local current_branch current_sha
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+      current_sha=$(git rev-parse HEAD)
+      _save_last_good_state "$current_branch" "$current_sha"
+
       return
     fi
 
