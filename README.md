@@ -53,7 +53,7 @@ git clone https://github.com/AndyRKeys/MyPortfolioSite.git
 cd MyPortfolioSite
 
 # 2. Copy env
-cp docker/.env.example .env
+cp .env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
 . scripts\dev\dev-local.ps1 up
