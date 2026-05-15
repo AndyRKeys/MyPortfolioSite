@@ -183,8 +183,8 @@ function printResults() {
   for (const [key, result] of pageEntries) {
     const statusStr = result.status === 200 ? '✓ 200' : `✗ ${result.status}`;
     const loggerStr = result.errorLoggerLoaded ? '✓ Yes' : '✗ No';
-    const errorsStr = result.consoleErrors > 0 ? result.consoleErrors : '—';
-    const sentStr = result.errorsSent > 0 ? result.errorsSent : '—';
+    const errorsStr = String(result.consoleErrors > 0 ? result.consoleErrors : '—');
+    const sentStr = String(result.errorsSent > 0 ? result.errorsSent : '—');
 
     console.log(
       `${result.path.padEnd(20)} ${statusStr.padEnd(8)} ${loggerStr.padEnd(10)} ${errorsStr.padEnd(8)} ${sentStr}`
