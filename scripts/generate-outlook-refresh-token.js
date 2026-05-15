@@ -27,7 +27,7 @@ function prompt(question) {
 
 const AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
 const TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
-const SCOPE = 'https://outlook.office365.com/SMTP.Send offline_access';
+const SCOPE = 'https://outlook.office365.com/.default offline_access';
 const REDIRECT_URI = 'http://localhost:3001/callback';
 
 let authCode = null;
