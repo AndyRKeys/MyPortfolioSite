@@ -301,11 +301,15 @@ validate_env() {
 
 ensure_dev_certs() {
   local lan_ip="$1"
+  local webauthn_host="${2:-}"
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local cert_script="${script_dir}/../setup/generate-dev-certs.sh"
   local cert_dir="${script_dir}/../config/certs"
   local cert_file="${cert_dir}/dev-server.crt"
   local key_file="${cert_dir}/dev-server.key"
+
+  # WebAuthn needs the cert to cover the hostname (the RP ID), not the IP.
+  local cert_match="${webauthn_host:-$lan_ip}"
 
   dsection "Checking SSL certificates for HTTPS on port 3001"
 
@@ -313,14 +317,14 @@ ensure_dev_certs() {
     ddie "Certificate generation script not found at $cert_script"
   fi
 
-  # Idempotency check: only regenerate if certs are missing or LAN_IP doesn't match cert CN/SAN
+  # Idempotency check: only regenerate if certs are missing or the hostname
+  # (or IP, when no hostname) isn't present in the cert SAN.
   local should_regenerate=false
   if [ -f "$cert_file" ] && [ -f "$key_file" ]; then
-    # Check if existing certificate CN/SAN matches current LAN_IP (from .env)
-    if openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP:" | grep -q "$lan_ip"; then
-      dok "SSL certificates present and CN/SAN matches $lan_ip — skipping regeneration"
+    if openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+      dok "SSL certificates present and cover $cert_match — skipping regeneration"
     else
-      dwarn "Certificate CN/SAN doesn't match current LAN_IP ($lan_ip), regenerating..."
+      dwarn "Certificate does not cover $cert_match, regenerating..."
       should_regenerate=true
     fi
   else
@@ -330,10 +334,10 @@ ensure_dev_certs() {
 
   # Generate certificates if needed
   if [ "$should_regenerate" = true ]; then
-    if bash "$cert_script" "$lan_ip" 2>&1 | tee -a "$LOG_FILE"; then
+    if bash "$cert_script" "$lan_ip" "$webauthn_host" 2>&1 | tee -a "$LOG_FILE"; then
       dinfo "Certificate generation passed"
     else
-      ddie "Failed to generate SSL certificates. Check LAN_IP in .env."
+      ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
     fi
   fi
 
@@ -359,9 +363,9 @@ ensure_dev_certs() {
     dinfo "Certificate expires: $expiry_date"
   fi
 
-  # Verify certificate CN/SAN matches LAN_IP
-  if ! openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP:" | grep -q "$lan_ip"; then
-    dwarn "Certificate may not have correct CN/SAN for $lan_ip"
+  # Verify certificate covers the WebAuthn host (or IP when no host configured)
+  if ! openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+    dwarn "Certificate may not cover $cert_match"
   fi
 
   # Verify file permissions (nginx needs read access)
@@ -369,7 +373,7 @@ ensure_dev_certs() {
     ddie "Certificate files exist but are not readable (permissions issue)"
   fi
 
-  dok "SSL certificates verified and ready for $lan_ip"
+  dok "SSL certificates verified and ready for $cert_match"
 }
 
 # ── Nginx config pre-flight ────────────────────────────────────────────────────
