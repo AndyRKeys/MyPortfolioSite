@@ -77,9 +77,32 @@ printf '%0.s=' {1..52}; echo ""
 echo ""
 
 # ── Blog posts ────────────────────────────────────────────────────────────────
+#
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │ CURATION NOTES — read before running.                                       │
+# │ This merges three post sets into one journey:                               │
+# │   [#203] = posts ported from PR #203 (project-journey narrative)            │
+# │   [.sh]  = original seed posts from this script                             │
+# │   [new]  = continuation posts (dev-server / HTTPS / CSP arc)                │
+# │ DECISION 1-4 each hold a near-duplicate pair — KEEP ONE, delete the other.  │
+# │ REVIEW A-B are related-but-distinct — probably keep both; trim if you want  │
+# │ a single post on that theme. Grep "DECISION", "CHOOSE ONE", "REVIEW".       │
+# └────────────────────────────────────────────────────────────────────────────┘
 
 echo "Seeding blog posts..."
 
+# ╔═══ DECISION 1 — PORTFOLIO INTRO — CHOOSE ONE, delete the other ════════════╗
+# Both are the "why I built this / vanilla JS / Node+Postgres" opener.
+# ── 1A  [#203]  "Building a Personal Portfolio in 2026" (2026-05-01) ──
+seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/posts" <<'JSON'
+{
+  "title": "Building a Personal Portfolio in 2026",
+  "body_markdown": "# Building a Personal Portfolio in 2026\n\nWhen I decided to create a new portfolio site, I wanted something that reflected my values: **simplicity, performance, and security**.\n\n## Why vanilla JavaScript?\n\nNo frameworks. No build step. Just HTML, CSS, and JavaScript—served directly by Nginx. This approach keeps the site lightning-fast and easy to understand. Frontend logic lives in self-contained ES modules: `script.js`, `blog.js`, `travel.js`, `admin.js`.\n\n## The backend\n\nNode.js with Express handles the API. PostgreSQL stores the data. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
+  "post_date": "2026-05-01",
+  "publish": true
+}
+JSON
+# ── 1B  [.sh]   "Building a Portfolio with Node and Postgres" (2026-04-10) ──
 seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/posts" <<'JSON'
 {
   "title": "Building a Portfolio with Node and Postgres",
@@ -88,7 +111,19 @@ seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/post
   "publish": true
 }
 JSON
+# ╚═══ END DECISION 1 ════════════════════════════════════════════════════════╝
 
+# ╔═══ DECISION 2 — PASSWORDLESS AUTH — CHOOSE ONE ═══════════════════════════╗
+# ── 2A  [#203]  "Authentication Without Passwords: WebAuthn & JWT" (2026-05-02) ──
+seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/posts" <<'JSON'
+{
+  "title": "Authentication Without Passwords: WebAuthn & JWT",
+  "body_markdown": "# Authentication Without Passwords: WebAuthn & JWT\n\nPasswords are the weakest link in security. So I built a system where you sign in with your device's biometrics or PIN—no password needed.\n\n## How it works\n\n1. **Registration** — You create an account and register a FIDO2 passkey via WebAuthn\n2. **Sign-in** — Browser runs the WebAuthn ceremony; your device confirms your identity\n3. **Token issuance** — Backend verifies the ceremony and issues a JWT valid for 7 days\n4. **Protected routes** — Every admin API checks for a valid JWT before executing\n\n## Email magic links as backup\n\nNot everyone has a passkey yet. For those users, we offer email magic links:\n- Request a link, a random token is stored (bcrypt hashed)\n- Click the link, the token is verified (constant-time comparison)\n- JWT issued automatically\n\n## Why this matters\n\nWebAuthn is phishing-resistant. A malicious site can't intercept your passkey. Your device won't complete the ceremony for the wrong origin. Combined with HTTPS, this is security that actually works.",
+  "post_date": "2026-05-02",
+  "publish": true
+}
+JSON
+# ── 2B  [.sh]   "Why I Chose Passkeys Over Passwords" (2026-04-18) ──
 seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JSON'
 {
   "title": "Why I Chose Passkeys Over Passwords",
@@ -97,7 +132,9 @@ seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JS
   "publish": true
 }
 JSON
+# ╚═══ END DECISION 2 ════════════════════════════════════════════════════════╝
 
+# ── KEEP [.sh] (unique — no overlap) ──
 seed_item "Blog: What I Got Wrong About SQL Indexes (published)" "/posts" <<'JSON'
 {
   "title": "What I Got Wrong About SQL Indexes",
@@ -107,6 +144,7 @@ seed_item "Blog: What I Got Wrong About SQL Indexes (published)" "/posts" <<'JSO
 }
 JSON
 
+# ── KEEP [.sh] (unique — no overlap) ──
 seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <<'JSON'
 {
   "title": "Markdown Rendering Without a Build Step",
@@ -116,24 +154,62 @@ seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <
 }
 JSON
 
-seed_item "Blog: Deploying to a Raspberry Pi with PM2 and Nginx (published)" "/posts" <<'JSON'
+# ── KEEP [#203] (unique — no overlap) ──
+seed_item "Blog: Building a Travel Memory Archive (published)" "/posts" <<'JSON'
 {
-  "title": "Deploying to a Raspberry Pi with PM2 and Nginx",
-  "body_markdown": "## The setup\n\nNginx handles TLS termination and static files. PM2 keeps the Node process running and restarts it after crashes or reboots.\n\n## The deploy script\n\nA single bash script: fetch latest main, run `npm install --omit=dev`, apply schema migrations if needed, restart PM2, run a health check. If the health check fails, PM2 rolls back automatically.\n\n## Lessons learned\n\n- `certbot --nginx` makes SSL trivial\n- PM2 startup scripts survive Pi reboots\n- Keep deploy logs — `~/deploy.log` records every deploy SHA for rollback",
+  "title": "Building a Travel Memory Archive",
+  "body_markdown": "# Building a Travel Memory Archive\n\nTravel creates memories. A simple blog post can't capture the feeling of a place. So I built a travel feature that combines location, photos, timeline, and an interactive map.\n\n## What you can do\n\n- **Add a trip** — title, date, location (auto-geocoded), notes, and photos\n- **Coordinate steppers** — adjust latitude/longitude with tiny buttons (0.000001 degree precision)\n- **Geocode confirmation map** — see your marker on Leaflet before publishing\n- **Timeline view** — sorted by date, with a visual timeline on the blog page\n- **Lightbox gallery** — click photos to expand, swipe to navigate\n\n## Technical highlights\n\n- Leaflet.js for the interactive map (open-source, lightweight)\n- Custom coordinate stepper UI — hold the button to keep adjusting\n- Multi-file upload with validation (photos, videos)\n- Separate storage from blog posts (both use the same `posts` table with a `post_type` column)\n\n## Why it matters\n\nTravel memories deserve more than a text dump. This feature celebrates the places you've been and the moments you've captured.",
   "post_date": "2026-05-03",
   "publish": true
 }
 JSON
 
-seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
+# ── KEEP [#203] (unique — no overlap) ──
+seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)" "/posts" <<'JSON'
 {
-  "title": "Goodbye Raspberry Pi, Hello Ubuntu Server",
-  "body_markdown": "## Outgrowing the Pi\n\nThe Raspberry Pi 3 served this site well for over a year, but the cracks were showing: `npm install` took minutes, image uploads were sluggish, and running tests on-device was painful.\n\n## The new home\n\nI repurposed an Ubuntu Server box (an old gaming PC) as the new host. Same site, far more headroom.\n\n## The real work was Docker\n\nProd had been running on PM2 directly on the Pi while dev used Docker Compose — a structural mismatch that caused \"works on dev, breaks on prod\" surprises. The migration was the chance to put prod in Docker too, so both environments finally run identical containers.\n\n## Lessons\n\n- A structural difference between dev and prod is technical debt, even when both \"work\"\n- Migrating hosting is a good forcing function to delete accumulated cruft\n- Keep the old host running until the new one is proven",
-  "post_date": "2026-05-08",
+  "title": "The Admin Dashboard: CRUD for a One-Person Team",
+  "body_markdown": "# The Admin Dashboard: CRUD for a One-Person Team\n\nManaging a blog, travel memories, CV uploads, and deployments from one interface—that's the admin dashboard. At 18KB of JavaScript, it's monolithic, but it works.\n\n## Features\n\n- **Blog posts** — create, edit, publish, draft, or delete\n- **Travel memories** — same CRUD, plus geocoding and photo upload\n- **CV manager** — upload a PDF, auto-scanned for private info (phone numbers, postcodes, emails)\n- **Deployment console** — deploy latest code, rollback to a previous commit, view logs\n- **Site stats** — visitor counts by page\n- **Passkey management** — add/remove signing devices\n- **Private notes** — saved to browser localStorage (not sent to server)\n\n## Why it's monolithic\n\nThree factors drive the size: multiple post types with different form layouts, form state across edit/create/publish/draft flows, and deployment controls with real-time polling. Refactoring into smaller modules would help — that's a future improvement.\n\n## Security\n\nOnly authenticated users can access the dashboard. JWT is required. CV uploads are validated server-side before storage.",
+  "post_date": "2026-05-04",
   "publish": true
 }
 JSON
 
+# ╔═══ REVIEW A — CSP/SECURITY — related, likely KEEP BOTH (different chapters) ╗
+# R-A1 is the early "we added CSP" state (note: shows the OLD localhost CSP).
+# R-A2 is the later consolidation. Together they're an arc; trim here if you
+# only want one CSP post.
+# ── R-A1 [#203] "Security First: Content Security Policy and Hardening" (2026-05-05) ──
+seed_item "Blog: Security First — CSP and Hardening (published)" "/posts" <<'JSON'
+{
+  "title": "Security First: Content Security Policy and Hardening",
+  "body_markdown": "# Security First: Content Security Policy and Hardening\n\nA portfolio that handles authentication and uploads needs serious security. Here's what I implemented.\n\n## Content Security Policy (CSP)\n\nCSP tells the browser what resources are allowed to load. Mine is strict:\n\n```\ndefault-src 'self'\nscript-src 'self' https://unpkg.com https://cdn.jsdelivr.net\nstyle-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com\nfont-src 'self' https://fonts.gstatic.com\nimg-src 'self' data: https://*.tile.openstreetmap.org\nconnect-src 'self' http://localhost:8080\nframe-ancestors 'none'\n```\n\n- No inline scripts (all extracted to external files)\n- Only whitelisted CDNs for libraries\n- No framing (prevents clickjacking)\n- Strict referrer policy\n\n## Other headers\n\n- **X-Content-Type-Options: nosniff** — prevent MIME-type sniffing\n- **X-Frame-Options: DENY** — no clickjacking\n- **Referrer-Policy: strict-origin-when-cross-origin** — privacy-conscious\n\n## Input validation\n\nEvery form input is validated server-side. No trusting the client. SQL queries use parameterised statements—no concatenation, ever.\n\n## File uploads\n\nCV files are scanned for phone numbers, UK postcodes, and email addresses. If found, the upload is rejected with a message asking the user to redact.\n\n## What's left\n\nNo system is 100% secure. But these measures stop the most common attacks.",
+  "post_date": "2026-05-05",
+  "publish": true
+}
+JSON
+# ── R-A2 [new]  "One Source of Truth for Security Headers" (2026-05-15) ──
+seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" <<'JSON'
+{
+  "title": "One Source of Truth for Security Headers",
+  "body_markdown": "## Three configs, three policies\n\nLocal, dev, and prod each had their own nginx config — and each had drifted to a slightly different Content-Security-Policy. Dev was missing the CDN that serves the WebAuthn library, which silently blocked passkeys. Classic copy-paste divergence.\n\n## The consolidation\n\nAll CSP and security headers now live in a single `nginx-security-headers.conf` snippet that every environment includes. One place to change, no drift.\n\n## A nasty sub-bug\n\nThe CSP had been written across multiple lines for readability. nginx bakes literal newlines into the header value, which truncates it on the wire — so the policy silently evaluated to almost nothing. Reformatting to a single line fixed it. Readability now lives in the comment block above the directive instead.\n\n## Plus: self-hosted error tracking\n\nWhile in there I added a lightweight error logger — uncaught errors, promise rejections, and CSP violations get POSTed to a backend route and logged to the container. No external service, full visibility.\n\n## Lesson\n\nDuplicated configuration is a bug waiting for the moment you forget one copy.",
+  "post_date": "2026-05-15",
+  "publish": true
+}
+JSON
+# ╚═══ END REVIEW A ══════════════════════════════════════════════════════════╝
+
+# ╔═══ REVIEW B — DEV ENV / DOCKER — related, likely KEEP BOTH ═══════════════╗
+# R-B1 is the early local-Docker story; R-B2 is the later LAN HTTPS dev server.
+# ── R-B1 [#203] "Docker & Nginx: Local Dev That Mirrors Production" (2026-05-06) ──
+seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published)" "/posts" <<'JSON'
+{
+  "title": "Docker & Nginx: Local Dev That Mirrors Production",
+  "body_markdown": "# Docker & Nginx: Local Dev That Mirrors Production\n\nWhat works locally might not work in production. So I containerised everything—backend, database, reverse proxy—in Docker Compose.\n\n## The setup\n\n`docker-compose.yml` defines three services:\n- **postgres** — PostgreSQL database\n- **backend** — Node.js/Express app on port 8080 (internal)\n- **nginx** — reverse proxy on port 80/443 (localhost) or 3001 (dev server)\n\n## Why Nginx?\n\nThe backend shouldn't serve static files. Nginx does that. It serves HTML/CSS/JS from the repo root, proxies `/api/*` to the backend (stripping the prefix), enforces security headers, and handles HTTPS in production.\n\n## Local vs. production\n\n**Local** (`nginx-local.conf.template`): HTTP only, `connect-src 'self' http://localhost:8080`.\n\n**Production** (`nginx-portfolio.conf.template`): HTTPS with Let's Encrypt certs, `connect-src 'self' http://127.0.0.1:8080`, larger upload limit (25MB for multer).\n\n## The .env file\n\nSecrets stay out of git. `.env` (not in repo) defines `DATABASE_URL`, `JWT_SECRET`, and `SMTP_*`. Docker Compose reads from `.env` automatically.",
+  "post_date": "2026-05-06",
+  "publish": true
+}
+JSON
+# ── R-B2 [new]  "A LAN-Only HTTPS Dev Environment" (2026-05-11) ──
 seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
 {
   "title": "A LAN-Only HTTPS Dev Environment",
@@ -142,7 +218,51 @@ seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
   "publish": true
 }
 JSON
+# ╚═══ END REVIEW B ══════════════════════════════════════════════════════════╝
 
+# ╔═══ DECISION 3 — RASPBERRY PI DEPLOYMENT — CHOOSE ONE ═════════════════════╗
+# ── 3A  [#203]  "CI/CD and Deployment: From Dev to Raspberry Pi" (2026-05-07) ──
+seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" "/posts" <<'JSON'
+{
+  "title": "CI/CD and Deployment: From Dev to Raspberry Pi",
+  "body_markdown": "# CI/CD and Deployment: From Dev to Raspberry Pi\n\nThe site lives on a Raspberry Pi. Updating it shouldn't require SSH and manual commands. So I built a deployment system.\n\n## The pipeline\n\n1. **Git push** to `dev` or `main` on GitHub\n2. **Admin dashboard** shows deployment status (commits ahead, last deployed SHA)\n3. **Deploy button** pulls latest code, rebuilds Docker images, restarts services\n4. **Health check** polls `/api/health` until the backend is ready\n5. **Rollback** can revert to any previous commit in 30 seconds\n\n## How it works\n\n- `scripts/deploy/prod-deploy.sh` — SSH into the Pi, pull latest, rebuild, health-check\n- `scripts/config/nginx-portfolio.conf.template` — rendered with envsubst before deploying\n- PM2 (on Pi) or Docker Compose (locally) keeps services running\n\n## Why this matters\n\nZero-downtime updates. Rollback on failure. No manual intervention. The site stays live.\n\n## What's next?\n\nMoving the Pi to an Ubuntu Server gaming PC. Same deployment script, bigger hardware.",
+  "post_date": "2026-05-07",
+  "publish": true
+}
+JSON
+# ── 3B  [.sh]   "Deploying to a Raspberry Pi with PM2 and Nginx" (2026-05-03) ──
+seed_item "Blog: Deploying to a Raspberry Pi with PM2 and Nginx (published)" "/posts" <<'JSON'
+{
+  "title": "Deploying to a Raspberry Pi with PM2 and Nginx",
+  "body_markdown": "## The setup\n\nNginx handles TLS termination and static files. PM2 keeps the Node process running and restarts it after crashes or reboots.\n\n## The deploy script\n\nA single bash script: fetch latest main, run `npm install --omit=dev`, apply schema migrations if needed, restart PM2, run a health check. If the health check fails, PM2 rolls back automatically.\n\n## Lessons learned\n\n- `certbot --nginx` makes SSL trivial\n- PM2 startup scripts survive Pi reboots\n- Keep deploy logs — `~/deploy.log` records every deploy SHA for rollback",
+  "post_date": "2026-05-03",
+  "publish": true
+}
+JSON
+# ╚═══ END DECISION 3 ════════════════════════════════════════════════════════╝
+
+# ╔═══ DECISION 4 — PI → UBUNTU MIGRATION — CHOOSE ONE ══════════════════════╗
+# ── 4A  [#203]  "Migrating Infrastructure: Raspberry Pi to Ubuntu Server" (2026-05-09) ──
+seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
+{
+  "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
+  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n\n- **Zero downtime** — users shouldn't know the site moved\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access:\n```bash\nsudo ufw allow from 192.168.0.0/16 to any port 3001\n```\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
+  "post_date": "2026-05-09",
+  "publish": true
+}
+JSON
+# ── 4B  [new]   "Goodbye Raspberry Pi, Hello Ubuntu Server" (2026-05-08) ──
+seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
+{
+  "title": "Goodbye Raspberry Pi, Hello Ubuntu Server",
+  "body_markdown": "## Outgrowing the Pi\n\nThe Raspberry Pi 3 served this site well for over a year, but the cracks were showing: `npm install` took minutes, image uploads were sluggish, and running tests on-device was painful.\n\n## The new home\n\nI repurposed an Ubuntu Server box (an old gaming PC) as the new host. Same site, far more headroom.\n\n## The real work was Docker\n\nProd had been running on PM2 directly on the Pi while dev used Docker Compose — a structural mismatch that caused \"works on dev, breaks on prod\" surprises. The migration was the chance to put prod in Docker too, so both environments finally run identical containers.\n\n## Lessons\n\n- A structural difference between dev and prod is technical debt, even when both \"work\"\n- Migrating hosting is a good forcing function to delete accumulated cruft\n- Keep the old host running until the new one is proven",
+  "post_date": "2026-05-08",
+  "publish": true
+}
+JSON
+# ╚═══ END DECISION 4 ════════════════════════════════════════════════════════╝
+
+# ── KEEP [new] (unique — no overlap) ──
 seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (published)" "/posts" <<'JSON'
 {
   "title": "The WebAuthn Gotcha — Passkeys Need a Real Hostname",
@@ -152,15 +272,7 @@ seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (publishe
 }
 JSON
 
-seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" <<'JSON'
-{
-  "title": "One Source of Truth for Security Headers",
-  "body_markdown": "## Three configs, three policies\n\nLocal, dev, and prod each had their own nginx config — and each had drifted to a slightly different Content-Security-Policy. Dev was missing the CDN that serves the WebAuthn library, which silently blocked passkeys. Classic copy-paste divergence.\n\n## The consolidation\n\nAll CSP and security headers now live in a single `nginx-security-headers.conf` snippet that every environment includes. One place to change, no drift.\n\n## A nasty sub-bug\n\nThe CSP had been written across multiple lines for readability. nginx bakes literal newlines into the header value, which truncates it on the wire — so the policy silently evaluated to almost nothing. Reformatting to a single line fixed it. Readability now lives in the comment block above the directive instead.\n\n## Plus: self-hosted error tracking\n\nWhile in there I added a lightweight error logger — uncaught errors, promise rejections, and CSP violations get POSTed to a backend route and logged to the container. No external service, full visibility.\n\n## Lesson\n\nDuplicated configuration is a bug waiting for the moment you forget one copy.",
-  "post_date": "2026-05-15",
-  "publish": true
-}
-JSON
-
+# ── Drafts [.sh] (unique — kept for draft-state UI testing) ──
 seed_item "Blog: Draft — AI-Assisted Development Workflow (draft)" "/posts" <<'JSON'
 {
   "title": "AI-Assisted Development Workflow",
