@@ -306,7 +306,8 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
         [userResult.rows[0].id, token]
       );
       await sendMagicLink(normalizedEmail, token).catch(err => {
-        console.error('Failed to send magic link:', err.message);
+        console.error('[auth] Failed to send magic link:', err.message);
+        console.error('[auth] Check SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
       });
     }
 

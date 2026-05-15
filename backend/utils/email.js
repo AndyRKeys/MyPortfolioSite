@@ -17,10 +17,24 @@ function getTransporter() {
   return transporter;
 }
 
+export function isEmailConfigured() {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
 export async function sendMagicLink(to, token) {
+  if (!isEmailConfigured()) {
+    console.warn('[email] SMTP not configured — SMTP_HOST, SMTP_USER, SMTP_PASS must all be set');
+    throw new Error('SMTP not configured');
+  }
+
+  // Fall back to SMTP_USER if SMTP_FROM not explicitly set (common for Gmail)
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   const url = `${process.env.FRONTEND_URL}/login.html?token=${token}`;
+
+  console.log(`[email] Sending magic link to ${to} via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`);
+
   await getTransporter().sendMail({
-    from: `"AK Portfolio" <${process.env.SMTP_FROM}>`,
+    from: `"AK Portfolio" <${from}>`,
     to,
     subject: 'Your login link',
     text: `Log in here: ${url}\n\nThis link expires in 15 minutes and can only be used once.`,
@@ -34,4 +48,6 @@ export async function sendMagicLink(to, token) {
       <p style="color:#666;font-size:12px;">This link expires in 15 minutes and can only be used once.</p>
     `,
   });
+
+  console.log(`[email] Magic link sent successfully to ${to}`);
 }
