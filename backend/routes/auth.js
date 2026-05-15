@@ -9,6 +9,7 @@ import {
 } from '@simplewebauthn/server';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 import { sendMagicLink } from '../utils/email.js';
 import {
   validate,
@@ -24,6 +25,19 @@ const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
 const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
 const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
 const JWT_EXPIRY = '24h';
+
+// Rate limiters for sensitive auth endpoints (per IP)
+const emailRateLimit = createRateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000, // 5 per hour
+  message: 'Too many login attempts. Please try again later.',
+});
+
+const passkeyRateLimit = createRateLimiter({
+  limit: 10,
+  windowMs: 60 * 60 * 1000, // 10 per hour
+  message: 'Too many authentication attempts. Please try again later.',
+});
 
 function signJWT(user) {
   return jwt.sign(
@@ -85,7 +99,7 @@ router.get('/me', authenticate, async (req, res) => {
 
 // ── Passkey registration ───────────────────────────────────────────────────────
 
-router.post('/passkey/register/start', authenticate, async (req, res) => {
+router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -130,7 +144,7 @@ router.post('/passkey/register/start', authenticate, async (req, res) => {
   }
 });
 
-router.post('/passkey/register/finish', authenticate, validate(PasskeyRegisterFinishSchema), async (req, res) => {
+router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey, passkeyName } = req.body;
 
@@ -182,7 +196,7 @@ router.post('/passkey/register/finish', authenticate, validate(PasskeyRegisterFi
 
 // ── Passkey authentication ────────────────────────────────────────────────────
 
-router.post('/passkey/login/start', async (req, res) => {
+router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
   try {
     const { email } = req.body;
     let allowCredentials = [];
@@ -224,7 +238,7 @@ router.post('/passkey/login/start', async (req, res) => {
   }
 });
 
-router.post('/passkey/login/finish', validate(PasskeyLoginFinishSchema), async (req, res) => {
+router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey } = req.body;
 
@@ -283,13 +297,31 @@ router.post('/passkey/login/finish', validate(PasskeyLoginFinishSchema), async (
 
 // ── Email magic link ──────────────────────────────────────────────────────────
 
-router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
+router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req, res) => {
   try {
     const { email } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 
+    // Debug: confirm we entered the handler
+    console.log(`[auth/email/send] Request received`);
+    console.log(`[auth/email/send] ADMIN_EMAIL configured: ${normalizedAdmin ? 'yes' : 'NO — blank!'}`);
+    console.log(`[auth/email/send] Submitted email length: ${normalizedEmail.length}`);
+    console.log(`[auth/email/send] Admin email length: ${normalizedAdmin.length}`);
+    console.log(`[auth/email/send] Emails match: ${normalizedEmail === normalizedAdmin}`);
+
+    // Gate magic link to admin email only — prevents email bombing/enumeration
+    if (normalizedEmail !== normalizedAdmin) {
+      console.log(`[auth/email/send] Gate blocked — submitted email does not match ADMIN_EMAIL`);
+      return res.json({ sent: true });
+    }
+
+    console.log(`[auth/email/send] Gate passed — looking up user in DB`);
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
-      email.toLowerCase().trim(),
+      normalizedEmail,
     ]);
+
+    console.log(`[auth/email/send] DB lookup complete — rows found: ${userResult.rows.length}`);
 
     if (userResult.rows.length) {
       const token = uuidv4();
@@ -298,15 +330,21 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
          VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
-      await sendMagicLink(email.toLowerCase().trim(), token).catch(err => {
-        console.error('Failed to send magic link:', err.message);
+      console.log(`[auth/email/send] Token inserted — attempting email send`);
+      await sendMagicLink(normalizedEmail, token).catch(err => {
+        console.error('[auth] Failed to send magic link:', err.message);
+        console.error('[auth] SMTP error stack:', err.stack);
+        console.error('[auth] Check SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
       });
+    } else {
+      console.log(`[auth/email/send] No user found for this email — skipping send`);
     }
 
     // Deliberate anti-enumeration: always same response regardless of whether email exists
     res.json({ sent: true });
   } catch (err) {
-    console.error(err);
+    console.error('[auth/email/send] Unexpected error:', err.message);
+    console.error(err.stack);
     res.status(500).json({ error: 'Failed to send email' });
   }
 });

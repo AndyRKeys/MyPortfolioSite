@@ -291,6 +291,15 @@ seed_item "Blog: Draft — Rate Limiting Without Redis" "/posts" <<'JSON'
 }
 JSON
 
+seed_item "Blog: Migrating Email to Outlook OAuth2 (published)" "/posts" <<'JSON'
+{
+  "title": "Migrating Email to Outlook OAuth2",
+  "body_markdown": "# Migrating Email to Outlook OAuth2\n\nMicrosoft disabled SMTP basic authentication on Outlook accounts. Overnight, the magic-link login and contact form stopped sending: `535 5.7.139 Authentication unsuccessful, basic authentication is disabled`. Time to move to OAuth2.\n\n## The wrong turns\n\nThe migration was a tour of every way OAuth2 can go sideways:\n\n- **Wrong Azure section.** I started in *Expose an API* (for apps that *are* an API). Email sending needs *API permissions* instead.\n- **Wrong scope.** The first token script requested `https://outlook.office365.com/.default` — Azure rejected it with `invalid_scope`. The correct scope is `https://graph.microsoft.com/Mail.Send`.\n- **Wrong endpoint.** A personal `outlook.com` account can't use the `/common/` token endpoint — it needs `/consumers/`.\n- **Wrong transport.** `nodemailer`'s SMTP OAuth2 wants a token scoped for `smtp.office365.com`, but my refresh token was scoped for Graph. Different resources, can't mix.\n\n## The fix that worked\n\nDrop SMTP entirely. Exchange the refresh token for a Graph access token and POST straight to `https://graph.microsoft.com/v1.0/me/sendMail`. One delegated `Mail.Send` permission, a one-time browser consent to capture a long-lived refresh token, and the backend sends mail silently forever after.\n\n## The infrastructure gotcha\n\nEven with correct code, emails failed — because the `OUTLOOK_*` variables were in `.env` but never passed through `docker-compose` to the container. And a tangle of orphaned containers from an old service rename meant my tests were hitting *stale code* the whole time. Lesson: when debugging \"impossible\" behaviour, verify *which container* is actually serving the request.\n\n## The payoff\n\nWorking OAuth2 email, plus a confirmed rate limiter (the `429` that finally proved requests were reaching the new code). No more basic-auth dependency, and the refresh token never expires unless unused for 90 days.",
+  "post_date": "2026-05-15",
+  "publish": true
+}
+JSON
+
 # ── Travel memories ───────────────────────────────────────────────────────────────────────────────
 
 echo ""

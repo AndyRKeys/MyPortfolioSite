@@ -42,6 +42,10 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 
 **Expiry:** Tokens expire based on `expires_at`. Expired tokens are rejected regardless of `used` status.
 **Single-use:** Once a token is used, `used = TRUE` and any subsequent attempt with the same token is rejected.
+**Recipient gate:** Tokens are only sent to `ADMIN_EMAIL`. Requests for any other address return the same success response (no enumeration signal) but no email is sent.
+**Rate limit:** `/auth/email/send` is limited to 5 requests/hour/IP (DB-backed, survives restarts).
+
+**Email transport:** Outlook OAuth2 via the Microsoft Graph API (`/v1.0/me/sendMail`). Microsoft has disabled SMTP basic auth, so a long-lived refresh token (delegated `Mail.Send` scope, personal-account `/consumers/` endpoint) is exchanged for a short-lived access token on each send. The refresh token is stored in `.env` only. SMTP basic auth (`nodemailer`) is retained as a fallback for non-Outlook providers.
 
 ---
 
@@ -104,9 +108,10 @@ Other routes have no rate limiting. This is a known trade-off for a low-traffic 
 
 | Area | Trade-off |
 |------|-----------|
-| Rate limiting scope | Only the contact form is rate-limited — admin routes rely on JWT expiry |
+| Rate limiting scope | Contact form and auth endpoints (`/auth/email/send`, passkey register/login) are rate-limited; other admin routes rely on JWT expiry |
 | CSRF | Not implemented — admin actions use JWT Bearer tokens (not cookies by default), so standard CSRF attacks are not applicable |
-| Email delivery | SMTP credentials in `.env` — if SMTP is unavailable, magic links fail silently (fallback: use passkey) |
+| Email delivery | Outlook OAuth2 (Graph API) credentials in `.env`; if email is unavailable, magic links fail (fallback: use passkey) |
+| Refresh token | Outlook refresh token in `.env` is long-lived; if leaked it allows sending mail as the admin until revoked in Azure |
 | Passkey-only deployment | WebAuthn requires HTTPS in production and `localhost` in dev — other origins will fail |
 | Single user | No multi-user, role-based access control, or public signup — intentional |
 
@@ -120,7 +125,8 @@ Other routes have no rate limiting. This is a known trade-off for a low-traffic 
 | `JWT_EXPIRY` | Token lifetime, e.g. `7d` |
 | `WEBAUTHN_RP_ID` | Relying Party ID — must match the domain exactly (`andykeys.me` in prod, `localhost` in dev) |
 | `WEBAUTHN_ORIGIN` | Full origin — must match exactly (`https://andykeys.me` or `http://localhost`) |
-| `SMTP_HOST/PORT/USER/PASS` | Email magic link sending — leave blank to disable |
+| `OUTLOOK_CLIENT_ID/SECRET/REFRESH_TOKEN/EMAIL` | Outlook OAuth2 (Graph API) email sending — preferred method |
+| `SMTP_HOST/PORT/USER/PASS` | SMTP fallback for non-Outlook providers — used only if `OUTLOOK_*` absent |
 | `ADMIN_EMAIL` | The only address magic links are sent to |
 
 Never commit `.env`. See `backend/.env.example` for the full list.
