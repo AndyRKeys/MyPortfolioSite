@@ -126,6 +126,36 @@ Deployments are still script-driven and manual, which has caused real incidents 
 
 **Outcome:** Push-button, auditable releases with the human gate kept for prod; stale-code/orphan classes of incident designed out; the home-lab, no-paid-SaaS philosophy preserved. Sequencing: land after dual-environment hosting (3.1) is stable and likely alongside the mini PC migration (5.1), since a beefier host makes a self-hosted runner + image builds comfortable.
 
+### 4.5 Open-source tooling adoption
+
+Beyond the CI/CD pipeline (§4.4), several existing pain points and open issues can be addressed with free, self-hostable, open-source tools — keeping the no-paid-SaaS principle. Grouped by area:
+
+**Dependency & security hygiene (low effort, high value):**
+
+- **Dependabot** or **Renovate** (free) — automated dependency PRs; reduces manual `npm audit` toil.
+- **gitleaks** in CI — block commits/PRs that leak secrets (`.env`, tokens) — complements the existing "never commit secrets" rule.
+- **Trivy / Grype** — container image CVE scanning (also listed in §4.4 CI).
+- Hardens the open `/debug` route and rate-limit work already in flight (#236, #237).
+
+**Code quality gates (supports untested-route risk in #238):**
+
+- **ESLint + Prettier** with a CI check — consistent style enforced automatically, less review nitpicking.
+- **markdownlint-cli2** in CI — resolves #199 and keeps docs clean going forward.
+- **axe-core / pa11y** accessibility check in CI — turns the manual a11y fixes (#229) into a regression gate.
+- Vitest coverage thresholds enforced in CI — directly targets the auth.js/deploy.js coverage gap (#238).
+
+**Observability (addresses the "limited observability" pain point and §4.2):**
+
+- **Uptime Kuma** (self-hosted, lightweight) — uptime/health dashboard for app, DB, SSL, disk; far less work than a full metrics stack.
+- **Grafana + Prometheus + node_exporter**, or the lighter **Grafana + Loki + Promtail** for logs — surface request/error rates and host metrics. Pair with structured logging (Pino) to replace ad-hoc `console.log` (#152).
+- **Postgres `pgBackRest`** or a documented `pg_dump` + **restic**/**rclone** routine — closes the no-automated-backup gap (#185, #240) with a tested restore path.
+
+**Database lifecycle:**
+
+- A lightweight open-source migration tool (**node-pg-migrate** or **dbmate**) — replaces the idempotent-`schema.sql`-only approach with versioned, reversible migrations (long-standing gap; see #169 context in CLAUDE.md).
+
+**Outcome:** Most of these are CI-only or single-container additions — incremental, reversible, and individually shippable as their own `feature/*` issues rather than one big bang.
+
 ## 5. Longer-term ideas
 
 ### 5.1 Move from Pi to mini PC
@@ -156,6 +186,39 @@ Deployments are still script-driven and manual, which has caused real incidents 
   - Could integrate with AI Lab for local document processing.
 - Would need dedicated Docker resources; deferred until after mini PC migration.
 
+### 5.5 Future development suggestions
+
+Speculative, not committed — captured so good ideas are not lost. To be promoted to issues/priorities only when there is appetite.
+
+**Platform & architecture:**
+
+- **Server-side rendering for blog/travel** — current client-side Markdown rendering degrades SEO; a minimal SSR or build-time pre-render (still no heavy framework) would help discoverability.
+- **Modularise the monoliths** — continue the direction in #175 (`admin.js`) and #178 (HTML feature folders); pairs well with the jQuery removal in #176.
+- **API versioning** (`/api/v1`) — cheap to add now, painful to retrofit later if the AI Lab API grows.
+- **Typed backend** — incremental TypeScript or JSDoc-typed modules on the highest-risk files (`auth.js`, `deploy.js`) for safety without a build step everywhere.
+
+**Content & UX:**
+
+- **RSS/Atom feed** for the blog — trivial, high value for a personal site, no infra.
+- **Full-text search** across blog/travel using Postgres `tsvector` (no external search service).
+- **Image optimisation pipeline** (#174) using **sharp** — responsive sizes + modern formats on upload.
+- **Draft preview links** — share unpublished posts via a signed, expiring URL (reuses the magic-link token pattern).
+
+**AI Lab extensions (build on §3.2/§4.1):**
+
+- **Retrieval over own content** — embed blog/devlogs into pgvector so the Code Companion/Researcher can cite the site's own history.
+- **Scheduled agent runs** — e.g. a weekly "summarise what changed" devlog draft from git history + closed issues.
+
+**Home-lab synergy:**
+
+- **Single sign-on** across home-lab services (the passkey/JWT model could front other self-hosted apps).
+- **Status page** aggregating all home-lab services (extends the Uptime Kuma idea in §4.5).
+
+**Process:**
+
+- **Issue/PR templates audit** and a lightweight project board reflecting this roadmap, so roadmap ↔ issues stay in sync (relates to #196, #239).
+- **Release automation** — auto-generate `RELEASE_NOTES.md` entries from merged PR labels at tag time (composes with §4.4 CD).
+
 ## 6. Risks and assumptions
 
 - **Pi resource limits:** Running multiple containers and AI features on the Pi will be tight; the mini PC migration is assumed.
@@ -166,3 +229,4 @@ Deployments are still script-driven and manual, which has caused real incidents 
 
 - **2026-05-07** – Initial roadmap drafting, based on issues #15, #151, #159 and current architecture.
 - **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
+- **2026-05-15** – Added §4.5 Open-source tooling adoption (Dependabot/Renovate, gitleaks, ESLint/Prettier, Uptime Kuma, Grafana/Loki, migration tooling) and §5.5 Future development suggestions, cross-referencing existing open issues.
