@@ -287,16 +287,27 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
   try {
     const { email } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
+    const normalizedAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
+    // Debug: confirm we entered the handler
+    console.log(`[auth/email/send] Request received`);
+    console.log(`[auth/email/send] ADMIN_EMAIL configured: ${normalizedAdmin ? 'yes' : 'NO — blank!'}`);
+    console.log(`[auth/email/send] Submitted email length: ${normalizedEmail.length}`);
+    console.log(`[auth/email/send] Admin email length: ${normalizedAdmin.length}`);
+    console.log(`[auth/email/send] Emails match: ${normalizedEmail === normalizedAdmin}`);
 
     // Gate magic link to admin email only — prevents email bombing/enumeration
-    if (normalizedEmail !== (process.env.ADMIN_EMAIL || '').toLowerCase().trim()) {
-      // Return generic response to avoid email enumeration
+    if (normalizedEmail !== normalizedAdmin) {
+      console.log(`[auth/email/send] Gate blocked — submitted email does not match ADMIN_EMAIL`);
       return res.json({ sent: true });
     }
 
+    console.log(`[auth/email/send] Gate passed — looking up user in DB`);
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
       normalizedEmail,
     ]);
+
+    console.log(`[auth/email/send] DB lookup complete — rows found: ${userResult.rows.length}`);
 
     if (userResult.rows.length) {
       const token = uuidv4();
@@ -305,16 +316,21 @@ router.post('/email/send', validate(EmailSendSchema), async (req, res) => {
          VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
+      console.log(`[auth/email/send] Token inserted — attempting email send`);
       await sendMagicLink(normalizedEmail, token).catch(err => {
         console.error('[auth] Failed to send magic link:', err.message);
+        console.error('[auth] SMTP error stack:', err.stack);
         console.error('[auth] Check SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
       });
+    } else {
+      console.log(`[auth/email/send] No user found for this email — skipping send`);
     }
 
     // Deliberate anti-enumeration: always same response regardless of whether email exists
     res.json({ sent: true });
   } catch (err) {
-    console.error(err);
+    console.error('[auth/email/send] Unexpected error:', err.message);
+    console.error(err.stack);
     res.status(500).json({ error: 'Failed to send email' });
   }
 });
