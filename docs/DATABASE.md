@@ -56,7 +56,7 @@ Short-lived tokens for email magic-link authentication.
 |--------|------|-------|
 | `id` | `UUID PK` | |
 | `user_id` | `UUID FK → users(id)` | `ON DELETE CASCADE` |
-| `token` | `VARCHAR(255) UNIQUE NOT NULL` | Secure random token |
+| `token` | `VARCHAR(255) UNIQUE NOT NULL` | Bcrypt hash of the secure random token (stored via `crypt(raw_token, gen_salt('bf'))`); the raw token is sent in the email link only — see `docs/SECURITY.md` (#134) |
 | `expires_at` | `TIMESTAMPTZ NOT NULL` | Checked on use; expired tokens are rejected |
 | `used` | `BOOLEAN DEFAULT FALSE` | Tokens are single-use |
 | `created_at` | `TIMESTAMPTZ` | |

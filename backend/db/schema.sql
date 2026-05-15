@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS passkeys (
 CREATE TABLE IF NOT EXISTS email_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(255) UNIQUE NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL, -- bcrypt hash via crypt(raw_token, gen_salt('bf')); raw token sent in email link only (#134)
   expires_at TIMESTAMPTZ NOT NULL,
   used BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
