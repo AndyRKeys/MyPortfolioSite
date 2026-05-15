@@ -33,11 +33,17 @@ pass=0
 fail=0
 
 # ── Auto-generate a JWT from the running backend container ─────────────────────
+# The backend is an ESM package ("type": "module"), so require() is not
+# available. Use dynamic import() instead.
 
 if [ -z "$TOKEN" ]; then
-  TOKEN=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SVC" node -e \
-'const jwt=require("jsonwebtoken");if(!process.env.JWT_SECRET){process.stderr.write("NO_SECRET");process.exit(1);}console.log(jwt.sign({userId:"dev-seed-user"},process.env.JWT_SECRET,{expiresIn:"1h"}));' \
-    2>/dev/null | tr -d '\r' | grep -E '^eyJ' | tail -1)
+  TOKEN=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SVC" node --input-type=module <<'JSEOF' \
+    2>/dev/null | tr -d '\r' | grep -E '^eyJ' | tail -1
+import jwt from 'jsonwebtoken';
+if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET\n'); process.exit(1); }
+console.log(jwt.sign({ userId: 'dev-seed-user' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
+JSEOF
+  )
 fi
 
 if [ -z "$TOKEN" ]; then
@@ -46,7 +52,7 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────────────────
 
 # seed_item LABEL ENDPOINT  (JSON body read from stdin)
 seed_item() {
@@ -76,7 +82,7 @@ echo "  Target: ${BASE_URL}"
 printf '%0.s=' {1..52}; echo ""
 echo ""
 
-# ── Blog posts ────────────────────────────────────────────────────────────────
+# ── Blog posts ───────────────────────────────────────────────────────────────────────────────
 #
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │ CURATION NOTES — read before running.                                       │
@@ -91,8 +97,8 @@ echo ""
 
 echo "Seeding blog posts..."
 
-# ╔═══ DECISION 1 — PORTFOLIO INTRO — CHOOSE ONE, delete the other ════════════╗
-# Both are the "why I built this / vanilla JS / Node+Postgres" opener.
+# ╔═══ DECISION 1 — PORTFOLIO INTRO — CHOOSE ONE, delete the other ════════════════════╗
+# Both are the “why I built this / vanilla JS / Node+Postgres” opener.
 # ── 1A  [#203]  "Building a Personal Portfolio in 2026" (2026-05-01) ──
 # seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/posts" <<'JSON'
 # {
@@ -111,16 +117,14 @@ seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/post
   "publish": true
 }
 JSON
-# ╚═══ END DECISION 1 ════════════════════════════════════════════════════════╝
+# ╚═══ END DECISION 1 ════════════════════════════════════════════════════════════════════════════╝
 
-# ╔═══ DECISION 2 — PASSWORDLESS AUTH — CHOOSE ONE ═══════════════════════════╗
+# ╔═══ DECISION 2 — PASSWORDLESS AUTH — CHOOSE ONE ═════════════════════════════╗
 # ── 2A  [#203]  "Authentication Without Passwords: WebAuthn & JWT" (2026-05-02) ──
-seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/posts" <<'JSON'
+# seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/posts" <<'JSON'
 # {
 #   "title": "Authentication Without Passwords: WebAuthn & JWT",
-#   "body_markdown": "# Authentication Without Passwords: WebAuthn & JWT\n\nPasswords are the weakest link in security. So I built a system where you sign in with your device's biometrics or PIN—no password needed.\n\n## How it works\n\n1. **Registration** — You create an account and register a FIDO2 passkey via WebAuthn\n2. **Sign-in** — Browser runs the WebAuthn ceremony; your device confirms your identity\n3. **Token issuance** — Backend verifies the ceremony and issues a JWT valid for 7 days\n4. **Protected routes** — Every admin API checks for a valid JWT before executing\n\n## Email magic links as backup\n\nNot everyone has a passkey yet. For those users, we offer email magic links:\n- Request a link, a random token is stored (bcrypt hashed)\n- Click the link, the token is verified (constant-time comparison)\n- JWT issued automatically\n\n## Why this matters\n\nWebAuthn is phishing-resistant. A malicious site can't intercept your passkey. Your device won't complete the ceremony for the wrong origin. Combined with HTTPS, this is security that actually works.",
-#   "post_date": "2026-05-02",
-#   "publish": true
+#   ...
 # }
 # JSON
 # ── 2B  [.sh]   "Why I Chose Passkeys Over Passwords" (2026-04-18) ──
@@ -132,19 +136,8 @@ seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JS
   "publish": true
 }
 JSON
-# ╚═══ END DECISION 2 ════════════════════════════════════════════════════════╝
+# ╚═══ END DECISION 2 ════════════════════════════════════════════════════════════════════════════╝
 
-# ── KEEP [.sh] (unique — no overlap) ──
-# seed_item "Blog: What I Got Wrong About SQL Indexes (published)" "/posts" <<'JSON'
-# {
-#   "title": "What I Got Wrong About SQL Indexes",
-#   "body_markdown": "## Indexes are not free\n\nI used to think: just add an index and queries go fast. Turns out indexes cost write performance and storage, so you need to be deliberate.\n\n## What actually matters\n\nIndex the columns in your `WHERE` and `ORDER BY` clauses. For this site the main query is:\n\n```sql\nWHERE post_type = 'blog' AND published_at IS NOT NULL\nORDER BY post_date DESC\n```\n\nSo the right index is a composite on `(post_type, published_at, post_date)`.\n\n## EXPLAIN ANALYZE\n\nAlways check your query plans. `EXPLAIN ANALYZE` in psql will tell you if your index is actually being used.",
-#   "post_date": "2026-04-25",
-#   "publish": true
-# }
-# JSON
-
-# ── KEEP [.sh] (unique — no overlap) ──
 seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <<'JSON'
 {
   "title": "Markdown Rendering Without a Build Step",
@@ -154,7 +147,6 @@ seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <
 }
 JSON
 
-# ── KEEP [#203] (unique — no overlap) ──
 seed_item "Blog: Building a Travel Memory Archive (published)" "/posts" <<'JSON'
 {
   "title": "Building a Travel Memory Archive",
@@ -164,7 +156,6 @@ seed_item "Blog: Building a Travel Memory Archive (published)" "/posts" <<'JSON'
 }
 JSON
 
-# ── KEEP [#203] (unique — no overlap) ──
 seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)" "/posts" <<'JSON'
 {
   "title": "The Admin Dashboard: CRUD for a One-Person Team",
@@ -174,11 +165,6 @@ seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)"
 }
 JSON
 
-# ╔═══ REVIEW A — CSP/SECURITY — related, likely KEEP BOTH (different chapters) ╗
-# R-A1 is the early "we added CSP" state (note: shows the OLD localhost CSP).
-# R-A2 is the later consolidation. Together they're an arc; trim here if you
-# only want one CSP post.
-# ── R-A1 [#203] "Security First: Content Security Policy and Hardening" (2026-05-05) ──
 seed_item "Blog: Security First — CSP and Hardening (published)" "/posts" <<'JSON'
 {
   "title": "Security First: Content Security Policy and Hardening",
@@ -187,7 +173,7 @@ seed_item "Blog: Security First — CSP and Hardening (published)" "/posts" <<'J
   "publish": true
 }
 JSON
-# ── R-A2 [new]  "One Source of Truth for Security Headers" (2026-05-15) ──
+
 seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" <<'JSON'
 {
   "title": "One Source of Truth for Security Headers",
@@ -196,11 +182,7 @@ seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" 
   "publish": true
 }
 JSON
-# ╚═══ END REVIEW A ══════════════════════════════════════════════════════════╝
 
-# ╔═══ REVIEW B — DEV ENV / DOCKER — related, likely KEEP BOTH ═══════════════╗
-# R-B1 is the early local-Docker story; R-B2 is the later LAN HTTPS dev server.
-# ── R-B1 [#203] "Docker & Nginx: Local Dev That Mirrors Production" (2026-05-06) ──
 seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published)" "/posts" <<'JSON'
 {
   "title": "Docker & Nginx: Local Dev That Mirrors Production",
@@ -209,7 +191,7 @@ seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published
   "publish": true
 }
 JSON
-# ── R-B2 [new]  "A LAN-Only HTTPS Dev Environment" (2026-05-11) ──
+
 seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
 {
   "title": "A LAN-Only HTTPS Dev Environment",
@@ -218,10 +200,7 @@ seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
   "publish": true
 }
 JSON
-# ╚═══ END REVIEW B ══════════════════════════════════════════════════════════╝
 
-# ╔═══ DECISION 3 — RASPBERRY PI DEPLOYMENT — CHOOSE ONE ═════════════════════╗
-# ── 3A  [#203]  "CI/CD and Deployment: From Dev to Raspberry Pi" (2026-05-07) ──
 seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" "/posts" <<'JSON'
 {
   "title": "CI/CD and Deployment: From Dev to Raspberry Pi",
@@ -230,39 +209,16 @@ seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" 
   "publish": true
 }
 JSON
-# # ── 3B  [.sh]   "Deploying to a Raspberry Pi with PM2 and Nginx" (2026-05-03) ──
-# seed_item "Blog: Deploying to a Raspberry Pi with PM2 and Nginx (published)" "/posts" <<'JSON'
-# {
-#   "title": "Deploying to a Raspberry Pi with PM2 and Nginx",
-#   "body_markdown": "## The setup\n\nNginx handles TLS termination and static files. PM2 keeps the Node process running and restarts it after crashes or reboots.\n\n## The deploy script\n\nA single bash script: fetch latest main, run `npm install --omit=dev`, apply schema migrations if needed, restart PM2, run a health check. If the health check fails, PM2 rolls back automatically.\n\n## Lessons learned\n\n- `certbot --nginx` makes SSL trivial\n- PM2 startup scripts survive Pi reboots\n- Keep deploy logs — `~/deploy.log` records every deploy SHA for rollback",
-#   "post_date": "2026-05-03",
-#   "publish": true
-# }
-# JSON
-# ╚═══ END DECISION 3 ════════════════════════════════════════════════════════╝
 
-# ╔═══ DECISION 4 — PI → UBUNTU MIGRATION — CHOOSE ONE ══════════════════════╗
-── 4A  [#203]  "Migrating Infrastructure: Raspberry Pi to Ubuntu Server" (2026-05-09) ──
-seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
+seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
 {
   "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
-  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access:\n```bash\n```\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
+  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
   "post_date": "2026-05-09",
   "publish": true
 }
 JSON
-# ── 4B  [new]   "Goodbye Raspberry Pi, Hello Ubuntu Server" (2026-05-08) ──
-# seed_item "Blog: Goodbye Raspberry Pi, Hello Ubuntu Server (published)" "/posts" <<'JSON'
-# {
-#   "title": "Goodbye Raspberry Pi, Hello Ubuntu Server",
-#   "body_markdown": "## Outgrowing the Pi\n\nThe Raspberry Pi 3 served this site well for a few weeks, but the cracks were showing: `npm install` took minutes, image uploads were sluggish, and running tests on-device was painful.\n\n## The new home\n\nI repurposed an Ubuntu Server box (an old gaming PC) as the new host. Same site, far more headroom.\n\n## The real work was Docker\n\nProd had been running on PM2 directly on the Pi while dev used Docker Compose — a structural mismatch that caused \"works on dev, breaks on prod\" surprises. The migration was the chance to put prod in Docker too, so both environments finally run identical containers.\n\n## Lessons\n\n- A structural difference between dev and prod is technical debt, even when both \"work\"\n- Migrating hosting is a good forcing function to delete accumulated cruft\n- Keep the old host running until the new one is proven",
-#   "post_date": "2026-05-08",
-#   "publish": true
-# }
-# JSON
-# ╚═══ END DECISION 4 ════════════════════════════════════════════════════════╝
 
-# ── KEEP [new] (unique — no overlap) ──
 seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (published)" "/posts" <<'JSON'
 {
   "title": "The WebAuthn Gotcha — Passkeys Need a Real Hostname",
@@ -272,17 +228,17 @@ seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (publishe
 }
 JSON
 
-# ── Drafts [.sh] (unique — kept for draft-state UI testing) ──
-seed_item "Blog: Draft — AI-Assisted Development Workflow (draft)" "/posts" <<'JSON'
+# ── Drafts ──
+seed_item "Blog: Draft — AI-Assisted Development Workflow" "/posts" <<'JSON'
 {
   "title": "AI-Assisted Development Workflow",
-  "body_markdown": "## Work in progress\n\nThis post covers how I use Claude Code as a pair programmer — creating GitHub issues, writing implementation plans, and raising PRs for review.\n\n## Key points\n\n- AI creates issues and plans before writing code\n- All PRs include a detailed test plan\n- Human reviews every merge to dev\n\n_TODO: add more detail on the branching strategy_",
+  "body_markdown": "## Work in progress\n\nThis post covers how I use Claude as a pair programmer — creating GitHub issues, writing implementation plans, and raising PRs for review.\n\n## Key points\n\n- AI creates issues and plans before writing code\n- All PRs include a detailed test plan\n- Human reviews every merge to dev\n\n_TODO: add more detail on the branching strategy_",
   "post_date": "2026-05-05",
   "publish": false
 }
 JSON
 
-seed_item "Blog: Draft — Lessons from Building Auth from Scratch (draft)" "/posts" <<'JSON'
+seed_item "Blog: Draft — Lessons from Building Auth from Scratch" "/posts" <<'JSON'
 {
   "title": "Lessons from Building Auth from Scratch",
   "body_markdown": "## Why not just use Auth0?\n\nCost and control. For a personal project, a managed auth service is overkill.\n\n## What I built\n\n- Magic link email login (nodemailer + signed tokens)\n- WebAuthn passkey registration and authentication\n- JWT session tokens with short expiry\n\n_TODO: expand section on challenge storage_",
@@ -291,7 +247,7 @@ seed_item "Blog: Draft — Lessons from Building Auth from Scratch (draft)" "/po
 }
 JSON
 
-seed_item "Blog: Draft — Rate Limiting Without Redis (draft)" "/posts" <<'JSON'
+seed_item "Blog: Draft — Rate Limiting Without Redis" "/posts" <<'JSON'
 {
   "title": "Rate Limiting Without Redis",
   "body_markdown": "## The requirement\n\nPrevent spam on the contact form without adding infrastructure.\n\n## The approach\n\nA `rate_limits` table in Postgres with one row per IP. An upsert increments the counter within the current time window and resets it when the window expires.\n\n_TODO: add code snippet_",
@@ -300,7 +256,7 @@ seed_item "Blog: Draft — Rate Limiting Without Redis (draft)" "/posts" <<'JSON
 }
 JSON
 
-# ── Travel memories ───────────────────────────────────────────────────────────
+# ── Travel memories ───────────────────────────────────────────────────────────────────────────────
 
 echo ""
 echo "Seeding travel memories..."
