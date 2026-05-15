@@ -85,6 +85,20 @@ load_env
 
 validate_env
 
+# ── Template validation ────────────────────────────────────────────────────────────
+
+dsection "Validating .env against template"
+
+if command -v node >/dev/null 2>&1; then
+  if node "$REPO_DIR/scripts/validate-env.js" "$ENV_FILE" "$ENV_TEMPLATE" 2>&1 | tee -a "$LOG_FILE"; then
+    dok ".env template validation passed"
+  else
+    dwarn ".env is missing variables from template — review and update if needed"
+  fi
+else
+  dwarn "Node.js not found — skipping template validation"
+fi
+
 # ── UFW check (dev-specific) ───────────────────────────────────────────────────────────
 
 dsection "Checking firewall (UFW)"
