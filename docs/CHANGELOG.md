@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
+## Unreleased (dev)
+
+### Added
+- Outlook OAuth2 email via Microsoft Graph API (`/v1.0/me/sendMail`); `scripts/generate-outlook-refresh-token.js` captures a long-lived refresh token (delegated `Mail.Send`, personal-account `/consumers/` endpoint) (#241)
+- Rate limiting on auth endpoints: `/auth/email/send` (5/hr/IP), passkey register/login (10/hr/IP) (#237)
+- Magic-link recipient gate: tokens only sent to `ADMIN_EMAIL`; other addresses get the same success response with no email (anti-enumeration) (#241)
+- `OUTLOOK_*` env vars wired through all three compose files and documented in every `.env*.example`
+
+### Changed
+- Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
+- `.env*.example`: OAuth2 promoted to the primary email method, SMTP demoted to documented fallback
+
+### Removed
+- `docker/.env.example` — duplicate of root `.env.example`; README updated to reference the canonical file
+
+---
+
 ## Release 2026-05-07
 
 ### Added
