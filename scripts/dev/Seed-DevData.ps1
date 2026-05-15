@@ -1,15 +1,12 @@
 # Seed the dev-server database from Windows via SSH.
-# Connects to the Ubuntu dev server, checks out + syncs the requested branch
-# in ~/MyPortfolioSite-dev, then runs scripts/dev/seed-dev-data.sh remotely.
+# Connects to the Ubuntu dev server, switches the repo to the requested
+# branch via switch-branch.sh, then runs scripts/dev/seed-dev-data.sh.
 #
-# The localhost/Windows seeding path is retired — the bash seeder
-# (scripts/dev/seed-dev-data.sh) is the single source of truth and runs on
-# the dev server, which is where the dev database lives.
-#
-# Usage: .\scripts\dev\Seed-DevData.ps1 [-Hostname <name>] [-Branch <branch>]
+# Usage: .\scripts\dev\Seed-DevData.ps1 [-Hostname <name>] [-Branch <branch>] [-RepoPath <path>]
 param(
     [string]$Hostname = 'ak-home-server',
-    [string]$Branch = ''
+    [string]$Branch   = '',
+    [string]$RepoPath = '~/MyPortfolioSite-dev'
 )
 
 # Detect current branch if not specified
@@ -18,25 +15,26 @@ if ([string]::IsNullOrEmpty($Branch)) {
     Write-Host "Detected branch: $Branch" -ForegroundColor Cyan
 }
 
-Write-Host "Seeding dev-server database from branch '$Branch' via SSH..." -ForegroundColor Green
+Write-Host "Switching dev server to branch '$Branch'..." -ForegroundColor Green
 
+# Step 1: switch branch via wrapper
+ssh $Hostname "bash '$RepoPath/scripts/deploy/switch-branch.sh' '$Branch' '$RepoPath'"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Branch switch failed (exit $LASTEXITCODE). Aborting seed." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+Write-Host "Seeding dev-server database from branch '$Branch'..." -ForegroundColor Green
+
+# Step 2: run seeder
+$seeder = "$RepoPath/scripts/dev/seed-dev-data.sh"
 $remoteCommand = @"
 set -e
-REPO=~/MyPortfolioSite-dev
-SEEDER="`$REPO/scripts/dev/seed-dev-data.sh"
-if [ ! -d "`$REPO/.git" ]; then
-    echo "[ERROR] Dev repo not found at `$REPO. Run a dev deploy first." >&2
+if [ ! -f "$seeder" ]; then
+    echo "[ERROR] Seeder not found at $seeder on branch $Branch." >&2
     exit 1
 fi
-cd "`$REPO"
-git fetch origin "$Branch"
-git checkout "$Branch"
-git pull origin "$Branch"
-if [ ! -f "`$SEEDER" ]; then
-    echo "[ERROR] Seeder not found at `$SEEDER on branch $Branch." >&2
-    exit 1
-fi
-bash "`$SEEDER"
+bash "$seeder"
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
