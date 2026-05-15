@@ -18,6 +18,7 @@ import postsRoutes   from './routes/posts.js';
 import statsRoutes   from './routes/stats.js';
 import cvRoutes      from './routes/cv.js';
 import deployRoutes  from './routes/deploy.js';
+import debugRoutes   from './routes/debug.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -27,10 +28,16 @@ export function createApp() {
   const app = express();
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
+
+  // Extract host+port from ALLOWED_ORIGIN for flexible protocol matching
+  const allowedOriginHostPort = ALLOWED_ORIGIN.replace(/^https?:\/\//, '');
+
   app.use(cors({
     origin: (origin, cb) => {
       if (!origin || origin === ALLOWED_ORIGIN ||
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+          // Docker internal: allow nginx service names for dev/test (nginx-dev, nginx-local, etc.)
+          /^https?:\/\/nginx-(dev|local)(:\d+)?$/.test(origin)) {
         cb(null, true);
       } else {
         cb(new Error(`CORS: origin ${origin} not allowed`));
@@ -53,6 +60,7 @@ export function createApp() {
   app.use('/stats',   statsRoutes);
   app.use('/cv',      cvRoutes);
   app.use('/deploy',  deployRoutes);
+  app.use('/debug',   debugRoutes);
 
   // Health check endpoint — no auth required, lightweight DB verification
   app.get('/health', healthRouter);

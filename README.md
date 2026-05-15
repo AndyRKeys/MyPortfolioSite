@@ -278,6 +278,25 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 
 ---
 
+---
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **README.md** | Architecture, tech stack, local dev setup |
+| **[docs/AI.md](./docs/AI.md)** | Pair programming instructions, scope discipline, commit conventions |
+| **[docs/STYLE_GUIDE.md](./docs/STYLE_GUIDE.md)** | Naming conventions, code patterns, button variants |
+| **[docs/TESTING.md](./docs/TESTING.md)** | Test suite structure, how to run tests, smoke test examples |
+| **[docs/DATABASE.md](./docs/DATABASE.md)** | PostgreSQL schema reference, tables, columns, constraints |
+| **[docs/SECURITY.md](./docs/SECURITY.md)** | Auth model, JWT, WebAuthn, protected routes, threat model |
+| **[docs/UNTRACKED_FILES.md](./docs/UNTRACKED_FILES.md)** | Files not in git but required (`.env`, certs, uploads) |
+| **[docs/DEPLOY_HOUSEKEEPING.md](./docs/DEPLOY_HOUSEKEEPING.md)** | UFW, cron, autostart checks during deployment |
+| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Server setup, cert renewal, monitoring (work-in-progress) |
+| **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
+
+---
+
 ## AI Onboarding Prompt
 
 Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
@@ -297,6 +316,8 @@ documents in order — do not skip any:
                                  test template, and what is/isn't tested
 5. docs/DATABASE.md            — full database schema reference (tables, columns, constraints)
 6. docs/SECURITY.md            — auth model, JWT, protected routes, and threat model
+7. docs/UNTRACKED_FILES.md     — files not in git but critical (.env, certs, uploads,
+                                 how they're created, how to restore)
 7. docs/DEPENDENCIES.md        — rules for adding, updating, and removing dependencies
 8. backend/db/schema.sql       — raw schema SQL
 

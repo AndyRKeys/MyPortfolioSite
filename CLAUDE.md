@@ -231,6 +231,17 @@ const result = await pool.query('SELECT * FROM posts WHERE id = $1', [postId]);
 const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
+**DRY principle (Don't Repeat Yourself):**
+- **Frontend:** Reuse utility functions from `resources/java/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
+- **Backend:** Extract common logic into middleware or route helpers. Don't repeat validation, error handling, or CORS logic.
+- **Deployment scripts:** Extract reusable functions into `scripts/deploy/deploy-lib.sh` (shared helpers like `ensure_repo_cloned()`, `update_to_branch()`, `validate_env()`, `ensure_dev_certs()`). Each `*-deploy.sh` focuses on environment-specific logic only. PowerShell wrappers (`.ps1`) are thin — mostly SSH + arg passing.
+- **Configuration:** Use single source of truth for CSP headers (nginx-security-headers.conf), environment templates (.env.*.example), and docker-compose settings.
+- **When you find the same code in two places, extract it into a shared location.** Examples:
+  - Same validation logic → create a validator utility
+  - Same nginx headers → consolidate into a snippet
+  - Same deploy step → move to deploy-lib.sh function
+  - Same HTML structure → extract to a shared template or builder function
+
 ### Testing
 
 **Vitest suite:**

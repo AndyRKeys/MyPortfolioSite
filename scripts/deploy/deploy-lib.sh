@@ -23,11 +23,22 @@
 #   HEALTH_TIMEOUT — seconds to wait for health
 #   HEALTH_INTERVAL— seconds between health checks
 #   HEALTH_URL_2   — optional secondary health URL (e.g. HTTPS)
+#   NGINX_SERVICE    — compose service name for nginx (enables nginx log capture + startup check)
+#   HEALTH_INSECURE  — set to 1 to skip TLS cert verification (dev self-signed certs)
+#   ROLLBACK_BRANCH  — branch to roll back to on failure (e.g. dev, main).
+#                      If set and different from BRANCH, fetches and checks out this branch
+#                      instead of reverting to PRE_SHA, giving a known-stable baseline.
+#                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
+#   LAST_GOOD_STATE_FILE — (optional) path to save/restore last successful deployment state
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
 
 set -euo pipefail
+
+# ── Deployment state tracking ─────────────────────────────────────────────────
+
+DEPLOY_ROLLED_BACK=0  # Set to 1 if we rolled back instead of deploying the intended branch
 
 # ── Colours and logging ───────────────────────────────────────────────────────
 
@@ -39,7 +50,34 @@ else
 fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
-_deploy_log_raw()   { echo -e "[$(_deploy_timestamp)] $*" | tee -a "$LOG_FILE"; }
+
+# Redact sensitive info from logs (IP addresses, usernames, service names, hostnames)
+# See docs/LOGGING.md for what should be redacted and why
+_redact_sensitive() {
+  local text="$1"
+  # Redact IP addresses (keep format readable but obscure actual IPs)
+  text=$(echo "$text" | sed -E 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[REDACTED_IP]/g')
+  # Redact home directory usernames
+  text=$(echo "$text" | sed -E "s|/home/[a-z_][a-z0-9_-]*|/home/[USER]|g")
+  # Redact root home
+  text=$(echo "$text" | sed -E 's|/root|/home/[USER]|g')
+  # Redact URLs with IPs
+  text=$(echo "$text" | sed -E 's|https?://\[REDACTED_IP\]:[0-9]+|[REDACTED_URL]|g')
+  # Redact container/service names (myportfoliosite-dev-*, backend-dev, etc.)
+  text=$(echo "$text" | sed -E 's/myportfoliosite(-dev)?-[a-z0-9_-]+/[REDACTED_CONTAINER]/g')
+  # Redact service names in docker compose output (backend-dev, nginx-dev, postgres-dev)
+  text=$(echo "$text" | sed -E 's/(backend|nginx|postgres)-(dev|prod|local)(-[0-9])?/[REDACTED_SERVICE]/g')
+  # Redact hostnames (modnar3, user machines, etc.) — but keep localhost
+  text=$(echo "$text" | sed -E 's|/home/[a-z_][a-z0-9_-]*@[a-z0-9.-]+|/home/[USER]@[REDACTED_HOST]|g')
+  # Redact project directory names (MyPortfolioSite-dev)
+  text=$(echo "$text" | sed -E 's|/[a-z_][a-z0-9_-]*/MyPortfolioSite(-dev)?|/home/[USER]/[REDACTED_PROJECT]|g')
+  echo "$text"
+}
+
+_deploy_log_raw()   {
+  local msg="$(_redact_sensitive "$*")"
+  echo -e "[$(_deploy_timestamp)] $msg" | tee -a "$LOG_FILE";
+}
 
 dlog()     { _deploy_log_raw "$*"; }
 dinfo()    { _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*"; }
@@ -52,6 +90,45 @@ ddie() {
   dfail "$*"
   dlog "See full log at: $LOG_FILE"
   exit 1
+}
+
+# ── Last-good state tracking ──────────────────────────────────────────────────
+
+_save_last_good_state() {
+  local branch="$1"
+  local sha="$2"
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ]; then
+    return  # State tracking disabled if file path not set
+  fi
+
+  if echo "BRANCH=$branch" > "$state_file"; then
+    echo "SHA=$sha" >> "$state_file"
+    dinfo "Saved last-good state: $branch@${sha:0:7}"
+  else
+    dwarn "Could not save last-good state to $state_file"
+  fi
+}
+
+_restore_last_good_state() {
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ] || [ ! -f "$state_file" ]; then
+    return 1  # No saved state
+  fi
+
+  # Source the state file to get BRANCH and SHA variables
+  set +u
+  source "$state_file" 2>/dev/null || return 1
+  set -u
+
+  if [ -n "${BRANCH:-}" ] && [ -n "${SHA:-}" ]; then
+    echo "$BRANCH" "$SHA"
+    return 0
+  fi
+
+  return 1
 }
 
 init_log_banner() {
@@ -137,6 +214,24 @@ update_to_branch() {
   fi
 }
 
+show_deployment_info() {
+  dsection "Deployment details"
+
+  cd "$REPO_DIR"
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  dinfo "Branch: $current_branch"
+
+  local commit_sha
+  commit_sha=$(git rev-parse --short HEAD)
+  dinfo "Commit: $commit_sha"
+
+  local commit_msg
+  commit_msg=$(git log -1 --pretty=%B HEAD)
+  dinfo "Message: $commit_msg"
+}
+
 # ── Env helpers ────────────────────────────────────────────────────────────────
 
 ensure_env_file() {
@@ -202,6 +297,170 @@ validate_env() {
   dok "All required env vars set and valid."
 }
 
+# ── Dev certificates (HTTPS with self-signed) ──────────────────────────────────
+
+ensure_dev_certs() {
+  local lan_ip="$1"
+  local webauthn_host="${2:-}"
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local cert_script="${script_dir}/../setup/generate-dev-certs.sh"
+  local cert_dir="${script_dir}/../config/certs"
+  local cert_file="${cert_dir}/dev-server.crt"
+  local key_file="${cert_dir}/dev-server.key"
+
+  # WebAuthn needs the cert to cover the hostname (the RP ID), not the IP.
+  local cert_match="${webauthn_host:-$lan_ip}"
+
+  dsection "Checking SSL certificates for HTTPS on port 3001"
+
+  if ! [ -f "$cert_script" ]; then
+    ddie "Certificate generation script not found at $cert_script"
+  fi
+
+  # Idempotency check: only regenerate if certs are missing or the hostname
+  # (or IP, when no hostname) isn't present in the cert SAN.
+  local should_regenerate=false
+  if [ -f "$cert_file" ] && [ -f "$key_file" ]; then
+    if openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+      dok "SSL certificates present and cover $cert_match — skipping regeneration"
+    else
+      dwarn "Certificate does not cover $cert_match, regenerating..."
+      should_regenerate=true
+    fi
+  else
+    dwarn "Dev certificates missing, generating fresh dev certificates..."
+    should_regenerate=true
+  fi
+
+  # Generate certificates if needed
+  if [ "$should_regenerate" = true ]; then
+    if bash "$cert_script" "$lan_ip" "$webauthn_host" 2>&1 | tee -a "$LOG_FILE"; then
+      dinfo "Certificate generation passed"
+    else
+      ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
+    fi
+  fi
+
+  # Verify certificate files exist
+  if ! [ -f "$cert_file" ]; then
+    ddie "Certificate file not found at $cert_file after generation"
+  fi
+  if ! [ -f "$key_file" ]; then
+    ddie "Certificate key file not found at $key_file after generation"
+  fi
+
+  # Verify certificate validity
+  if ! openssl x509 -in "$cert_file" -noout >/dev/null 2>&1; then
+    ddie "Certificate at $cert_file is invalid or corrupted"
+  fi
+
+  # Verify certificate hasn't expired
+  local expiry_date
+  expiry_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+  if [ -z "$expiry_date" ]; then
+    dwarn "Could not verify certificate expiry date"
+  else
+    dinfo "Certificate expires: $expiry_date"
+  fi
+
+  # Verify certificate covers the WebAuthn host (or IP when no host configured)
+  if ! openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+    dwarn "Certificate may not cover $cert_match"
+  fi
+
+  # Verify file permissions (nginx needs read access)
+  if ! [ -r "$cert_file" ] || ! [ -r "$key_file" ]; then
+    ddie "Certificate files exist but are not readable (permissions issue)"
+  fi
+
+  dok "SSL certificates verified and ready for $cert_match"
+}
+
+# ── Nginx config pre-flight ────────────────────────────────────────────────────
+
+check_nginx_config() {
+  local nginx_service="${1:-nginx}"
+
+  dsection "Pre-flight: nginx configuration test"
+
+  # Runs nginx -t inside a throw-away container using the same compose env and
+  # volume mounts, so template substitution and cert paths are tested for real.
+  if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
+      2>&1 | tee -a "$LOG_FILE"; then
+    dfail ""
+    dfail "Nginx config test failed. Common causes:"
+    dfail "  • SSL cert or key file missing at the path mounted into the container"
+    dfail "  • Syntax error in nginx config template"
+    dfail "  • Environment variable not set (check .env and COMPOSE_FILE)"
+    ddie "Fix the nginx config then re-run."
+  fi
+
+  dok "Nginx config test passed"
+
+  # Compare what the template renders NOW against what is live in the running
+  # container. Only remove the container if they differ — or if no container is
+  # running. This avoids unnecessary recreation on deploys where nginx config
+  # hasn't changed, while still guaranteeing a fresh start when it has.
+  local new_config current_config
+  new_config=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+  current_config=$(docker compose -f "$COMPOSE_FILE" exec -T "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+
+  if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
+    dok "Nginx config unchanged — container will be reused"
+  else
+    if [ -z "$current_config" ]; then
+      dinfo "No running nginx container — will be created fresh by compose up"
+    else
+      dinfo "Nginx config changed — removing container for clean start"
+    fi
+    dinfo "Rendered nginx config:"
+    echo "$new_config" | tee -a "$LOG_FILE"
+    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
+  fi
+}
+
+# ── Rollback helper ───────────────────────────────────────────────────────────
+
+_do_rollback() {
+  local reason="$1"
+
+  cd "$REPO_DIR"
+
+  # Try to restore last-good state first
+  if _restore_last_good_state > /dev/null 2>&1; then
+    read -r rollback_branch rollback_sha < <(_restore_last_good_state)
+    dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
+    git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
+    # Roll back to a known-stable branch (e.g. dev or main) rather than a
+    # previous commit on the same potentially-broken feature branch.
+    dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
+    git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
+    # Same branch deploy: revert to the previous commit.
+    dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
+    git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  else
+    dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
+    dwarn "Manual intervention required — check container logs above."
+  fi
+}
+
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
@@ -213,14 +472,29 @@ compose_up_with_rollback() {
   if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
+    _do_rollback "docker compose up failed"
+    ddie "Deploy failed — see above for details."
+  fi
 
-    if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-      dwarn "Rolling back to previous commit ($PRE_SHA)..."
-      git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-      docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+  # If NGINX_SERVICE is set, verify it actually started — nginx exits immediately
+  # on config errors, so catching it here avoids a silent 60s health check timeout.
+  if [ -n "${NGINX_SERVICE:-}" ]; then
+    sleep 2  # allow nginx to finish initialising or fail-fast
+    local nginx_state
+    nginx_state=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$NGINX_SERVICE" 2>/dev/null \
+      || docker compose -f "$COMPOSE_FILE" ps "$NGINX_SERVICE" 2>/dev/null | awk 'NR==2{print $4}' \
+      || echo "unknown")
+
+    if [[ "$nginx_state" != "running" ]]; then
+      dfail "Nginx container is not running (state: $nginx_state)"
+      dfail ""
+      dfail "Nginx logs:"
+      docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      _do_rollback "nginx failed to start"
+      ddie "Nginx failed to start — check the nginx config and cert paths above."
     fi
 
-    ddie "Deploy failed — see above for details."
+    dok "Nginx container is running"
   fi
 }
 
@@ -232,6 +506,9 @@ wait_for_health() {
   local url2="${HEALTH_URL_2:-}"
   local timeout="${HEALTH_TIMEOUT:-60}"
   local interval="${HEALTH_INTERVAL:-5}"
+  # Set HEALTH_INSECURE=1 in caller to skip SSL cert verification (e.g. dev self-signed certs)
+  local curl_opts=""
+  [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_opts="--insecure"
 
   dsection "Phase 6: HTTP/HTTPS health checks"
 
@@ -240,36 +517,64 @@ wait_for_health() {
     return
   fi
 
+  [ -n "$curl_opts" ] && dwarn "SSL verification disabled for health check (self-signed cert)"
+
   local attempts=$(( timeout / interval ))
   dinfo "Polling $url (${timeout}s timeout)..."
 
   for i in $(seq 1 "$attempts"); do
-    if curl -sf --max-time 4 "$url" > /dev/null 2>&1; then
+    if curl -sf --max-time 4 $curl_opts "$url" > /dev/null 2>&1; then
       dok "Primary health check OK: $url"
       if [ -n "$url2" ]; then
         local code
-        code=$(curl -sf -o /dev/null -w "%{http_code}" "$url2" 2>/dev/null || echo "000")
+        code=$(curl -sf -o /dev/null -w "%{http_code}" $curl_opts "$url2" 2>/dev/null || echo "000")
         if [ "$code" = "200" ]; then
           dok "Secondary health check OK: $url2"
         else
           dwarn "Secondary health check returned $code for $url2"
         fi
       fi
+
+      # Save this as the last-good deployment
+      cd "$REPO_DIR"
+      local current_branch current_sha
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+      current_sha=$(git rev-parse HEAD)
+      _save_last_good_state "$current_branch" "$current_sha"
+
       return
     fi
 
     if [ "$i" -eq "$attempts" ]; then
       dfail "Health check failed after ${timeout}s"
       dfail ""
-      dfail "Logs for $backend_service (last 50 lines):"
+
+      # Diagnostic curl — show HTTP code and connection error without full verbose noise
+      local diag_http diag_err diag_tmp
+      diag_tmp=$(mktemp)
+      diag_http=$(curl -s --max-time 4 $curl_opts \
+        -o /dev/null -w "%{http_code}" \
+        --stderr "$diag_tmp" \
+        "$url" 2>/dev/null || echo "000")
+      diag_err=$(cat "$diag_tmp" 2>/dev/null || true)
+      rm -f "$diag_tmp"
+      dfail "Last curl attempt: HTTP $diag_http"
+      if [ -n "$diag_err" ]; then
+        dfail "curl error: $diag_err"
+      fi
+      dfail ""
+
+      dfail "Backend logs — $backend_service (last 50 lines):"
       docker compose -f "$COMPOSE_FILE" logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
 
-      if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-        dwarn "Rolling back to previous commit (${PRE_SHA:0:7})..."
-        git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-        docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-        dwarn "Rolled back — verify the service is healthy before investigating the failed update."
+      # Nginx logs are critical for diagnosing SSL/config failures
+      if [ -n "${NGINX_SERVICE:-}" ]; then
+        dfail ""
+        dfail "Nginx logs — $NGINX_SERVICE (last 30 lines):"
+        docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
       fi
+
+      _do_rollback "health check timed out"
 
       ddie "Deploy failed — see log at $LOG_FILE"
     fi
@@ -277,4 +582,60 @@ wait_for_health() {
     dinfo "  attempt $i/$attempts — not ready yet, retrying in ${interval}s..."
     sleep "$interval"
   done
+}
+
+# ── Error Logger Test ──────────────────────────────────────────────────────────
+
+test_error_logger_all_pages() {
+  dsection "Testing error logger across all site pages"
+
+  # Extract base URL from HEALTH_URL
+  local base_url=$(echo "$HEALTH_URL" | sed -E 's|/api/health.*||')
+
+  dinfo "Running comprehensive page coverage test..."
+  dinfo "  Testing all pages for error-logger deployment"
+
+  # Run comprehensive test inside the backend container
+  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | tee -a "$LOG_FILE"; then
+    dok "✓ Error logger site-wide test passed"
+  else
+    dwarn "⚠ Error logger site-wide test failed or had warnings"
+    dwarn "  See output above for details"
+  fi
+}
+
+# ── CSP Violation Test ────────────────────────────────────────────────────────
+
+test_csp_reporting() {
+  dsection "Testing CSP violation reporting"
+
+  # Extract host from HEALTH_URL
+  local host_port=$(echo "$HEALTH_URL" | sed -E 's|^https?://([^/]+).*|\1|')
+  local protocol=$(echo "$HEALTH_URL" | sed -E 's|^(https?)://.*|\1|')
+  local test_url="${protocol}://${host_port}"
+
+  dinfo "CSP report-uri configured at /api/debug/csp-violations"
+  dinfo "CSP violations will be logged when resources violate policy"
+
+  # Check if CSP header includes report-uri
+  local curl_opts=""
+  if [ "$HEALTH_INSECURE" = "1" ]; then
+    curl_opts="-sk"
+  else
+    curl_opts="-s"
+  fi
+
+  local csp_header=$(curl $curl_opts -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
+
+  if [ -n "$csp_header" ]; then
+    if echo "$csp_header" | grep -q "report-uri"; then
+      dok "✓ CSP report-uri is configured"
+    else
+      dwarn "⚠ CSP header present but report-uri not found"
+      dinfo "  Full CSP header:"
+      echo "$csp_header" | tee -a "$LOG_FILE" | sed 's/^/    /'
+    fi
+  else
+    dwarn "⚠ CSP header not found (not being sent by server)"
+  fi
 }

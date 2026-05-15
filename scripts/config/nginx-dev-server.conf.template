@@ -1,28 +1,28 @@
 # Nginx config for dev environment on Ubuntu Server.
 # HTTPS on port 3001 with self-signed certificate for WebAuthn support.
+# HTTP on port 80 redirects to HTTPS on port 3001.
 # Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST
 
-# HTTP → HTTPS redirect (disabled in no-SSL dev branch)
-# server {
-#     listen 3001;
-#     server_name ${DOMAIN} localhost;
-#     return 301 https://$host$request_uri;
-# }
-
-# HTTP server (no SSL) for dev
+# HTTP → HTTPS redirect
 server {
-    # listen 3001 ssl;
-    listen 3001;
+    listen 80;
+    server_name ${DOMAIN} localhost;
+    return 301 https://$host:3001$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 3001 ssl;
     server_name ${DOMAIN} localhost;
 
-    # SSL certificate paths (disabled in no-SSL dev branch)
-    # ssl_certificate     /etc/nginx/certs/dev-server.crt;
-    # ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    # SSL certificate paths (self-signed, mounted from host)
+    ssl_certificate     /etc/nginx/certs/dev-server.crt;
+    ssl_certificate_key /etc/nginx/certs/dev-server.key;
 
-    # Modern SSL configuration (not used without SSL)
-    # ssl_protocols TLSv1.2 TLSv1.3;
-    # ssl_ciphers HIGH:!aNULL:!MD5;
-    # ssl_prefer_server_ciphers on;
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
 
     root ${REPO_DIR};
     index index.html;
@@ -30,25 +30,8 @@ server {
     # Allow larger file uploads (matches multer 20 MB limit + headroom)
     client_max_body_size 25M;
 
-    # ── Security headers
-    # CSP: content-src self only; external resources (CDNs) whitelisted below
-    add_header Content-Security-Policy "
-  default-src 'self';
-  script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh;
-  style-src  'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com;
-  font-src   'self' https://fonts.gstatic.com;
-  img-src    'self' data: https://*.tile.openstreetmap.org https://unpkg.com;
-  connect-src 'self' https://api.github.com;
-  frame-ancestors 'none';
-" always;
-    # Prevent MIME-type sniffing (forces content-type header respect)
-    add_header X-Content-Type-Options "nosniff" always;
-    # Prevent clickjacking / frame embedding
-    add_header X-Frame-Options "DENY" always;
-    # Referrer policy for privacy
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    # Disable unused browser APIs
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    # ── Security headers (consolidated in nginx-security-headers.conf)
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Proxy all API traffic to Node backend.
     # The /api prefix is stripped before forwarding (trailing slash on proxy_pass).
@@ -65,6 +48,7 @@ server {
     location /health {
         proxy_pass http://${BACKEND_HOST}:${APP_PORT}/health;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # Uploaded media served directly by Nginx from repo-root uploads/ dir

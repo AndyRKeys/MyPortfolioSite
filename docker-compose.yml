@@ -45,6 +45,7 @@ services:
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
+      - ./scripts:/app/scripts:ro
       - /app/node_modules
     depends_on:
       postgres:
@@ -62,6 +63,7 @@ services:
     volumes:
       # Local dev template — plain HTTP only, no SSL (prod SSL lives in nginx-portfolio.conf.template)
       - ./scripts/config/nginx-local.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - .:/usr/share/nginx/html:ro
       - ./uploads:/usr/share/nginx/html/uploads:ro
     environment:
