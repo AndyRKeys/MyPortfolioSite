@@ -257,7 +257,7 @@ curl.exe -s -X POST http://localhost/api/contact `
   -d '{\"name\":\"Test\",\"email\":\"test@example.com\",\"message\":\"Hello\"}'
 ```
 
-- Bash scripts (`*.sh`) are still used for Pi/server-side operations and Docker. When providing commands intended to run on the Pi or inside a container, Bash syntax is correct. When providing commands to run on your local Windows machine, use PowerShell.
+- Bash scripts (`*.sh`) are still used for server-side operations and Docker. When providing commands intended to run on the server (`ak-home-server`) or inside a container, Bash syntax is correct. When providing commands to run on your local Windows machine, use PowerShell.
 
 ## Code Style
 
@@ -416,7 +416,7 @@ When working with this project:
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
 - **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
-- **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
+- **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for server (`ak-home-server`) / container operations.
 - **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 
 See README.md for full details, scripts, and local dev setup.
@@ -429,9 +429,10 @@ See README.md for full details, scripts, and local dev setup.
 4. Check [docs/DATABASE.md](docs/DATABASE.md) before adding or changing any routes, migrations, or queries
 5. Check [docs/SECURITY.md](docs/SECURITY.md) before touching auth, sessions, or input handling
 6. Check [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) before adding, updating, or removing a dependency
-7. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
-8. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
-9. Review recent commits to match code style
-10. Ask: "Is this change isolated, testable, and reversible?"
-11. If a task is too large, break it into smaller PRs
-12. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
+7. Check [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md) for the canonical name of the host, environments, services, or branches — never invent or reuse old names (e.g. "the Pi", `portfolio-server`)
+8. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
+9. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
+10. Review recent commits to match code style
+11. Ask: "Is this change isolated, testable, and reversible?"
+12. If a task is too large, break it into smaller PRs
+13. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`

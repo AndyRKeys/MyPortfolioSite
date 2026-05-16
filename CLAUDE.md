@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Orientation (2 minutes)
 
-**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Hosted on a Raspberry Pi (moving to Ubuntu Server gaming PC).
+**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Self-hosted on an Ubuntu Server (`ak-home-server`, a repurposed gaming PC); the original Raspberry Pi has been retired. See `docs/TERMINOLOGY.md` for canonical names.
 
 **Tech stack:**
 - Frontend: vanilla JS/HTML/CSS (no build step), jQuery for legacy compatibility
@@ -36,6 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - docs/DATABASE.md — schema reference
    - docs/SECURITY.md — auth model, JWT, threat model
    - docs/DEPENDENCIES.md — dependency rules
+   - docs/TERMINOLOGY.md — canonical names (host, environments, services, branches)
 
 2. **Project orientation:**
    - Branching: `main` (prod) ← `dev` (integration) ← `feature/issue-N-*` (your work)
@@ -322,6 +323,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **Database schema** → `docs/DATABASE.md`
 - **Auth deep-dive** → `docs/SECURITY.md`
 - **Naming & code patterns** → `docs/STYLE_GUIDE.md`
+- **Canonical names (host, environments, services)** → `docs/TERMINOLOGY.md`
 - **Branching rules** → README.md
 - **Dependency rules** → `docs/DEPENDENCIES.md`
 - **AI working instructions** → `docs/AI.md` (scope discipline, commit hygiene, workflow)

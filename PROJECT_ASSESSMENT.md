@@ -22,14 +22,14 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Weaknesses and risks
 
-- **Single-node, single-point-of-failure production.** Everything runs on one Raspberry Pi. There is no redundancy, no failover, and no easy rollback if a deploy breaks the server. A bad deploy to `main` means the site is down until manually fixed over SSH.
-- **Production is not containerised.** Local dev uses Docker Compose cleanly, but production runs PM2 directly on the Pi. This means the dev and prod environments are structurally different, which is a source of "works locally, breaks in prod" risk. Moving prod to Docker is the right next step.
-- **No database backups.** There is no automated backup of the PostgreSQL data on the Pi. If the SD card dies or the Pi is lost, all blog posts, travel entries, and user data are gone permanently.
-- **Uploads are stored on the Pi filesystem.** User-uploaded images (`/uploads`) live directly on the Pi with no backup, no CDN, and no size/type validation beyond what multer provides. This is fine for now but will become a problem as content grows.
+- **Single-node, single-point-of-failure production.** Everything runs on one Ubuntu Server (`ak-home-server`). There is no redundancy, no failover, and no easy rollback if a deploy breaks the server. A bad deploy to `main` means the site is down until manually fixed over SSH.
+- **Production is containerised (migration complete).** Both dev and prod now run on Docker Compose, closing the structural dev/prod gap that previously caused "works locally, breaks in prod" risk. The original Raspberry Pi + PM2 setup has been retired (#165/#171/#179); residual risk is now operational (script-driven deploys — see ROADMAP §3.5) rather than architectural.
+- **No database backups.** There is no automated backup of the PostgreSQL data on the server. If the disk dies or the server is lost, all blog posts, travel entries, and user data are gone permanently.
+- **Uploads are stored on the server filesystem.** User-uploaded images (`/uploads`) live directly on the server with no backup, no CDN, and no size/type validation beyond what multer provides. This is fine for now but will become a problem as content grows.
 - **No staging environment.** `dev` branch is tested locally in Docker but there is no equivalent of the prod environment to test against before merging to `main`. The dual-environment work in the roadmap (Issues #151/#159) directly addresses this.
 - **The schema has no migration versioning.** Re-running `schema.sql` is safe but there is no record of what version the live database is at. As the schema grows, this becomes harder to manage without a tool like `node-postgres-migrate` or Flyway.
 
-**Overall architecture rating: Amber.** Solid for a personal project at this stage; the Pi + no-backup + no-staging combination is the biggest real risk.
+**Overall architecture rating: Amber.** Solid for a personal project at this stage; the single-server + no-backup + no-staging combination is the biggest real risk.
 
 ---
 
@@ -67,8 +67,8 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Pain points
 
-- **SSH from Windows to Pi is not frictionless.** Key authentication sometimes fails, requiring password fallback. This breaks the automation story — `prod-deploy.ps1` should be a one-command operation, and any time it requires manual intervention it erodes confidence in the workflow.
-- **Production deploy has no visible outcome.** After running `prod-deploy.ps1`, you have to separately SSH to the Pi to check PM2 status and Nginx logs to confirm the deploy worked. There is no success/failure signal back to the developer's terminal in a clear, structured way.
+- **SSH from Windows to the server is not frictionless.** Key authentication sometimes fails, requiring password fallback. This breaks the automation story — `prod-deploy.ps1` should be a one-command operation, and any time it requires manual intervention it erodes confidence in the workflow.
+- **Production deploy has no visible outcome.** After running `prod-deploy.ps1`, you have to separately SSH to the server to check container and Nginx logs to confirm the deploy worked. There is no success/failure signal back to the developer's terminal in a clear, structured way. (Tracked in ROADMAP §3.5.)
 - **There is no health check URL.** There is no `/api/health` endpoint that returns a structured response (app status, DB connectivity, version). This means the only way to confirm a deploy succeeded is to manually test the site. A health check would take 10 minutes to add and dramatically improve deploy confidence.
 - **The admin panel has grown without a clear UX model.** It handles blog posts, travel posts, CV upload, deploy triggers, and stats in one page. Functionally fine for one user; but navigating it is increasingly "just knowing where things are" rather than following an obvious structure.
 - **Agent context resets every session.** Each new Claude session must re-read all the docs from scratch. The onboarding prompt handles this well, but long sessions where the context fills up risk agents losing track of earlier decisions. Devlogs (Issues linked in earlier sessions) help mitigate this but require discipline to maintain.
@@ -84,17 +84,17 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **PM2 provides basic process supervision.** If the Node process crashes, PM2 restarts it. This is the minimum viable reliability for a personal site.
 - **Nginx handles static files independently.** Even if the Node backend crashes, static pages would theoretically still be served by Nginx. In practice, most pages rely on API calls, so this is limited comfort.
 - **No automated SSL renewal monitoring.** Let's Encrypt auto-renews via a systemd timer, but there is no alert if renewal silently fails. The first sign of a problem would be a browser HTTPS warning — not ideal.
-- **No automated Pi health monitoring.** There is no alerting on CPU, memory, disk space, or process health. If the Pi SD card fills up (a known Raspberry Pi failure mode), nothing will warn you before the site goes down.
+- **No automated host health monitoring.** There is no alerting on CPU, memory, disk space, or process health. If the server disk fills up, nothing will warn you before the site goes down.
 
 ### Observability
 
-- **Logging is minimal.** PM2 captures stdout/stderr, but there is no structured logging, no log rotation policy, and no centralised view. Debugging a production issue requires SSHing to the Pi and tailing logs manually.
+- **Logging is minimal.** Docker captures stdout/stderr, but there is no structured logging, no log rotation policy, and no centralised view. Debugging a production issue requires SSHing to the server and tailing container logs manually. (Tracked in ROADMAP §3.5.)
 - **No metrics.** There is no tracking of request counts, error rates, response times, or API usage. The `stats.js` route exists but its scope is limited.
 - **The admin deploy console is the nearest thing to an ops dashboard.** This is a good foundation but it currently only shows deploy output, not runtime health.
 
 ### Performance
 
-- **Performance is not currently a concern.** Traffic is low, the stack is efficient (Nginx serves static files directly, Node only handles API calls), and PostgreSQL is not under load. The Pi is adequate for current usage.
+- **Performance is not currently a concern.** Traffic is low, the stack is efficient (Nginx serves static files directly, Node only handles API calls), and PostgreSQL is not under load. The server is adequate for current usage.
 - **No image optimisation.** Uploaded images are stored and served at their original size. For a travel site with multiple photos per post, this will become noticeable as content grows.
 - **No caching headers on static assets.** Nginx likely serves static files without long-lived cache headers, meaning repeat visitors re-download assets on every visit.
 
@@ -119,7 +119,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **The deploy endpoint (`/api/deploy`) is high-value and must remain tightly protected.** A compromise of the JWT that gates this route would give an attacker the ability to trigger deploys. This endpoint should be audited specifically as part of any security review.
 - **No Content Security Policy (CSP) headers.** Nginx does not appear to set CSP headers. This is a meaningful XSS mitigation that is missing.
 - **Uploaded files are served from the same origin.** If a malicious file were uploaded (e.g., an SVG with embedded script), it could be served directly. Input validation on uploads should be reviewed.
-- **The Pi itself is the weakest link.** The Pi is a home-hosted server with a dynamic IP. Physical access, SD card health, and home network security are all outside the application's control but affect the overall security posture.
+- **The server itself is the weakest link.** It is a home-hosted machine (`ak-home-server`) with a dynamic IP. Physical access, disk health, and home network security are all outside the application's control but affect the overall security posture.
 - **AI Lab will add new attack surface.** Once implemented, the AI Lab introduces API keys for Perplexity and Anthropic, prompt injection risk, and potential for resource abuse. The auth-token gating planned in Issue #15 is necessary but not sufficient — the Lab endpoints will need their own threat model.
 
 **Overall security rating: Amber.** Auth is solid; infrastructure and headers need attention; AI Lab will require a dedicated security review before launch.
@@ -141,7 +141,7 @@ This is an unusual section for a project assessment, but it is directly relevant
 
 - **No architecture diagram.** There is no visual representation of how the pieces fit together. Agents (and new humans) must construct a mental model from reading code. A simple `docs/ARCHITECTURE.md` with an ASCII or Mermaid diagram of Nginx → Node → PostgreSQL and the file structure would reduce onboarding time.
 - **`admin.html` is hard for agents to modify safely.** Its size and mixed concerns mean agents often request clarification or make overly conservative changes. Splitting it into logical sections or extracting JS modules would help. This is a concrete friction point that affects every session where admin changes are needed.
-- **Implicit Pi-specific knowledge.** Several operational facts are not written down: the exact PM2 service name, where Nginx config files live on the Pi, how `ddclient` is configured, where the Let's Encrypt certs are. An agent asked to diagnose a production issue would be guessing at these. A short `docs/INFRASTRUCTURE.md` would close this gap. This is more impactful than the current assessment suggests — agents need this to be operationally independent without asking the owner for facts.
+- **Implicit server-specific knowledge.** Several operational facts (Compose service names, where Nginx config files live on the server, how `ddclient` is configured, where the Let's Encrypt certs are) were previously undocumented. This is now captured in `docs/INFRASTRUCTURE.md` and `docs/TERMINOLOGY.md`; keep them current so agents can diagnose production issues without asking the owner for facts.
 - **Context window pressure in long sessions.** The doc suite is thorough but also long. In extended sessions, earlier context (especially specific file contents read at the start) can be lost. This is a fundamental LLM constraint, not a fixable problem, but it means breaking work into smaller issues (which the project already does well) is especially important here.
 - **No structured way for agents to flag "I am not sure about this."** When an agent is uncertain, it either proceeds (risky) or asks (slows things down). A convention like "if in doubt, raise a GitHub issue with the `needs-decision` label and stop" would help, but this is aspirational rather than current practice.
 
@@ -154,14 +154,14 @@ This is an unusual section for a project assessment, but it is directly relevant
 These are ordered by impact-to-effort ratio, considering both operational risk and agent friction.
 
 **High priority (operational + agent enablement):**
-1. **Write `docs/INFRASTRUCTURE.md`** — a short document covering PM2 service name, Nginx config paths, cert locations, ddclient config, and any other Pi-specific facts that currently live only in someone's head. Directly improves agent effectiveness in production debugging scenarios and is a prerequisite for safe agent-driven troubleshooting.
-2. **Containerise production (move prod to Docker Compose on Pi)** — aligns dev and prod environments, makes deploys predictable, reduces friction from environment gaps, and is a prerequisite for the dual-environment setup in the roadmap.
+1. ✅ **Done — `docs/INFRASTRUCTURE.md` written** (Compose service names, Nginx config paths, cert locations, ddclient config and other server-specific facts). Now complemented by `docs/TERMINOLOGY.md`. Keep both current.
+2. ✅ **Done — production containerised** (migrated off the Raspberry Pi to Ubuntu Server, Docker Compose; #165/#171/#179). Dev and prod environments are now aligned. Residual risk is operational (script-driven deploys — ROADMAP §3.5).
 3. **Add a `/api/health` endpoint** — 30 minutes of work, dramatically improves deploy confidence and sets the foundation for future monitoring. Should return `{ status: "ok", db: "ok", version: "..." }`.
 
 **High priority (security + agent friction):**
 4. **Add CSP and security headers to Nginx config** — one Nginx config block; meaningfully improves XSS and clickjacking protection with minimal risk.
 
-**Note on backups:** Database backups are critically important, but will be implemented holistically during the Ubuntu Server migration (#171) with a proper backup + offsite strategy.
+**Note on backups:** Database backups are critically important. The Ubuntu Server migration (#171) is complete, but a hardened backup + offsite strategy is still outstanding — tracked in ROADMAP §4.5 (pgBackRest / `pg_dump` + restic/rclone).
 
 ---
 
@@ -169,7 +169,7 @@ These are ordered by impact-to-effort ratio, considering both operational risk a
 
 This document should be updated when:
 
-- The architecture changes meaningfully (e.g. moving from Pi to mini PC, adding Docker to prod, introducing a new major component).
+- The architecture changes meaningfully (e.g. a major hosting change, introducing a new major component).
 - A significant area of technical debt is resolved (mark it as addressed, update the rating).
 - A new risk is identified that is not captured here.
 

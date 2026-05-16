@@ -3,7 +3,7 @@
 # Defaults to main branch — override with -Branch only when intentional.
 #
 # IMPORTANT: If the server has rebooted, decrypt it first via Dropbear:
-#   ssh -p 2222 root@portfolio-server
+#   ssh -p 2222 root@ak-home-server
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
