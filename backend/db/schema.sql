@@ -23,11 +23,17 @@ CREATE TABLE IF NOT EXISTS passkeys (
 CREATE TABLE IF NOT EXISTS email_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(255) UNIQUE NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL, -- bcrypt hash via crypt(raw_token, gen_salt('bf')); raw token sent in email link only (#134)
   expires_at TIMESTAMPTZ NOT NULL,
   used BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- One-time, idempotent cleanup: purge legacy plaintext tokens left over from
+-- before #134. Any non-bcrypt row (token not starting with '$2') is a stale
+-- pre-hash token — already useless for login — and would make crypt() raise
+-- "invalid salt" during verification. Safe to run on every boot.
+DELETE FROM email_tokens WHERE token NOT LIKE '$2%';
 
 CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

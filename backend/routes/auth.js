@@ -327,7 +327,7 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
       const token = uuidv4();
       await pool.query(
         `INSERT INTO email_tokens (user_id, token, expires_at)
-         VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
+         VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
       console.log(`[auth/email/send] Token inserted — attempting email send`);
@@ -352,25 +352,71 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
 router.get('/email/verify', async (req, res) => {
   try {
     const { token } = req.query;
-    if (!token) return res.status(400).json({ error: 'Token required' });
+    // Never log the raw token — it is a bearer credential.
+    console.log(`[auth/email/verify] Request received — token present: ${token ? 'yes' : 'no'}`);
+    if (!token) {
+      console.log(`[auth/email/verify] Rejected — no token in query`);
+      return res.status(400).json({ error: 'Token required' });
+    }
 
+    // Filter to unused, unexpired, bcrypt-shaped rows BEFORE calling crypt().
+    // pgcrypto's crypt() raises a hard "invalid salt" error if et.token is not
+    // a valid bcrypt hash (e.g. a legacy plaintext token). A single such row
+    // would otherwise break verification for every token. The CTE narrows the
+    // candidate set so crypt() only ever sees valid bcrypt hashes (#134).
     const result = await pool.query(
-      `SELECT et.user_id, et.token, u.email, u.username
-       FROM email_tokens et JOIN users u ON et.user_id = u.id
-       WHERE et.token = $1 AND et.used = FALSE AND et.expires_at > NOW()`,
+      `WITH candidates AS (
+         SELECT et.id, et.user_id, et.token
+         FROM email_tokens et
+         WHERE et.used = FALSE
+           AND et.expires_at > NOW()
+           AND et.token LIKE '$2%'
+       )
+       SELECT c.id, c.user_id, u.email, u.username
+       FROM candidates c
+       JOIN users u ON c.user_id = u.id
+       WHERE c.token = crypt($1, c.token)`,
       [token]
     );
+
     if (!result.rows.length) {
+      // Diagnostic breakdown so a failed login is explainable from logs
+      // alone: distinguishes "no valid candidates" (expired/used/none) from
+      // "candidates exist but none match" (wrong/forged token), and surfaces
+      // legacy non-bcrypt rows that should have been purged on boot.
+      const diag = await pool.query(
+        `SELECT
+           count(*)                                                          AS total,
+           count(*) FILTER (WHERE token NOT LIKE '$2%')                       AS legacy_plaintext,
+           count(*) FILTER (WHERE used = TRUE)                                AS used,
+           count(*) FILTER (WHERE expires_at <= NOW())                        AS expired,
+           count(*) FILTER (WHERE used = FALSE AND expires_at > NOW()
+                                  AND token LIKE '$2%')                       AS valid_candidates
+         FROM email_tokens`
+      );
+      const d = diag.rows[0];
+      console.log(
+        `[auth/email/verify] No match — total=${d.total} valid_candidates=${d.valid_candidates} ` +
+        `expired=${d.expired} used=${d.used} legacy_plaintext=${d.legacy_plaintext}`
+      );
+      if (Number(d.legacy_plaintext) > 0) {
+        console.warn(
+          `[auth/email/verify] ${d.legacy_plaintext} legacy non-bcrypt row(s) present — ` +
+          `boot cleanup may not have run (#134)`
+        );
+      }
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
-    await pool.query('UPDATE email_tokens SET used = TRUE WHERE token = $1', [token]);
-
     const row = result.rows[0];
+    await pool.query('UPDATE email_tokens SET used = TRUE WHERE id = $1', [row.id]);
+    console.log(`[auth/email/verify] Match — token consumed for user_id=${row.user_id}; issuing JWT`);
+
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
-    console.error(err);
+    // Log the failure reason (not the token) so crypt/DB errors are diagnosable.
+    console.error(`[auth/email/verify] Verification failed — ${err.message}`);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
