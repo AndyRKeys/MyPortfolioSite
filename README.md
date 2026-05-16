@@ -14,7 +14,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 | Auth | WebAuthn/FIDO2 passkeys + email magic links, JWT |
 | Database | PostgreSQL |
 | Web server | Nginx (static files + reverse proxy) |
-| Process manager | PM2 |
+| Runtime | Docker Compose (backend + Postgres + Nginx containerised) |
 | SSL | Let's Encrypt (certbot, auto-renewing) |
 | DNS | Namecheap + dynamic DNS (ddclient) |
 | Hosting | Self-hosted, Raspberry Pi |
@@ -27,7 +27,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 ```
 Browser → andykeys.me
        → Nginx :80/:443
-           ├── /auth/*  → proxy → Node.js backend (PM2)
+           ├── /auth/*  → proxy → Node.js backend (Docker)
            │                        └── PostgreSQL
            └── /*       → static files
 ```
@@ -189,37 +189,40 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
-3. Runs `npm install` only if `backend/package.json` changed
-4. Re-runs `backend/db/schema.sql` only if it changed or DB is empty (idempotent)
-5. Re-renders and reloads Nginx only if `scripts/deploy/nginx-portfolio.conf.template` changed
-6. Restarts PM2 only if backend files changed
-7. Reports PM2 status
+3. Pulls the target branch and rebuilds images
+4. Re-runs `backend/db/schema.sql` (idempotent — `IF NOT EXISTS`)
+5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
+6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
 
 ### What needs a restart?
+
+The whole stack is containerised, so a deploy rebuilds and recreates the affected containers. There is no separate process manager to restart.
 
 | Change type | Action needed |
 |-------------|--------------|
 | HTML / CSS / JS (frontend) | None — Nginx serves files directly |
-| Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
-| `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
-| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
-| `scripts/deploy/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
-| `.env` | Edit on server manually + `pm2 restart` |
+| Backend `.js` files | Auto: image rebuild + `docker compose up -d --build` recreates the backend container |
+| `package.json` / new deps | Auto: image rebuild reinstalls deps, container recreated |
+| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) on boot |
+| `scripts/config/nginx-*.conf.template` | Auto: rendered + validated with `nginx -t` before the Nginx container reloads |
+| `.env` | Edit on server manually, then re-run the deploy (Compose reloads env on recreate) |
 
 ### Useful server commands
 
+> Prod uses `docker-compose.prod.yml`. SSH into the server first, then run from the repo directory.
+
 ```bash
 # Check backend logs
-ssh <pi-hostname> "pm2 logs portfolio-backend --lines 50"
+docker compose -f docker-compose.prod.yml logs --tail=50 backend
 
-# Check backend status
-ssh <pi-hostname> "pm2 status"
+# Check container status
+docker compose -f docker-compose.prod.yml ps
 
-# Restart backend manually
-ssh <pi-hostname> "pm2 restart portfolio-backend"
+# Restart the backend container
+docker compose -f docker-compose.prod.yml restart backend
 
-# Check Nginx status
-ssh <pi-hostname> "sudo systemctl status nginx"
+# Check Nginx (containerised — via Compose, not systemd)
+docker compose -f docker-compose.prod.yml logs --tail=50 nginx
 
 # Renew SSL cert (also auto-renews via systemd timer)
 ssh <pi-hostname> "sudo certbot renew"

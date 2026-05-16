@@ -414,8 +414,8 @@ When working with this project:
 - **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
 - **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
-- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
-- **Deployment:** Smart deploy script detects changes and restarts only what's needed
+- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
+- **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
 - **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 

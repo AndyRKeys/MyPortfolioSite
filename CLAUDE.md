@@ -312,7 +312,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **No structured logging:** `console.log` used throughout; no severity levels or request context. (#152)
 - **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
-- **PM2 in prod, Docker in dev:** Structural difference; moving prod to Docker is next big task. (#165)
+- **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; ROADMAP §3.5)
 
 ---
 
