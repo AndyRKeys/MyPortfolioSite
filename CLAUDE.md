@@ -324,7 +324,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ## Fragile / Incomplete Areas (from PROJECT_ASSESSMENT.md)
 
 - **No backups:** Database and uploads have no automated backup. (#164)
-- **No structured logging:** `console.log` used throughout; no severity levels or request context. (#152)
+- **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
 - **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; ROADMAP §3.5)

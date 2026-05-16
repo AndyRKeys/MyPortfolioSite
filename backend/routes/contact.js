@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -23,10 +24,10 @@ router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => 
     if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({ error: 'Email service is not configured on this server.' });
     }
-    console.log('[DEV] Contact form submission (email not configured — not sent):');
-    console.log(`  Name:    ${name}`);
-    console.log(`  Email:   ${email}`);
-    console.log(`  Message: ${message}`);
+    logger.info(
+      { name, email, message },
+      '[contact] DEV: form submission received but email not configured — not sent'
+    );
     return res.json({ success: true });
   }
 
@@ -34,7 +35,7 @@ router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => 
     await sendContactEmail({ name, email, message });
     res.json({ success: true });
   } catch (err) {
-    console.error('Contact email error:', err.message);
+    logger.error({ err }, '[contact] Failed to send contact email');
     res.status(500).json({ error: 'Failed to send message. Please email directly.' });
   }
 });

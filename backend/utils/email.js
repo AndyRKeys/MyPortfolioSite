@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { escapeHtml } from './html.js';
+import { logger } from './logger.js';
 
 const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
 const GRAPH_SEND_URL  = 'https://graph.microsoft.com/v1.0/me/sendMail';
@@ -89,10 +90,10 @@ export async function sendContactEmail({ name, email, message }) {
 }
 
 export async function sendMagicLink(to, token) {
-  console.log(`[email] sendMagicLink called for ${redactEmail(to)}`);
+  logger.info(`[email] sendMagicLink called for ${redactEmail(to)}`);
 
   if (!isEmailConfigured()) {
-    console.warn('[email] Email not configured — set OUTLOOK_* or SMTP_* vars');
+    logger.warn('[email] Email not configured — set OUTLOOK_* or SMTP_* vars');
     throw new Error('Email not configured');
   }
 
@@ -112,22 +113,22 @@ export async function sendMagicLink(to, token) {
   const text = `Log in here: ${url}\n\nThis link expires in 15 minutes and can only be used once.`;
 
   if (isOAuth2Configured()) {
-    console.log(`[email] OAuth2 (Graph): user=${redactEmail(process.env.OUTLOOK_EMAIL)}`);
+    logger.info(`[email] OAuth2 (Graph): user=${redactEmail(process.env.OUTLOOK_EMAIL)}`);
   } else {
-    console.log(`[email] SMTP: host=${process.env.SMTP_HOST} user=${redactEmail(process.env.SMTP_USER)}`);
+    logger.info(`[email] SMTP: host=${process.env.SMTP_HOST} user=${redactEmail(process.env.SMTP_USER)}`);
   }
-  console.log(`[email] Sending from: ${redactEmail(from)} to: ${redactEmail(to)}`);
+  logger.info(`[email] Sending from: ${redactEmail(from)} to: ${redactEmail(to)}`);
 
   try {
     if (isOAuth2Configured()) {
       await sendViaGraph({ from, to, subject: 'Your login link', text, html });
     } else {
       const info = await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to, subject: 'Your login link', text, html });
-      if (info.rejected?.length) console.warn(`[email] ⚠ Rejected: ${info.rejected.join(', ')}`);
+      if (info.rejected?.length) logger.warn(`[email] Rejected recipients: ${info.rejected.join(', ')}`);
     }
-    console.log('[email] ✓ Sent successfully');
+    logger.info('[email] Sent successfully');
   } catch (err) {
-    console.error(`[email] ✗ Send failed: ${err.message}`);
+    logger.error({ err }, '[email] Send failed');
     throw err;
   }
 }

@@ -9,6 +9,8 @@
  * in Express 5. For Express 4, wrap handlers with asyncHandler() or
  * use .catch(next) explicitly.
  */
+import { logger } from '../utils/logger.js';
+
 export function errorHandler(err, _req, res, _next) {
   if (res.headersSent) return;
 
@@ -16,7 +18,7 @@ export function errorHandler(err, _req, res, _next) {
   const message = err.message || 'Internal server error';
 
   if (process.env.NODE_ENV !== 'test') {
-    console.error('[ERROR]', status, message, err.stack ?? '');
+    logger.error({ err, status }, `[errorHandler] ${message}`);
   }
 
   res.status(status).json({ error: message });

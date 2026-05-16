@@ -103,6 +103,12 @@ git commit -m "chore(deps): remove unused package"
 
 ---
 
+## Notable runtime dependencies
+
+A few packages are load-bearing for cross-cutting concerns and worth knowing about before adding alternatives:
+
+- **`pino` + `pino-http`** — the backend's structured logging stack (#153). All backend code logs through `backend/utils/logger.js`; **no bare `console.log` in runtime code**. `pino-http` provides the per-request HTTP log line (method/path/status/latency) and a `req.log` child logger. Secret redaction (auth headers, tokens, passwords, refresh tokens) is configured centrally in `logger.js` — do not bypass it. `pino-pretty` (devDependency) pretty-prints in non-production; production emits JSON. Level is set by `LOG_LEVEL` (default `info`).
+
 ## Security
 
 - Run `npm audit` regularly — treat vulnerabilities as blockers

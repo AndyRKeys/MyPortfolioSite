@@ -87,7 +87,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Observability
 
-- **Logging is minimal.** Docker captures stdout/stderr, but there is no structured logging, no log rotation policy, and no centralised view. Debugging a production issue requires SSHing to the server and tailing container logs manually. (Tracked in ROADMAP §3.5.)
+- **Structured logging in place; rotation/centralisation still open.** The backend now logs through `pino` + `pino-http` (#153): severity levels, per-request context, `LOG_LEVEL`, and secret redaction. What remains is operational — no log rotation policy and no centralised/aggregated view, so production diagnosis still means SSHing to the server and tailing container logs. (Remaining work tracked in ROADMAP §3.5.)
 - **No metrics.** There is no tracking of request counts, error rates, response times, or API usage. The `stats.js` route exists but its scope is limited.
 - **The admin deploy console is the nearest thing to an ops dashboard.** This is a good foundation but it currently only shows deploy output, not runtime health.
 
