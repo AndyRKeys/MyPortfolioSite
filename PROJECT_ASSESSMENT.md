@@ -1,6 +1,6 @@
 # Project Assessment
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-16_
 
 This document is a frank self-assessment of the current state of MyPortfolioSite — what is working well, what is fragile, where technical debt lives, and what would benefit most from attention. It is written to be honest rather than flattering.
 
@@ -81,8 +81,8 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Reliability
 
-- **PM2 provides basic process supervision.** If the Node process crashes, PM2 restarts it. This is the minimum viable reliability for a personal site.
-- **Nginx handles static files independently.** Even if the Node backend crashes, static pages would theoretically still be served by Nginx. In practice, most pages rely on API calls, so this is limited comfort.
+- **Docker Compose provides process supervision.** Since the migration off PM2 (#165/#171/#179), the backend runs under Docker with a restart policy — if the container exits, Docker restarts it. This is the minimum viable reliability for a personal site and is now consistent between dev and prod.
+- **Nginx handles static files independently.** The Nginx container serves static pages even if the backend container is down. In practice, most pages rely on API calls, so this is limited comfort.
 - **No automated SSL renewal monitoring.** Let's Encrypt auto-renews via a systemd timer, but there is no alert if renewal silently fails. The first sign of a problem would be a browser HTTPS warning — not ideal.
 - **No automated host health monitoring.** There is no alerting on CPU, memory, disk space, or process health. If the server disk fills up, nothing will warn you before the site goes down.
 
@@ -94,8 +94,8 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Performance
 
-- **Performance is not currently a concern.** Traffic is low, the stack is efficient (Nginx serves static files directly, Node only handles API calls), and PostgreSQL is not under load. The server is adequate for current usage.
-- **No image optimisation.** Uploaded images are stored and served at their original size. For a travel site with multiple photos per post, this will become noticeable as content grows.
+- **Performance is not a concern, and the previous resource ceiling is gone.** The migration from the Raspberry Pi to the Ubuntu Server (`ak-home-server`) removed the constrained-hardware worry that dominated earlier assessments. Traffic is low, the stack is efficient (Nginx serves static files directly, Node only handles API calls), PostgreSQL is not under load, and the server now has substantial CPU/RAM headroom relative to the workload. Resource exhaustion is no longer a realistic risk for current or foreseeable usage.
+- **No image optimisation.** Uploaded images are stored and served at their original size. With ample server headroom this is no longer a performance risk, but it still wastes bandwidth and slows page loads for visitors as content grows — a UX concern rather than a capacity one.
 - **No caching headers on static assets.** Nginx likely serves static files without long-lived cache headers, meaning repeat visitors re-download assets on every visit.
 
 **Overall reliability/observability rating: Red-Amber.** The site works but is flying blind in production. No backups, no health checks, no alerting, no log strategy. For a personal site this is acceptable risk; for anything more important it would not be.
@@ -179,5 +179,6 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern.
 - **2026-05-07 (updated)** — Refined AI-readiness rating from Green-Amber to Amber based on real-world friction observed in agent sessions. Elevated priority of infrastructure docs and clarified frontend testing constraints. Updated improvement opportunities ordering to reflect agent friction alongside operational risk.
 - **2026-05-07** — Initial assessment written based on `dev` branch state, covering architecture, codebase health, DX, reliability, security, and AI readiness.
