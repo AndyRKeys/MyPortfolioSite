@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `OUTLOOK_*` env vars wired through all three compose files and documented in every `.env*.example`
 - `docs/TERMINOLOGY.md` — canonical names for host, hostnames, environments, services, and branches; wired into the onboarding doc lists
 - Structured backend logging via `pino` + `pino-http` (#153): severity levels, per-request HTTP log line (method/path/status/latency), `LOG_LEVEL` env var (default `info`), and centralised secret redaction (auth headers, tokens, passwords, refresh tokens). Shared logger at `backend/utils/logger.js`
+- Docker `json-file` log rotation on all services in all three compose files: `10m / 3 files` (local dev), `20m / 5 files` (prod + dev-server) — prevents unbounded disk growth from structured log output
 
 ### Changed
 - Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
