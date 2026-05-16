@@ -1,3 +1,13 @@
+# ============================================================
+# DEPRECATED — DO NOT USE
+# ============================================================
+# Pi-era SSL bootstrap: targets the old `raspberrypi3` SSH alias
+# and runs host-level certbot/Nginx. Production now runs on Ubuntu
+# Server (ak-home-server) with containerised Nginx; certs are
+# managed via scripts/backup/certbot-renew.sh and the Docker setup.
+# Use scripts/deploy/server-setup.sh for provisioning.
+# Kept for historical reference only. See docs/TERMINOLOGY.md.
+# ============================================================
 ssh raspberrypi3 @'
 set -e
 

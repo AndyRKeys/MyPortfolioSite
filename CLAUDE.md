@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Orientation (2 minutes)
 
-**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Hosted on a Raspberry Pi (moving to Ubuntu Server gaming PC).
+**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Self-hosted on an Ubuntu Server (`ak-home-server`, a repurposed gaming PC); the original Raspberry Pi has been retired. See `docs/TERMINOLOGY.md` for canonical names.
 
 **Tech stack:**
 - Frontend: vanilla JS/HTML/CSS (no build step), jQuery for legacy compatibility
@@ -36,6 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - docs/DATABASE.md — schema reference
    - docs/SECURITY.md — auth model, JWT, threat model
    - docs/DEPENDENCIES.md — dependency rules
+   - docs/TERMINOLOGY.md — canonical names (host, environments, services, branches)
 
 2. **Project orientation:**
    - Branching: `main` (prod) ← `dev` (integration) ← `feature/issue-N-*` (your work)
@@ -119,6 +120,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 # or the work is incomplete/experimental (and say so).
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
+
+# After opening the PR, also recommend a ready-to-copy squash commit
+# message (fenced code block: imperative ≤50-char summary, blank line,
+# short why/what body, Co-Authored-By footer). Repo squash-merges, so
+# this becomes the permanent history entry — owner pastes it on merge.
 
 # After review, merge to dev (user does this, not you)
 # User will then create a release PR: dev → main for deploy
@@ -331,6 +337,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **Database schema** → `docs/DATABASE.md`
 - **Auth deep-dive** → `docs/SECURITY.md`
 - **Naming & code patterns** → `docs/STYLE_GUIDE.md`
+- **Canonical names (host, environments, services)** → `docs/TERMINOLOGY.md`
 - **Branching rules** → README.md
 - **Dependency rules** → `docs/DEPENDENCIES.md`
 - **AI working instructions** → `docs/AI.md` (scope discipline, commit hygiene, workflow)

@@ -1,3 +1,19 @@
+# ============================================================
+# DEPRECATED — DO NOT USE
+# ============================================================
+# Pi-era one-shot SSL/Nginx setup: it targets the old `raspberrypi3`
+# SSH alias, writes a HOST Nginx vhost, hardcodes /home/pi/, and
+# restarts PM2 (`pm2 restart portfolio-backend`). None of that
+# reflects the current setup: production runs on Ubuntu Server
+# (ak-home-server) with Nginx + backend in Docker Compose
+# (docker-compose.prod.yml), and the repo lives at ~/MyPortfolioSite
+# (prod) / ~/MyPortfolioSite-dev (dev).
+#
+# Use scripts/deploy/server-setup.sh for provisioning and the
+# containerised Nginx config under scripts/config/ instead.
+# Kept for historical reference only. See docs/TERMINOLOGY.md
+# and docs/INFRASTRUCTURE.md.
+# ============================================================
 ssh raspberrypi3 @'
 set -e
 

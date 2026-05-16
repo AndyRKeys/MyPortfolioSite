@@ -13,10 +13,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Rate limiting on auth endpoints: `/auth/email/send` (5/hr/IP), passkey register/login (10/hr/IP) (#237)
 - Magic-link recipient gate: tokens only sent to `ADMIN_EMAIL`; other addresses get the same success response with no email (anti-enumeration) (#241)
 - `OUTLOOK_*` env vars wired through all three compose files and documented in every `.env*.example`
+- `docs/TERMINOLOGY.md` — canonical names for host, hostnames, environments, services, and branches; wired into the onboarding doc lists
 
 ### Changed
 - Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
+- Documentation: replaced stale "Raspberry Pi" / `portfolio-server` host references with the canonical "Ubuntu Server (`ak-home-server`)" across README, CLAUDE.md, ROADMAP, PROJECT_ASSESSMENT, AI.md, and deploy/monitor script comments (migration off the Pi is complete; #171). Historical records (CHANGELOG, RELEASE_NOTES, lessons-learned) left intact. Pi-era infra scripts marked deprecated in favour of `scripts/deploy/server-setup.sh` + the containerised Nginx setup: `scripts/infra/pi-setup.sh`, `setup-nginx-ssl.ps1`, `setup-ssl.ps1`, `fix-apache.ps1`
 - `.env*.example`: OAuth2 promoted to the primary email method, SMTP demoted to documented fallback
+- `PROJECT_ASSESSMENT.md`: post-migration reassessment — corrected stale PM2/performance statements and removed the resolved SSH-from-Windows pain point
+- Working instructions (`docs/AI.md`, `CLAUDE.md`): after opening a PR, recommend a ready-to-copy squash commit message for the owner to apply on merge
 
 ### Removed
 - `docker/.env.example` — duplicate of root `.env.example`; README updated to reference the canonical file

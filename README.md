@@ -1,6 +1,6 @@
 # andykeys.me — Personal Portfolio Site
 
-A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on a Raspberry Pi at [andykeys.me](https://andykeys.me).
+A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on an Ubuntu Server (`ak-home-server`) at [andykeys.me](https://andykeys.me).
 
 ---
 
@@ -17,7 +17,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 | Runtime | Docker Compose (backend + Postgres + Nginx containerised) |
 | SSL | Let's Encrypt (certbot, auto-renewing) |
 | DNS | Namecheap + dynamic DNS (ddclient) |
-| Hosting | Self-hosted, Raspberry Pi |
+| Hosting | Self-hosted, Ubuntu Server (`ak-home-server`) |
 | AI pair programmer | Claude (Anthropic) |
 
 ---
@@ -186,7 +186,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
+This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
 3. Pulls the target branch and rebuilds images
@@ -240,7 +240,7 @@ scripts/
 │   ├── debug-network.sh    Network diagnostics helper
 │   └── watch-logs.sh       Tail multiple log streams
 ├── deploy/
-│   ├── prod-deploy.sh      Smart deploy — runs on Pi, detects what changed
+│   ├── prod-deploy.sh      Smart deploy — runs on the server, detects what changed
 │   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
 │   ├── pi-setup.sh         Full server setup from scratch
 │   ├── install-monitor.sh  Install monitoring tooling

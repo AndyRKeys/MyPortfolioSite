@@ -10,7 +10,7 @@ The goals for the project are:
 
 - Turn the site into a reliable home for my content (blog, travel, devlogs) with low-friction publishing.
 - Evolve the AI Lab into a genuinely useful personal tool for research, coding, and project planning.
-- Mature the infrastructure from “Pi experiment” to a stable, observable service, eventually on a mini PC.
+- Mature the infrastructure into a stable, observable service (migration off the original Raspberry Pi to Ubuntu Server is complete; see §5.1).
 - Reduce operational friction (deployments, SSH, certs) so changes are safe and quick to ship.
 
 ## 2. Current state snapshot
@@ -19,7 +19,7 @@ The goals for the project are:
 
 - Node/Express backend serving static HTML/CSS/JS pages.
 - PostgreSQL database backing blog/travel content and admin features.
-- Hosted on a Raspberry Pi (Docker + Nginx reverse proxy + Let’s Encrypt TLS).
+- Hosted on an Ubuntu Server (`ak-home-server`) — Docker Compose + Nginx reverse proxy + Let’s Encrypt TLS. (Migrated off the original Raspberry Pi; see §5.1.)
 - Single production environment; dev work is mostly local.
 
 **Features**
@@ -31,9 +31,9 @@ The goals for the project are:
 
 **Pain points**
 
-- Deployments are still somewhat manual and Pi-centric.
+- Deployments are still somewhat manual and script-centric.
 - SSH key authentication from Windows is not yet frictionless.
-- Pi resource ceiling limits what can run concurrently (especially with future AI experiments).
+- Single-server resource ceiling limits what can run concurrently (especially with future AI experiments).
 - Limited observability (minimal metrics/logs surfaced in UI).
 
 ## 3. Near-term priorities
@@ -44,7 +44,7 @@ The goals for the project are:
 
 - Implement the dual-environment setup described in Issue #151 / #159:
   - Production on `main` via Nginx → Docker service bound to loopback.
-  - Dev/staging on `dev` via LAN-only port on the Pi.
+  - Dev/staging on `dev` via LAN-only port on the server (`ak-home-server`).
 - Extend the admin console to:
   - Show status for both environments.
   - Trigger “Pull & Restart” for prod and dev separately.
@@ -68,7 +68,7 @@ The goals for the project are:
 
 ### 3.3 Quality-of-life fixes
 
-- Fix SSH key auth from Windows to Pi so passwordless login works reliably.
+- Fix SSH key auth from Windows to the server (`ak-home-server`) so passwordless login works reliably.
 - Simplify deployment scripts and document the standard path (admin console as the primary interface).
 - Tidy up small UI/UX issues in admin and public pages as they surface.
 
@@ -114,7 +114,7 @@ The highest-priority near-term item (see the sequencing principle above). Deploy
 ### 4.2 Observability and reliability
 
 - Surface basic metrics in the admin console:
-  - Request counts, error counts, uptime, Pi CPU/RAM usage.
+  - Request counts, error counts, uptime, server CPU/RAM usage.
 - Add simple health checks and status indicators:
   - App, DB, disk space, SSL status.
 
@@ -190,12 +190,19 @@ Beyond the CI/CD pipeline (§4.4), several existing pain points and open issues 
 
 ## 5. Longer-term ideas
 
-### 5.1 Move from Pi to mini PC
+### 5.1 Move off the Raspberry Pi — ✅ Completed (2026-05)
 
-- Migrate hosting from Raspberry Pi to a more capable mini PC:
-  - Reuse Docker + Nginx + Postgres pattern.
-  - Keep deployment and admin model consistent.
-- Take the opportunity to tighten backup/restore and monitoring.
+Hosting was migrated from the original Raspberry Pi to an Ubuntu Server
+(`ak-home-server`, a repurposed gaming PC) and fully containerised with
+Docker Compose. The Docker + Nginx + Postgres pattern and the
+deployment/admin model were kept consistent. See `docs/INFRASTRUCTURE.md`
+for the current host layout and `docs/RELEASE_NOTES.md` for the migration
+record (#171).
+
+Remaining follow-ups from this milestone are tracked elsewhere:
+
+- Backup/restore hardening — see §4.5 (pgBackRest / `pg_dump` + restic/rclone).
+- Monitoring/observability — see §3.5 and §4.2.
 
 ### 5.2 Local AI capabilities
 
@@ -253,7 +260,7 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 
 ## 6. Risks and assumptions
 
-- **Pi resource limits:** Running multiple containers and AI features on the Pi will be tight; the mini PC migration is assumed.
+- **Host resource limits:** Running multiple containers and AI features concurrently on the single Ubuntu Server (`ak-home-server`) may be tight; heavier workloads could need dedicated resources. (The original Raspberry Pi has already been retired — see §5.1.)
 - **Time vs scope:** The roadmap assumes part-time work; priorities may be adjusted as reality dictates.
 - **External dependencies:** Perplexity and Anthropic APIs are central to AI Lab plans; changes in their pricing or features could affect direction.
 

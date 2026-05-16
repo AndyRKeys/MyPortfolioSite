@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# monitor.sh — Resource monitor & self-healing for Pi
+# monitor.sh — Resource monitor & self-healing for the server (ak-home-server)
 # Run via cron every 5 minutes:
 #   */5 * * * * /bin/bash ~/MyPortfolioSite/scripts/monitor.sh 2>&1
 # Also safe to run manually — always writes to ~/logs/monitor.log

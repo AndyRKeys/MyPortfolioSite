@@ -1,6 +1,6 @@
 #!/bin/bash
 # Network and deployment debug script for andykeys.me
-# Run on the Pi: bash ~/MyPortfolioSite/scripts/debug-network.sh
+# Run on the server (ak-home-server): bash ~/MyPortfolioSite/scripts/debug-network.sh
 # Paste the full output when reporting issues.
 
 BAR="======================================="
