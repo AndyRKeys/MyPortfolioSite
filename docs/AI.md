@@ -75,6 +75,7 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
+- **One branch at a time for ops and security work.** Do not open or develop multiple branches simultaneously when the work touches deployment/infrastructure or security (auth, tokens, secrets, rate limiting). These changes are interdependent and easy to get subtly wrong in parallel — finish, PR, and get one merged before starting the next. Independent low-risk work (e.g. a docs tweak, an unrelated UI fix) may still proceed in parallel; this restriction is specific to ops/security.
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
 - **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
@@ -107,6 +108,9 @@ Before writing code:
 4. Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
+
+**PR creation is the default.** Once the work is committed and the branch is pushed, open the PR to `dev` automatically — do not ask "shall I open a PR?" first. The standing authorisation is: branch + push + complete work ⇒ open the PR. (You still do **not** merge it — review and merge remain the owner's.) Only skip or defer the PR if the owner explicitly says so for that piece of work, or the work is genuinely incomplete/experimental (say so explicitly).
+
 Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
@@ -311,6 +315,28 @@ var name = user.name; // Get the user's name
 - **No Quick Fixes:** If tempted to duplicate code, create a utility instead
 - **Testability:** Write utilities to be testable independently of DOM
 
+## Debugging & Logging (build it in, don't bolt it on)
+
+Recent work has lost significant time to deployment bugs and blind debugging. Observability is **part of the change, not a follow-up**. This is a roadmap priority (`ROADMAP.md` §3.5) — treat it as a working rule, not an aspiration.
+
+**Logging is part of the implementation:**
+
+- When adding or modifying a backend route, deploy step, or any non-trivial flow, add **structured log lines at the meaningful decision points** (entry with relevant identifiers, external-call outcomes, the branch taken, failure reasons) — not just on the happy path.
+- Use the project's structured logger where it exists; until Pino lands (#152), use `console.log`/`console.error` with a consistent `[area] message — context` prefix (e.g. `[auth/email/send] token inserted — user=...`). A new log prefix should be unique enough to grep for and to distinguish new code from old.
+- Log the **why** of a failure, not just that it failed: include the error, the inputs that mattered (never secrets), and what was expected.
+- **Never log secrets** — `.env` values, JWTs, tokens, refresh tokens, password hashes. Redaction is a deliberate, reviewable choice.
+
+**Debuggability is a deliverable:**
+
+- A change is not done until you can answer "if this breaks in prod, how would we know, and how would we diagnose it from logs alone?" If the answer is "we couldn't", add the logging before opening the PR.
+- For deploy/infra changes, prefer fail-loud over fail-silent: surface warnings (orphan containers, port conflicts, env-var gaps) as hard failures, not buried output.
+- When you fix a bug, leave behind the log line that would have made it obvious — that's how the next instance gets caught in minutes, not hours.
+
+**PR expectations:**
+
+- The PR description should note what logging/observability was added and how a failure would surface.
+- Diagnostic scripts or temporary verbose logging used while debugging should either be cleaned up or, if generally useful, kept deliberately and mentioned in the PR — not left as accidental noise.
+
 ## Architecture Notes
 
 - **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
@@ -388,8 +414,8 @@ When working with this project:
 - **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
 - **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
-- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, PM2 process manager
-- **Deployment:** Smart deploy script detects changes and restarts only what's needed
+- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
+- **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for Pi/server/container operations.
 - **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 

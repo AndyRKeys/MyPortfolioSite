@@ -107,7 +107,16 @@ Files moved to scripts/config/ in #130 but compose file wasn't updated.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
+# One branch at a time for OPS and SECURITY work — do not run multiple
+# ops/infra or security (auth/tokens/secrets/rate-limit) branches in
+# parallel; finish + PR + merge one before starting the next. Unrelated
+# low-risk work may still parallelise.
+
 # Push and create PR
+# PR creation is the DEFAULT: once the branch is pushed and the work is
+# complete, open the PR to dev automatically — do not ask first. You still
+# never merge it (owner reviews + merges). Skip only if explicitly told to,
+# or the work is incomplete/experimental (and say so).
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
 
@@ -242,6 +251,16 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
   - Same deploy step → move to deploy-lib.sh function
   - Same HTML structure → extract to a shared template or builder function
 
+### Debugging & Logging
+
+**Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `ROADMAP.md` §3.5).
+
+- Add structured log lines at meaningful decision points (entry, external-call outcomes, branch taken, failure reasons) — not just the happy path. Use a unique, greppable `[area] message — context` prefix.
+- Log the *why* of a failure (error + relevant inputs + expectation), never secrets (`.env`, tokens, JWTs, hashes).
+- A change isn't done until you can answer: "if this breaks in prod, how would we diagnose it from logs alone?" If you can't, add the logging before the PR.
+- Deploy/infra changes: fail loud, not silent — surface orphan/port/env warnings as hard failures.
+- Full rule: see **[docs/AI.md](docs/AI.md) → Debugging & Logging**.
+
 ### Testing
 
 **Vitest suite:**
@@ -293,7 +312,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **No structured logging:** `console.log` used throughout; no severity levels or request context. (#152)
 - **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
-- **PM2 in prod, Docker in dev:** Structural difference; moving prod to Docker is next big task. (#165)
+- **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; ROADMAP §3.5)
 
 ---
 
