@@ -51,7 +51,10 @@ Production DB name: `portfolio`. Dev DB name: `portfolio_dev`.
 | Use this | Notes |
 |----------|-------|
 | **`scripts/deploy/server-setup.sh`** | Current one-shot Ubuntu Server provisioning (Docker). |
-| ~~`scripts/infra/pi-setup.sh`~~ | **Deprecated.** Original Raspberry Pi provisioning (PM2). Kept for historical reference only — do not use or cite as current. |
+| ~~`scripts/infra/pi-setup.sh`~~ | **Deprecated.** Original Raspberry Pi provisioning (PM2). Historical reference only. |
+| ~~`scripts/infra/setup-nginx-ssl.ps1`~~ | **Deprecated.** Pi-era host Nginx/SSL vhost (`raspberrypi3`, PM2). Nginx is containerised now. |
+| ~~`scripts/infra/setup-ssl.ps1`~~ | **Deprecated.** Pi-era host certbot bootstrap. Use `scripts/backup/certbot-renew.sh`. |
+| ~~`scripts/infra/fix-apache.ps1`~~ | **Deprecated.** Pi-era host Apache→Nginx swap. No host web server now. |
 
 ## Access
 

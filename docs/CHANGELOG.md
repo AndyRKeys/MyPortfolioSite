@@ -17,7 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ### Changed
 - Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
-- Documentation: replaced stale "Raspberry Pi" / `portfolio-server` host references with the canonical "Ubuntu Server (`ak-home-server`)" across README, CLAUDE.md, ROADMAP, PROJECT_ASSESSMENT, AI.md, and deploy/monitor script comments (migration off the Pi is complete; #171). Historical records (CHANGELOG, RELEASE_NOTES, lessons-learned) left intact. `scripts/infra/pi-setup.sh` marked deprecated in favour of `scripts/deploy/server-setup.sh`
+- Documentation: replaced stale "Raspberry Pi" / `portfolio-server` host references with the canonical "Ubuntu Server (`ak-home-server`)" across README, CLAUDE.md, ROADMAP, PROJECT_ASSESSMENT, AI.md, and deploy/monitor script comments (migration off the Pi is complete; #171). Historical records (CHANGELOG, RELEASE_NOTES, lessons-learned) left intact. Pi-era infra scripts marked deprecated in favour of `scripts/deploy/server-setup.sh` + the containerised Nginx setup: `scripts/infra/pi-setup.sh`, `setup-nginx-ssl.ps1`, `setup-ssl.ps1`, `fix-apache.ps1`
 - `.env*.example`: OAuth2 promoted to the primary email method, SMTP demoted to documented fallback
 
 ### Removed
