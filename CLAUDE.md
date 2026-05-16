@@ -108,6 +108,10 @@ Files moved to scripts/config/ in #130 but compose file wasn't updated.
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 # Push and create PR
+# PR creation is the DEFAULT: once the branch is pushed and the work is
+# complete, open the PR to dev automatically — do not ask first. You still
+# never merge it (owner reviews + merges). Skip only if explicitly told to,
+# or the work is incomplete/experimental (and say so).
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
 

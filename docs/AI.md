@@ -107,6 +107,9 @@ Before writing code:
 4. Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
+
+**PR creation is the default.** Once the work is committed and the branch is pushed, open the PR to `dev` automatically — do not ask "shall I open a PR?" first. The standing authorisation is: branch + push + complete work ⇒ open the PR. (You still do **not** merge it — review and merge remain the owner's.) Only skip or defer the PR if the owner explicitly says so for that piece of work, or the work is genuinely incomplete/experimental (say so explicitly).
+
 Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
