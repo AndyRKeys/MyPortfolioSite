@@ -120,6 +120,8 @@ Once implementation is complete:
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
 
+**Recommend a squash commit message with every PR.** After opening the PR, post (in the PR description or as a chat reply) a ready-to-copy squash commit message for the owner to paste when squash-merging on test completion. The repo merges via squash, so the PR's individual commits are discarded — this message becomes the permanent history entry. Format it the same as a normal commit: imperative summary ≤50 chars, blank line, a short body covering what changed and why, and the `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` footer. Present it in a fenced code block so it can be copied verbatim.
+
 **PR test plans must include:**
 - Specific steps to verify the happy path (e.g. exact URL, action, expected result)
 - Edge cases to check (e.g. empty state, error handling, mobile view)

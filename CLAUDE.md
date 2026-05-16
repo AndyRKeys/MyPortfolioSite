@@ -121,6 +121,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
 
+# After opening the PR, also recommend a ready-to-copy squash commit
+# message (fenced code block: imperative ≤50-char summary, blank line,
+# short why/what body, Co-Authored-By footer). Repo squash-merges, so
+# this becomes the permanent history entry — owner pastes it on merge.
+
 # After review, merge to dev (user does this, not you)
 # User will then create a release PR: dev → main for deploy
 ```
