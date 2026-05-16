@@ -225,7 +225,7 @@ docker compose -f docker-compose.prod.yml restart backend
 docker compose -f docker-compose.prod.yml logs --tail=50 nginx
 
 # Renew SSL cert (also auto-renews via systemd timer)
-ssh <pi-hostname> "sudo certbot renew"
+ssh <hostname> "sudo certbot renew"
 ```
 
 ---
