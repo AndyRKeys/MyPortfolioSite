@@ -107,6 +107,11 @@ Files moved to scripts/config/ in #130 but compose file wasn't updated.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
+# One branch at a time for OPS and SECURITY work — do not run multiple
+# ops/infra or security (auth/tokens/secrets/rate-limit) branches in
+# parallel; finish + PR + merge one before starting the next. Unrelated
+# low-risk work may still parallelise.
+
 # Push and create PR
 # PR creation is the DEFAULT: once the branch is pushed and the work is
 # complete, open the PR to dev automatically — do not ask first. You still

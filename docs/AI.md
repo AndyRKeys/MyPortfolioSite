@@ -75,6 +75,7 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
+- **One branch at a time for ops and security work.** Do not open or develop multiple branches simultaneously when the work touches deployment/infrastructure or security (auth, tokens, secrets, rate limiting). These changes are interdependent and easy to get subtly wrong in parallel — finish, PR, and get one merged before starting the next. Independent low-risk work (e.g. a docs tweak, an unrelated UI fix) may still proceed in parallel; this restriction is specific to ops/security.
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
 - **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
