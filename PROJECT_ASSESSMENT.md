@@ -67,7 +67,6 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Pain points
 
-- **SSH from Windows to the server is not frictionless.** Key authentication sometimes fails, requiring password fallback. This breaks the automation story — `prod-deploy.ps1` should be a one-command operation, and any time it requires manual intervention it erodes confidence in the workflow.
 - **Production deploy has no visible outcome.** After running `prod-deploy.ps1`, you have to separately SSH to the server to check container and Nginx logs to confirm the deploy worked. There is no success/failure signal back to the developer's terminal in a clear, structured way. (Tracked in ROADMAP §3.5.)
 - **There is no health check URL.** There is no `/api/health` endpoint that returns a structured response (app status, DB connectivity, version). This means the only way to confirm a deploy succeeded is to manually test the site. A health check would take 10 minutes to add and dramatically improve deploy confidence.
 - **The admin panel has grown without a clear UX model.** It handles blog posts, travel posts, CV upload, deploy triggers, and stats in one page. Functionally fine for one user; but navigating it is increasingly "just knowing where things are" rather than following an obvious structure.
@@ -179,6 +178,6 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
-- **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern.
+- **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern. Removed the "SSH from Windows is not frictionless" DX pain point — key auth has stabilised and is now reliable.
 - **2026-05-07 (updated)** — Refined AI-readiness rating from Green-Amber to Amber based on real-world friction observed in agent sessions. Elevated priority of infrastructure docs and clarified frontend testing constraints. Updated improvement opportunities ordering to reflect agent friction alongside operational risk.
 - **2026-05-07** — Initial assessment written based on `dev` branch state, covering architecture, codebase health, DX, reliability, security, and AI readiness.
