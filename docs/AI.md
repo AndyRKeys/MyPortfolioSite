@@ -128,6 +128,14 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - The smoke test checkbox: a reference to `scripts/tests/Test-PRN.ps1` if backend code was touched, or an explicit N/A if not
 - The documentation checklist: confirm `docs/CHANGELOG.md` updated and any relevant doc updated, or N/A
 
+**Test plan commands — mandatory rules:**
+- Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
+- Use the correct compose file and service name for the environment being tested (e.g. `docker-compose.dev-server.yml` with service `backend-dev` and `postgres-dev` for the dev server; `docker-compose.yml` with `backend`/`postgres` for local Docker).
+- Add a **comment line above every command** (using `#`) that explains what the command does and why it matters for this specific PR — not just what the tool is, but what you are verifying.
+- Include the **expected output or outcome** after each command so the tester knows immediately whether it passed or failed.
+- Where a step would normally require waiting (e.g. token expiry), provide a DB command to simulate it rather than leaving the tester to wait.
+- Use PowerShell `curl.exe` syntax for HTTP requests run from Windows; use plain `curl` for commands run inside the server or a container.
+
 ### 5. Release to Production
 
 When you are ready to release to production, instruct the AI with:

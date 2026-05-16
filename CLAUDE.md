@@ -274,6 +274,15 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed)
 - Run on your machine to verify no regressions before merging
 
+**PR test plan rules (every PR that touches backend code):**
+- Every step must include the **exact copy-paste command** — no assumed knowledge, no "run the usual command"
+- Add a `# comment` above every command explaining what it verifies and why it matters for this PR
+- State the **expected output** after each command so the tester knows pass vs fail at a glance
+- Use correct compose file + service for the target env: dev server → `docker-compose.dev-server.yml`, services `backend-dev` / `postgres-dev`, DB `portfolio_dev`; local Docker → `docker-compose.yml`, services `backend` / `postgres`
+- Where a step requires waiting (e.g. token expiry), provide a DB command to simulate it instead
+- HTTP requests from Windows: use `curl.exe` PowerShell syntax; from inside a container or the server: plain `curl`
+- Full rule: see **[docs/AI.md](docs/AI.md) → PR test plans must include**
+
 ### Documentation
 
 **When to write docs:**
