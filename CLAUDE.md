@@ -242,6 +242,16 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
   - Same deploy step → move to deploy-lib.sh function
   - Same HTML structure → extract to a shared template or builder function
 
+### Debugging & Logging
+
+**Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `ROADMAP.md` §3.5).
+
+- Add structured log lines at meaningful decision points (entry, external-call outcomes, branch taken, failure reasons) — not just the happy path. Use a unique, greppable `[area] message — context` prefix.
+- Log the *why* of a failure (error + relevant inputs + expectation), never secrets (`.env`, tokens, JWTs, hashes).
+- A change isn't done until you can answer: "if this breaks in prod, how would we diagnose it from logs alone?" If you can't, add the logging before the PR.
+- Deploy/infra changes: fail loud, not silent — surface orphan/port/env warnings as hard failures.
+- Full rule: see **[docs/AI.md](docs/AI.md) → Debugging & Logging**.
+
 ### Testing
 
 **Vitest suite:**

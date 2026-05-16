@@ -311,6 +311,28 @@ var name = user.name; // Get the user's name
 - **No Quick Fixes:** If tempted to duplicate code, create a utility instead
 - **Testability:** Write utilities to be testable independently of DOM
 
+## Debugging & Logging (build it in, don't bolt it on)
+
+Recent work has lost significant time to deployment bugs and blind debugging. Observability is **part of the change, not a follow-up**. This is a roadmap priority (`ROADMAP.md` §3.5) — treat it as a working rule, not an aspiration.
+
+**Logging is part of the implementation:**
+
+- When adding or modifying a backend route, deploy step, or any non-trivial flow, add **structured log lines at the meaningful decision points** (entry with relevant identifiers, external-call outcomes, the branch taken, failure reasons) — not just on the happy path.
+- Use the project's structured logger where it exists; until Pino lands (#152), use `console.log`/`console.error` with a consistent `[area] message — context` prefix (e.g. `[auth/email/send] token inserted — user=...`). A new log prefix should be unique enough to grep for and to distinguish new code from old.
+- Log the **why** of a failure, not just that it failed: include the error, the inputs that mattered (never secrets), and what was expected.
+- **Never log secrets** — `.env` values, JWTs, tokens, refresh tokens, password hashes. Redaction is a deliberate, reviewable choice.
+
+**Debuggability is a deliverable:**
+
+- A change is not done until you can answer "if this breaks in prod, how would we know, and how would we diagnose it from logs alone?" If the answer is "we couldn't", add the logging before opening the PR.
+- For deploy/infra changes, prefer fail-loud over fail-silent: surface warnings (orphan containers, port conflicts, env-var gaps) as hard failures, not buried output.
+- When you fix a bug, leave behind the log line that would have made it obvious — that's how the next instance gets caught in minutes, not hours.
+
+**PR expectations:**
+
+- The PR description should note what logging/observability was added and how a failure would surface.
+- Diagnostic scripts or temporary verbose logging used while debugging should either be cleaned up or, if generally useful, kept deliberately and mentioned in the PR — not left as accidental noise.
+
 ## Architecture Notes
 
 - **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step

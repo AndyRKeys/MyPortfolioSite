@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-15_
+_Last updated: 2026-05-16_
 
 ## 1. Vision and goals
 
@@ -37,6 +37,8 @@ The goals for the project are:
 - Limited observability (minimal metrics/logs surfaced in UI).
 
 ## 3. Near-term priorities
+
+> **Sequencing principle (ops first):** Deployment reliability, logging, and the automated test gate take precedence over new feature work (including AI Lab v1, §3.2). Recent sessions have lost significant time to deployment bugs (orphan containers, stale code, env-var gaps) and to debugging blind without structured logs. Until deploys are boringly reliable and observable, ops/deploy/logging items are pulled ahead of feature delivery. Concretely the near-term order is: **3.5 (deploy reliability & logging) → 3.4 (test gate) → 3.1 (dual-env) → 3.3 (QoL) → 3.2 (AI Lab v1)**.
 
 ### 3.1 Dual-environment hosting (LAN dev + public prod)
 
@@ -81,6 +83,24 @@ Promoted ahead of the full CI/CD pipeline (§4.4): the test-gate half needs no s
 - No deployment, registry, or runner work in scope here — this is purely the merge-time safety net. The build/publish/deploy automation stays in §4.4 and still sequences after dual-environment hosting (3.1).
 
 **Outcome:** Regressions caught at PR time instead of by hand, with zero new infrastructure — a cheap, reversible first step that de-risks everything in §4.4.
+
+### 3.5 Deployment reliability & structured logging
+
+The highest-priority near-term item (see the sequencing principle above). Deployment bugs and blind debugging have been the single biggest drain on recent work — orphan containers serving stale code (#253), env-var gaps that only surfaced at runtime, and `console.log`-only output that made diagnosis slow. This pulls the deploy-hardening and structured-logging work forward from §4.2/§4.5.
+
+**Deployment reliability:**
+
+- Bake orphan-container prevention into the deploy scripts: `docker compose up` always runs with `--remove-orphans`, and the deploy fails loudly on orphan/port-conflict warnings (#253).
+- Add a post-deploy verification step to `deploy-lib.sh`: hit `/api/health`, confirm the running image/commit matches the intended ref, and surface a clear pass/fail in the deploy output (catches the stale-code class of bug).
+- Document the single canonical deploy path and reduce script branching so there are fewer ways to get it subtly wrong.
+
+**Structured logging:**
+
+- Replace ad-hoc `console.log` with structured logging (Pino) carrying severity levels and request context (#152).
+- Ensure deploy scripts and the admin deploy console surface the relevant log lines on failure, so a bad deploy is diagnosable without SSH archaeology.
+- Never log secrets (`.env`, tokens, refresh tokens) — structured logging makes redaction a deliberate, reviewable choice.
+
+**Outcome:** Deploys become boringly reliable and self-verifying; failures are diagnosable from logs in minutes instead of hours. This unblocks everything else by stopping deployment bugs from eating feature/testing time.
 
 ## 4. Medium-term directions
 
@@ -243,3 +263,4 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 - **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
 - **2026-05-15** – Added §4.5 Open-source tooling adoption (Dependabot/Renovate, gitleaks, ESLint/Prettier, Uptime Kuma, Grafana/Loki, migration tooling) and §5.5 Future development suggestions, cross-referencing existing open issues.
 - **2026-05-15** – Promoted the CI test gate out of §4.4 into near-term priority §3.4 (Automated test gate); it needs no new infrastructure and lands before the full CD pipeline. §4.4 re-scoped to the Continuous Delivery half.
+- **2026-05-16** – Added an ops-first sequencing principle to §3 and new near-term priority §3.5 (Deployment reliability & structured logging), pulling deploy-hardening (#253) and Pino structured logging (#152) ahead of feature work after repeated deployment-bug time sinks.
