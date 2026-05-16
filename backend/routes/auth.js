@@ -352,7 +352,12 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
 router.get('/email/verify', async (req, res) => {
   try {
     const { token } = req.query;
-    if (!token) return res.status(400).json({ error: 'Token required' });
+    // Never log the raw token — it is a bearer credential.
+    console.log(`[auth/email/verify] Request received — token present: ${token ? 'yes' : 'no'}`);
+    if (!token) {
+      console.log(`[auth/email/verify] Rejected — no token in query`);
+      return res.status(400).json({ error: 'Token required' });
+    }
 
     // Filter to unused, unexpired, bcrypt-shaped rows BEFORE calling crypt().
     // pgcrypto's crypt() raises a hard "invalid salt" error if et.token is not
@@ -373,17 +378,45 @@ router.get('/email/verify', async (req, res) => {
        WHERE c.token = crypt($1, c.token)`,
       [token]
     );
+
     if (!result.rows.length) {
+      // Diagnostic breakdown so a failed login is explainable from logs
+      // alone: distinguishes "no valid candidates" (expired/used/none) from
+      // "candidates exist but none match" (wrong/forged token), and surfaces
+      // legacy non-bcrypt rows that should have been purged on boot.
+      const diag = await pool.query(
+        `SELECT
+           count(*)                                                          AS total,
+           count(*) FILTER (WHERE token NOT LIKE '$2%')                       AS legacy_plaintext,
+           count(*) FILTER (WHERE used = TRUE)                                AS used,
+           count(*) FILTER (WHERE expires_at <= NOW())                        AS expired,
+           count(*) FILTER (WHERE used = FALSE AND expires_at > NOW()
+                                  AND token LIKE '$2%')                       AS valid_candidates
+         FROM email_tokens`
+      );
+      const d = diag.rows[0];
+      console.log(
+        `[auth/email/verify] No match — total=${d.total} valid_candidates=${d.valid_candidates} ` +
+        `expired=${d.expired} used=${d.used} legacy_plaintext=${d.legacy_plaintext}`
+      );
+      if (Number(d.legacy_plaintext) > 0) {
+        console.warn(
+          `[auth/email/verify] ${d.legacy_plaintext} legacy non-bcrypt row(s) present — ` +
+          `boot cleanup may not have run (#134)`
+        );
+      }
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
-    await pool.query('UPDATE email_tokens SET used = TRUE WHERE id = $1', [result.rows[0].id]);
-
     const row = result.rows[0];
+    await pool.query('UPDATE email_tokens SET used = TRUE WHERE id = $1', [row.id]);
+    console.log(`[auth/email/verify] Match — token consumed for user_id=${row.user_id}; issuing JWT`);
+
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
-    console.error(err);
+    // Log the failure reason (not the token) so crypt/DB errors are diagnosable.
+    console.error(`[auth/email/verify] Verification failed — ${err.message}`);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
