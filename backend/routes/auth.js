@@ -354,10 +354,23 @@ router.get('/email/verify', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).json({ error: 'Token required' });
 
+    // Filter to unused, unexpired, bcrypt-shaped rows BEFORE calling crypt().
+    // pgcrypto's crypt() raises a hard "invalid salt" error if et.token is not
+    // a valid bcrypt hash (e.g. a legacy plaintext token). A single such row
+    // would otherwise break verification for every token. The CTE narrows the
+    // candidate set so crypt() only ever sees valid bcrypt hashes (#134).
     const result = await pool.query(
-      `SELECT et.id, et.user_id, u.email, u.username
-       FROM email_tokens et JOIN users u ON et.user_id = u.id
-       WHERE crypt($1, et.token) = et.token AND et.used = FALSE AND et.expires_at > NOW()`,
+      `WITH candidates AS (
+         SELECT et.id, et.user_id, et.token
+         FROM email_tokens et
+         WHERE et.used = FALSE
+           AND et.expires_at > NOW()
+           AND et.token LIKE '$2%'
+       )
+       SELECT c.id, c.user_id, u.email, u.username
+       FROM candidates c
+       JOIN users u ON c.user_id = u.id
+       WHERE c.token = crypt($1, c.token)`,
       [token]
     );
     if (!result.rows.length) {

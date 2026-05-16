@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS email_tokens (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- One-time, idempotent cleanup: purge legacy plaintext tokens left over from
+-- before #134. Any non-bcrypt row (token not starting with '$2') is a stale
+-- pre-hash token — already useless for login — and would make crypt() raise
+-- "invalid salt" during verification. Safe to run on every boot.
+DELETE FROM email_tokens WHERE token NOT LIKE '$2%';
+
 CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_key TEXT UNIQUE NOT NULL,
