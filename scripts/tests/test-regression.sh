@@ -31,6 +31,7 @@ TOKEN=""
 COMPOSE_FILE=""
 SERVICE="backend"
 INSECURE=""
+RESOLVE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,9 +40,19 @@ while [[ $# -gt 0 ]]; do
     --compose-file)  COMPOSE_FILE="$2";  shift 2 ;;
     --service)       SERVICE="$2";       shift 2 ;;
     --insecure)      INSECURE="-k";      shift   ;;
+    --resolve)       RESOLVE="$2";       shift 2 ;;
     *) shift ;;
   esac
 done
+
+# Build curl --resolve args so the request connects to a reachable address
+# (e.g. the LAN IP) while keeping the original Host/SNI for cert + routing.
+# Needed because the server cannot route to its own public DNS name (no NAT
+# hairpin), but the deploy must still test via the real hostname.
+RESOLVE_ARGS=()
+if [ -n "$RESOLVE" ]; then
+  RESOLVE_ARGS=(--resolve "$RESOLVE")
+fi
 
 if [ -z "$BASE_URL" ]; then
   echo "Usage: $0 --base-url <url> --compose-file <file> [--service <name>] [--insecure]" >&2
@@ -76,9 +87,12 @@ check() {
   # remaining args forwarded to curl (e.g. -H, -d)
   local extra=("$@")
 
+  # curl -w prints the HTTP code (000 on connection failure) and exits non-zero
+  # on failure; capture the printed code without appending a second one.
   local status
-  status=$(curl -s -o "$TMPFILE" -w "%{http_code}" -X "$method" $INSECURE "${extra[@]}" \
-    --stderr "$TMPERR" "$url" || echo "000")
+  status=$(curl -s -o "$TMPFILE" -w "%{http_code}" -X "$method" $INSECURE \
+    "${RESOLVE_ARGS[@]}" "${extra[@]}" --stderr "$TMPERR" "$url" 2>/dev/null) || true
+  [ -z "$status" ] && status="000"
   local body curl_err
   body=$(cat "$TMPFILE" 2>/dev/null || true)
   curl_err=$(cat "$TMPERR" 2>/dev/null | head -1 || true)

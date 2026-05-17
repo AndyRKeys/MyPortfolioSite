@@ -204,14 +204,18 @@ test_csp_reporting
 
 # ── Regression smoke tests ─────────────────────────────────────────────────────────────
 
+REGRESSION_RC=0
 if [ "$SKIP_REGRESSION" = "0" ]; then
   dsection "Regression smoke tests"
+  # Connect to the LAN IP (reachable from the server) while keeping the real
+  # hostname for Host/SNI — the server can't route to its own public DNS name.
   bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
     --base-url "https://${WEBAUTHN_HOST}:3001" \
+    --resolve "${WEBAUTHN_HOST}:3001:${LAN_IP}" \
     --compose-file "$COMPOSE_FILE" \
     --service backend-dev \
     --insecure \
-    2>&1 | tee -a "$LOG_FILE" || ddie "Regression smoke tests failed — see output above"
+    2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
@@ -219,5 +223,14 @@ fi
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-[ "$DEPLOY_ROLLED_BACK" = "1" ] && print_deploy_report "dev — ROLLED BACK" || print_deploy_report "dev"
+# Always print the AI-friendly report — even when regression failed.
+if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  print_deploy_report "dev — ROLLED BACK"
+elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_report "dev — REGRESSION FAILED"
+else
+  print_deploy_report "dev"
+fi
 dlog ""
+
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — see report above"

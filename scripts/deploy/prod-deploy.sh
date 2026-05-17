@@ -164,13 +164,17 @@ fi
 
 # ── Regression smoke tests ─────────────────────────────────────────────────────────────
 
+REGRESSION_RC=0
 if [ "$SKIP_REGRESSION" = "0" ] && [ -n "${DOMAIN:-}" ]; then
   dsection "Regression smoke tests"
+  # Resolve the domain to localhost — the server can't route to its own public
+  # IP (no NAT hairpin); SNI/Host stays the real domain so the cert validates.
   bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
     --base-url "https://${DOMAIN}" \
+    --resolve "${DOMAIN}:443:127.0.0.1" \
     --compose-file "$COMPOSE_FILE" \
     --service backend \
-    2>&1 | tee -a "$LOG_FILE" || ddie "Regression smoke tests failed — see output above"
+    2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
@@ -178,4 +182,13 @@ fi
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-[ "$DEPLOY_ROLLED_BACK" = "1" ] && print_deploy_report "prod — ROLLED BACK" || print_deploy_report "prod"
+# Always print the AI-friendly report — even when regression failed.
+if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  print_deploy_report "prod — ROLLED BACK"
+elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_report "prod — REGRESSION FAILED"
+else
+  print_deploy_report "prod"
+fi
+
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — see report above"
