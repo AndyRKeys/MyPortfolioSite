@@ -57,7 +57,10 @@ auto_detect_lan_ip() {
     done
   fi
 
-  [ "$is_placeholder" = "0" ] && return 0
+  if [ "$is_placeholder" = "0" ]; then
+    dstatus lan-ip status=ok reason=already-configured
+    return 0
+  fi
 
   dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
 
@@ -69,6 +72,7 @@ auto_detect_lan_ip() {
   fi
 
   if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
+    dstatus lan-ip status=failed reason=no-non-loopback-ip
     dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
     return 0
   fi
@@ -82,6 +86,7 @@ auto_detect_lan_ip() {
   fi
 
   export LAN_IP="$detected"
+  dstatus lan-ip status=detected reason=written-to-env
   dok "LAN_IP set to $detected in $ENV_FILE"
 }
 

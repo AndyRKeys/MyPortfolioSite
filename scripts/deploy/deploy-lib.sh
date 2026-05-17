@@ -296,11 +296,13 @@ ensure_env_file() {
   dsection "Phase 3: checking .env"
 
   if [ -f "$ENV_FILE" ]; then
+    dstatus envfile status=ok
     dok ".env present at $ENV_FILE"
     return
   fi
 
   if [ -n "${ENV_TEMPLATE:-}" ] && [ -f "$ENV_TEMPLATE" ]; then
+    dstatus envfile status=created reason=copied-from-template
     dinfo ".env not found — copying from template: $ENV_TEMPLATE"
     cp "$ENV_TEMPLATE" "$ENV_FILE"
     dwarn ""
@@ -308,6 +310,7 @@ ensure_env_file() {
     dwarn "  Edit $ENV_FILE and set all required values before re-running."
     ddie "Configure .env then re-run this script."
   else
+    dstatus envfile status=missing reason=no-template
     ddie ".env not found and ENV_TEMPLATE not available. Check your checkout or set ENV_FILE explicitly."
   fi
 }
@@ -362,10 +365,12 @@ sync_env_from_template() {
   dsection "Phase 3b: syncing .env against template"
 
   if [ -z "${ENV_TEMPLATE:-}" ]; then
+    dstatus envsync status=skipped reason=no-template-var
     dwarn "ENV_TEMPLATE not set — .env drift detection disabled (set ENV_TEMPLATE to enable)"
     return 0
   fi
   if [ ! -f "$ENV_TEMPLATE" ]; then
+    dstatus envsync status=skipped reason=template-not-found
     dwarn "ENV_TEMPLATE '$ENV_TEMPLATE' not found — .env drift detection skipped"
     return 0
   fi
@@ -383,6 +388,7 @@ sync_env_from_template() {
   missing_keys=$(comm -23 <(echo "$template_keys") <(echo "$existing_keys"))
 
   if [ -z "$missing_keys" ]; then
+    dstatus envsync status=ok
     dok ".env is up to date with template — no missing keys"
     return 0
   fi
@@ -419,6 +425,7 @@ sync_env_from_template() {
   done < "$ENV_TEMPLATE"
 
   if [ "$appended_any" -eq 1 ]; then
+    dstatus envsync status=keys-added reason=action-required
     dwarn ""
     dwarn "  Action required: edit $ENV_FILE and set the new vars above before re-running."
     # Treat missing-but-appended keys as a deploy blocker only if they are in REQUIRED_VARS.
@@ -717,6 +724,7 @@ check_disk_space() {
 
   free_kb=$(df -k "$target_dir" 2>/dev/null | awk 'NR==2 {print $4}')
   if [ -z "$free_kb" ]; then
+    dstatus disk status=unknown reason=df-failed
     dwarn "Could not determine free disk space — continuing anyway."
     return 0
   fi
@@ -725,10 +733,12 @@ check_disk_space() {
   local free_mb=$(( free_kb / 1024 ))
 
   if [ "$free_kb" -lt "$min_kb" ]; then
+    dstatus disk status=low free="${free_mb}MB" min="${min_gb}GB"
     dwarn "Low disk space: ${free_mb}MB free (recommended ≥ ${min_gb}GB for Docker builds)."
     dwarn "Docker image builds may fail. Free space on $(df -k "$target_dir" | awk 'NR==2{print $6}') before retrying."
     dwarn "Continuing — this is a warning, not a hard stop."
   else
+    dstatus disk status=ok free="${free_gb}GB"
     dok "Disk space OK: ${free_gb}GB free on $(df -k "$target_dir" | awk 'NR==2{print $6}')"
   fi
 }
