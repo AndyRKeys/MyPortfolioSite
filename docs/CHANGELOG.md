@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Unreleased (dev)
 
 ### Added
+- Deployment hardening (#263 A+B+C, #270): `check_disk_space`, `prompt_missing_vars`, `auto_detect_lan_ip`, `log_deploy_summary`, and `run_deploy_tests` (Vitest in the live container post-health-check; failure triggers rollback). Non-blocking backend startup preflight (DB + Outlook OAuth2) in `server.js` — warns, never crashes
+- `scripts/tests/test-regression.sh` — server-side bash regression smoke suite, run as the final step of every deploy; JWT generated from the running container so it matches the server's `JWT_SECRET`. Covers public baseline, auth gating (deploy/upload/posts/travel must 401 without a token), health DB-connectivity flag, and (dev only) rate-limit enforcement
+- Machine-readable deploy output (#276): `[deploy:<phase>]` checkpoint lines at every decision point plus a final AI-readable deploy-report box aggregating the current run's checkpoints; `-Quiet` mode suppresses verbose noise while keeping checkpoints, warnings, errors, and the report
+- Dev-only rate-limit reset before/after the regression run (via the backend container's own pool), so repeated deploys within the rate-limit window don't false-fail contact checks; prod deliberately excluded
 - Outlook OAuth2 email via Microsoft Graph API (`/v1.0/me/sendMail`); `scripts/generate-outlook-refresh-token.js` captures a long-lived refresh token (delegated `Mail.Send`, personal-account `/consumers/` endpoint) (#241)
 - Rate limiting on auth endpoints: `/auth/email/send` (5/hr/IP), passkey register/login (10/hr/IP) (#237)
 - Magic-link recipient gate: tokens only sent to `ADMIN_EMAIL`; other addresses get the same success response with no email (anti-enumeration) (#241)
@@ -18,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Docker `json-file` log rotation on all services in all three compose files: `10m / 3 files` (local dev), `20m / 5 files` (prod + dev-server) — prevents unbounded disk growth from structured log output
 
 ### Changed
+- Regression tests moved server-side: `scripts/tests/Test-Regression.ps1` replaced by `test-regression.sh`; `dev-deploy.ps1` / `prod-deploy.ps1` stripped to thin SSH wrappers. Deploy scripts reach the running site via curl `--resolve` (server can't route to its own public DNS name); regression failure now always prints the report and exits non-zero rather than aborting silently
+- GitHub Actions CI disabled (`workflow_dispatch` only) — tests run in the deployed container instead (#270)
+- `docs/TESTING.md`, `docs/AI.md`, `CLAUDE.md` — updated for deploy-time Vitest + regression, `-SkipRegression`/`-Quiet`, the report box, and `test-regression.sh` replacing `Test-Regression.ps1`
 - Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
 - Documentation: replaced stale "Raspberry Pi" / `portfolio-server` host references with the canonical "Ubuntu Server (`ak-home-server`)" across README, CLAUDE.md, ROADMAP, PROJECT_ASSESSMENT, AI.md, and deploy/monitor script comments (migration off the Pi is complete; #171). Historical records (CHANGELOG, RELEASE_NOTES, lessons-learned) left intact. Pi-era infra scripts marked deprecated in favour of `scripts/deploy/server-setup.sh` + the containerised Nginx setup: `scripts/infra/pi-setup.sh`, `setup-nginx-ssl.ps1`, `setup-ssl.ps1`, `fix-apache.ps1`
 - `.env*.example`: OAuth2 promoted to the primary email method, SMTP demoted to documented fallback

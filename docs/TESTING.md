@@ -37,14 +37,14 @@ Dev and prod deploy scripts now run automated checks as part of every deployment
 - **Backend Vitest suite** runs inside the already-deployed container (`backend-dev` on dev, `backend` on prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
 - **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<WEBAUTHN_HOST>:3001`, prod: `https://<DOMAIN>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
 
-You can skip the regression smoke tests (for example, during quick iteration) using the `-SkipRegression` switch in the PowerShell wrappers:
+You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
 ```powershell
 # Dev deploy without regression smoke tests
-.\scripts\deploy\dev-deploy.ps1 -SkipRegression
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression $true
 
 # Prod deploy without regression smoke tests
-.\scripts\deploy\prod-deploy.ps1 -SkipRegression
+.\scripts\deploy\prod-deploy.ps1 -SkipRegression $true
 ```
 
 Vitest remains part of the normal `npm test` flow (locally and in CI), but it is now also executed automatically inside the dev/prod backend containers during every deploy.
@@ -104,16 +104,61 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 . scripts\dev\dev-local.ps1 test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 ```
 
-### PR validation scripts — use `Start-Transcript` (built in)
+### Regression smoke tests
 
-All scripts in `scripts/tests/` use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
+Regression tests run automatically at the end of every deploy (inside `dev-deploy.sh` / `prod-deploy.sh`). They are defined in `scripts/tests/test-regression.sh` and execute on the server against the live site. On failure, each test prints `[FAIL] <name> — Expected N got M | body: ...` or `| curl error: ...` for connection-level failures.
+
+To skip regression tests during a quick iteration deploy, or suppress verbose step output:
+
+```powershell
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression $true              # skip regression tests only
+.\scripts\deploy\dev-deploy.ps1 -Quiet $true                       # suppress verbose logs; show only checkpoints + report
+.\scripts\deploy\dev-deploy.ps1 -Quiet $true -SkipRegression $true # both
+
+.\scripts\deploy\prod-deploy.ps1 -SkipRegression $true
+.\scripts\deploy\prod-deploy.ps1 -Quiet $true
+```
+
+In quiet mode, `dinfo`/`dok`/`dsection` output is suppressed on-screen. Warnings, errors, rollback events, and the final deploy report always print regardless.
+
+To run them manually on the server:
+
+```bash
+bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
+  --base-url https://dev.andykeys.me:3001 \
+  --compose-file ~/MyPortfolioSite-dev/docker-compose.dev-server.yml \
+  --service backend-dev \
+  --insecure
+```
+
+### Deploy report
+
+Every deploy ends with a structured report block that collects all `[deploy:*]` and `[regression]` checkpoint lines:
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║  Deploy Report — dev — 2026-05-17 13:30:00                                 ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  [deploy:preflight] status=ok tools=docker git curl openssl                ║
+║  [deploy:git] status=updated branch=feat/x pre=abc1234 sha=def5678         ║
+║  [deploy:compose] status=ok service=backend-dev                            ║
+║  [deploy:health] status=ok url=https://dev.andykeys.me:3001/api/h… attem… ║
+║  [deploy:vitest] status=ok service=backend-dev                             ║
+║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
+║  [regression] status=OK passed=12 failed=0 skipped=0 total=12              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+```
+
+This block is the canonical answer to "what happened?" — paste it into PR comments or AI prompts. Full verbose output is still written to the log file.
+
+### PR smoke tests
+
+Every PR that touches backend code should also have a `Test-PR<N>.ps1` script covering the new or changed endpoints. These still run from Windows against the dev server:
 
 ```powershell
 # Output goes to console AND test-results\PR<N>-<timestamp>.txt automatically
-.\scripts\tests\Test-PR<N>.ps1
+.\scripts\tests\Test-PR<N>.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
 ```
-
-The log file path is printed in the script header and footer so you always know where to find it.
 
 ### Setup (one-time)
 

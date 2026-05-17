@@ -17,6 +17,13 @@ set -euo pipefail
 REPO_DIR="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
 BRANCH="${1:-dev}"
+SKIP_REGRESSION=0
+DEPLOY_QUIET=0
+for arg in "$@"; do
+  [[ "$arg" == "--skip-regression" ]] && SKIP_REGRESSION=1
+  [[ "$arg" == "--quiet" ]] && DEPLOY_QUIET=1
+done
+export DEPLOY_QUIET
 COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
 ENV_FILE="${REPO_DIR}/.env"
 ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
@@ -30,6 +37,58 @@ REQUIRED_VARS=(LAN_IP WEBAUTHN_HOST DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUT
 
 # Placeholder values that signal the var hasn't been configured
 PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
+
+# ── Dev-specific: auto-detect LAN IP ──────────────────────────────────────────────────
+# If LAN_IP is unset or still a placeholder, detect the primary non-loopback IPv4
+# address and write it into .env so the operator doesn't have to look it up.
+
+auto_detect_lan_ip() {
+  local current="${LAN_IP:-}"
+  local is_placeholder=0
+
+  if [ -z "$current" ]; then
+    is_placeholder=1
+  else
+    for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+      if [[ "$current" == *"$pattern"* ]]; then
+        is_placeholder=1
+        break
+      fi
+    done
+  fi
+
+  if [ "$is_placeholder" = "0" ]; then
+    dstatus lan-ip status=ok reason=already-configured
+    return 0
+  fi
+
+  dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
+
+  local detected
+  # Try ip route first (most reliable on Ubuntu), fall back to hostname -I
+  detected=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  if [ -z "$detected" ]; then
+    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+
+  if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
+    dstatus lan-ip status=failed reason=no-non-loopback-ip
+    dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
+    return 0
+  fi
+
+  dinfo "Detected LAN IP: $detected"
+
+  if grep -qE '^LAN_IP=' "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^LAN_IP=.*|LAN_IP=${detected}|" "$ENV_FILE"
+  else
+    echo "LAN_IP=${detected}" >> "$ENV_FILE"
+  fi
+
+  export LAN_IP="$detected"
+  dstatus lan-ip status=detected reason=written-to-env
+  dok "LAN_IP set to $detected in $ENV_FILE"
+}
 
 # ── Extra env checks for dev ───────────────────────────────────────────────────────────
 
@@ -85,7 +144,11 @@ sync_env_from_template
 
 load_env
 
+auto_detect_lan_ip
+
 log_env_snapshot
+
+prompt_missing_vars
 
 validate_env
 
@@ -93,14 +156,36 @@ validate_env
 
 dsection "Checking firewall (UFW)"
 
-if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "3001"; then
-  dok "UFW rule for port 3001 is present"
+# `ufw status` needs root. try_root never blocks on a password prompt:
+# runs directly if root, uses passwordless sudo if available, else returns
+# 126 so we skip with an info note rather than a misleading "no UFW rule".
+ufw_status=""
+ufw_readable=0
+
+if ! command -v ufw &>/dev/null; then
+  dstatus firewall status=skipped reason=ufw-not-installed
+  dinfo "UFW not installed — skipping firewall check"
+elif ufw_status=$(try_root ufw status 2>/dev/null); then
+  ufw_readable=1
 else
-  dwarn "No UFW rule found for port 3001."
-  dwarn "The dev site may not be reachable from other LAN devices."
-  dwarn "To open port 3001 to your LAN:"
-  dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-  dwarn "Continuing anyway — this is a warning, not an error."
+  dstatus firewall status=skipped reason=needs-root-no-passwordless-sudo
+  dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
+  dinfo "To enable the check, allow just this read-only command without a password:"
+  dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
+fi
+
+if [ "$ufw_readable" -eq 1 ]; then
+  if echo "$ufw_status" | grep -q "3001"; then
+    dstatus firewall status=ok port=3001
+    dok "UFW rule for port 3001 is present"
+  else
+    dstatus firewall status=warn port=3001 reason=no-rule
+    dwarn "No UFW rule found for port 3001."
+    dwarn "The dev site may not be reachable from other LAN devices."
+    dwarn "To open port 3001 to your LAN:"
+    dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+    dwarn "Continuing anyway — this is a warning, not an error."
+  fi
 fi
 
 # ── Git update ─────────────────────────────────────────────────────────────────────────
@@ -126,11 +211,17 @@ ROLLBACK_BRANCH=dev   # fall back to stable dev branch if feature branch deploy 
 
 check_nginx_config nginx-dev
 
+check_disk_space
+
 compose_up_with_rollback backend-dev
 
 # ── Health check ───────────────────────────────────────────────────────────────────────
 
 wait_for_health backend-dev
+
+log_deploy_summary dev
+
+run_deploy_tests backend-dev
 
 # ── Post-deployment Tests ──────────────────────────────────────────────────────────────
 
@@ -138,25 +229,44 @@ test_error_logger_all_pages
 
 test_csp_reporting
 
+# ── Regression smoke tests ─────────────────────────────────────────────────────────────
+
+REGRESSION_RC=0
+if [ "$SKIP_REGRESSION" = "0" ]; then
+  dsection "Regression smoke tests"
+  # Connect to the LAN IP (reachable from the server) while keeping the real
+  # hostname for Host/SNI — the server can't route to its own public DNS name.
+  bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    --base-url "https://${WEBAUTHN_HOST}:3001" \
+    --resolve "${WEBAUTHN_HOST}:3001:${LAN_IP}" \
+    --compose-file "$COMPOSE_FILE" \
+    --service backend-dev \
+    --insecure \
+    --reset-rate-limits \
+    2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+fi
+
+# Regression failure rolls back, same as health/Vitest failures.
+if [ "$REGRESSION_RC" -ne 0 ]; then
+  _do_rollback "regression smoke tests failed"
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────────────────────
-
-dsection "Deploy complete"
-
-dok "  Site:    https://${LAN_IP}:3001"
-dok "  Commit:  $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
-dok "  Log:     $LOG_FILE"
 
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-dlog ""
+# Loud verdict banner, then the AI-friendly report — always printed.
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║        Dev rolled back (recovered)       ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+  print_deploy_status "ROLLED BACK" "dev"
+  print_deploy_report "dev — ROLLED BACK"
+elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_status "FAILED" "dev"
+  print_deploy_report "dev — REGRESSION FAILED"
 else
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║           Dev deploy complete ✓          ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
+  print_deploy_status "COMPLETE" "dev"
+  print_deploy_report "dev"
 fi
 dlog ""
+
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — rolled back; see report above"

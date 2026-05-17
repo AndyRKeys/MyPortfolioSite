@@ -56,16 +56,23 @@ extra_env_checks() {
 # ── Parse arguments (rollback) ─────────────────────────────────────────────────────────
 
 ROLLBACK_SHA=""
+SKIP_REGRESSION=0
+DEPLOY_QUIET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --branch)
       BRANCH="$2"; shift 2 ;;
     --rollback)
       ROLLBACK_SHA="$2"; shift 2 ;;
+    --skip-regression)
+      SKIP_REGRESSION=1; shift ;;
+    --quiet)
+      DEPLOY_QUIET=1; shift ;;
     *)
       shift ;;
   esac
 done
+export DEPLOY_QUIET
 
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
@@ -82,6 +89,8 @@ sync_env_from_template
 load_env
 
 log_env_snapshot
+
+prompt_missing_vars
 
 validate_env
 
@@ -131,11 +140,17 @@ else
   HEALTH_URL_2=""
 fi
 
+check_disk_space
+
 compose_up_with_rollback backend
 
 # ── Health checks ──────────────────────────────────────────────────────────────────────
 
 wait_for_health backend
+
+log_deploy_summary prod
+
+run_deploy_tests backend
 
 # Basic nginx HTTP health (localhost)
 HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health || echo "000")
@@ -147,22 +162,41 @@ fi
 
 # Secondary HTTPS health is already covered by HEALTH_URL_2 above when set.
 
+# ── Regression smoke tests ─────────────────────────────────────────────────────────────
+
+REGRESSION_RC=0
+if [ "$SKIP_REGRESSION" = "0" ] && [ -n "${DOMAIN:-}" ]; then
+  dsection "Regression smoke tests"
+  # Resolve the domain to localhost — the server can't route to its own public
+  # IP (no NAT hairpin); SNI/Host stays the real domain so the cert validates.
+  bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    --base-url "https://${DOMAIN}" \
+    --resolve "${DOMAIN}:443:127.0.0.1" \
+    --compose-file "$COMPOSE_FILE" \
+    --service backend \
+    2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+fi
+
+# Regression failure rolls back, same as health/Vitest failures.
+if [ "$REGRESSION_RC" -ne 0 ]; then
+  _do_rollback "regression smoke tests failed"
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────────────────────
-
-POST_SHA=$(git rev-parse HEAD)
-dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') deploy $PRE_SHA -> $POST_SHA" >> "$LOG_FILE"
-
-dsection "Deploy complete"
-
-dok "  Domain:  https://${DOMAIN:-<unset>}"
-dok "  Commit:  $(git rev-parse --short HEAD)"
-dok "  Log:     $LOG_FILE"
 
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-dlog ""
-dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}║          Prod deploy complete ✓          ║${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-dlog ""
+# Loud verdict banner, then the AI-friendly report — always printed.
+if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  print_deploy_status "ROLLED BACK" "prod"
+  print_deploy_report "prod — ROLLED BACK"
+elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_status "FAILED" "prod"
+  print_deploy_report "prod — REGRESSION FAILED"
+else
+  print_deploy_status "COMPLETE" "prod"
+  print_deploy_report "prod"
+fi
+
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — rolled back; see report above"
