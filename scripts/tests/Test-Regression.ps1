@@ -40,9 +40,10 @@
     . scripts\tests\Test-Regression.ps1 -SkipVitest:$false
 #>
 param(
-    [string]$Token      = '',
-    [string]$BaseUrl    = 'http://localhost',
-    [switch]$SkipVitest = $true,
+    [string]$Token          = '',
+    [string]$BaseUrl        = 'http://localhost',
+    [string]$ComposeService = 'backend',
+    [switch]$SkipVitest     = $true,
     [switch]$SkipSecurity,
     [switch]$Insecure
 )
@@ -60,7 +61,7 @@ Start-Transcript -Path $logFile -Append | Out-Null
 if (-not $Token) {
     try {
         Write-Host "  [INFO] No -Token provided — attempting to generate dev JWT from container..." -ForegroundColor DarkGray
-        $generated = docker compose exec -T backend node -e @"
+        $generated = docker compose exec -T $ComposeService node -e @"
 const jwt = require('jsonwebtoken');
 if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET'); process.exit(1); }
 console.log(jwt.sign({ userId: 'dev-test-user' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
@@ -129,7 +130,7 @@ Write-Host ""
 if (-not $SkipVitest) {
     Write-Host "--- Vitest unit + integration suite ---" -ForegroundColor Yellow
     Write-Host "  Running inside backend container..."
-    docker compose exec -T backend npm test 2>&1 | ForEach-Object { Write-Host "  $_" }
+    docker compose exec -T $ComposeService npm test 2>&1 | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [PASS] Vitest suite" -ForegroundColor Green
         $pass++

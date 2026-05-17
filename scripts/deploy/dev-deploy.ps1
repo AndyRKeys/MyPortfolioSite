@@ -41,13 +41,13 @@ if ($LASTEXITCODE -ne 0) {
 if (-not $SkipRegression) {
     Write-Host ""
     Write-Host "Fetching LAN_IP from dev server for regression tests..." -ForegroundColor Cyan
-    $lanIp = ssh $Hostname "grep '^LAN_IP=' ~/MyPortfolioSite-dev/.env 2>/dev/null | cut -d= -f2"
+    $lanIp = ssh $Hostname "grep '^LAN_IP=' ~/MyPortfolioSite-dev/.env 2>/dev/null | cut -d= -f2 | head -1"
     $lanIp = $lanIp.Trim()
 
     if ($lanIp) {
         $baseUrl = "https://${lanIp}:3001"
         Write-Host "Running regression tests against $baseUrl..." -ForegroundColor Cyan
-        & "$PSScriptRoot\..\tests\Test-Regression.ps1" -BaseUrl $baseUrl -Insecure -SkipSecurity
+        & "$PSScriptRoot\..\tests\Test-Regression.ps1" -BaseUrl $baseUrl -Insecure -SkipSecurity -ComposeService backend-dev
         if ($LASTEXITCODE -ne 0) {
             Write-Host ""
             Write-Host "Regression tests failed — site is live but smoke checks did not pass." -ForegroundColor Red
