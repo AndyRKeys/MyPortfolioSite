@@ -262,6 +262,119 @@ load_env() {
   set +a
 }
 
+# Print the current .env with secret values masked.
+# Keys matching *SECRET*|*TOKEN*|*PASS*|*KEY*|*REFRESH*|*CREDENTIAL* have their
+# value replaced with [redacted]. Safe to include in deploy logs.
+redact_env() {
+  local file="${1:-$ENV_FILE}"
+  local sensitive_pattern='SECRET|TOKEN|PASS|KEY|REFRESH|CREDENTIAL'
+
+  while IFS= read -r line; do
+    # Pass through blank lines and comments unchanged
+    if [[ "$line" =~ ^[[:space:]]*$ ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+      echo "$line"
+      continue
+    fi
+    # For KEY=VALUE lines, redact the value if the key is sensitive
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local val="${BASH_REMATCH[2]}"
+      if echo "$key" | grep -qE "$sensitive_pattern"; then
+        # Show that a value exists but not what it is
+        if [ -n "$val" ]; then
+          echo "${key}=[redacted]"
+        else
+          echo "${key}=(empty)"
+        fi
+      else
+        echo "$line"
+      fi
+    else
+      echo "$line"
+    fi
+  done < "$file"
+}
+
+# Compare .env against the template and append any keys that are present in the
+# template but missing from the live .env. The appended block carries its
+# original template comments so the operator knows what each var does.
+# Returns 0 if .env was already complete, 1 if keys were added (operator must
+# fill in values before the next deploy succeeds).
+sync_env_from_template() {
+  dsection "Phase 3b: syncing .env against template"
+
+  if [ -z "${ENV_TEMPLATE:-}" ] || [ ! -f "$ENV_TEMPLATE" ]; then
+    dinfo "No ENV_TEMPLATE set — skipping template sync"
+    return 0
+  fi
+
+  # Keys already present in .env (only KEY lines, not comments)
+  local existing_keys
+  existing_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" | cut -d= -f1 | sort)
+
+  # Keys defined in the template
+  local template_keys
+  template_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_TEMPLATE" | cut -d= -f1 | sort)
+
+  # Keys in template but not in .env
+  local missing_keys
+  missing_keys=$(comm -23 <(echo "$template_keys") <(echo "$existing_keys"))
+
+  if [ -z "$missing_keys" ]; then
+    dok ".env is up to date with template — no missing keys"
+    return 0
+  fi
+
+  dwarn "New keys in template not yet in .env — appending with placeholder values:"
+  local appended_any=0
+
+  # Append a section header
+  printf '\n# ── Added by deploy sync %s ────────────────────────────────────────────────────\n' \
+    "$(date '+%Y-%m-%d')" >> "$ENV_FILE"
+
+  # Walk the template line-by-line, output comment+key blocks for missing keys only
+  local pending_comments=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+      pending_comments=""
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      pending_comments+="${line}"$'\n'
+      continue
+    fi
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+      local key="${BASH_REMATCH[1]}"
+      if echo "$missing_keys" | grep -qx "$key"; then
+        # Write buffered comments then the key line from the template
+        [ -n "$pending_comments" ] && printf '%s' "$pending_comments" >> "$ENV_FILE"
+        echo "$line" >> "$ENV_FILE"
+        dwarn "  + $key (added from template — fill in a real value)"
+        appended_any=1
+      fi
+      pending_comments=""
+    fi
+  done < "$ENV_TEMPLATE"
+
+  if [ "$appended_any" -eq 1 ]; then
+    dwarn ""
+    dwarn "  Action required: edit $ENV_FILE and set the new vars above before re-running."
+    # Treat missing-but-appended keys as a deploy blocker only if they are in REQUIRED_VARS.
+    # validate_env will catch them; we warn here so the operator sees the specific list first.
+    return 1
+  fi
+
+  return 0
+}
+
+# Log a redacted snapshot of the current .env to the deploy log.
+log_env_snapshot() {
+  dsection "Active .env (secrets redacted)"
+  redact_env "$ENV_FILE" | while IFS= read -r line; do
+    dlog "  $line"
+  done
+}
+
 validate_env() {
   dsection "Phase 4: validating .env"
 
