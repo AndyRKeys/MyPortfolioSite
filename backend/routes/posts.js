@@ -3,6 +3,7 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.get('/', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -67,7 +68,7 @@ router.get('/all', authenticate, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -83,7 +84,7 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Post not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -100,7 +101,7 @@ router.get('/:slug', async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Post not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -115,7 +116,7 @@ router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
     const result = await tryInsertPost('blog', title, body_markdown, postDateVal, publishedAt);
     res.status(201).json(result);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -158,7 +159,7 @@ router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) =>
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -173,7 +174,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Post not found' });
     res.json({ deleted: true });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[posts] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });

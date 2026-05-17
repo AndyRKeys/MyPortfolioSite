@@ -93,6 +93,16 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 
 ---
 
+## Logging & Secret Redaction
+
+- Backend logging goes through a single structured logger (`backend/utils/logger.js`, pino — #153). No bare `console.log` in runtime code.
+- **Secrets are never logged.** The logger redacts `authorization`/`cookie` headers, `set-cookie`, and any `token` / `refresh_token` / `password` / `jwt` field centrally. Redaction is a deliberate, reviewable choice — do not log raw tokens, JWTs, password hashes, or the Outlook refresh token, and do not bypass the shared logger.
+- Magic-link verification logs token *presence* and a diagnostic count breakdown, never the raw bearer token (see `/auth/email/verify`).
+- Email addresses (PII) are masked via `redactEmail()` before logging; the admin-gate logs only lengths and a match boolean, never the raw address.
+- Log level is controlled by `LOG_LEVEL` (default `info`); production emits JSON, non-production pretty-prints.
+
+---
+
 ## Rate Limiting
 
 The contact form (`POST /api/contact`) is rate-limited using the `rate_limits` table:

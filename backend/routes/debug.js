@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -55,14 +56,14 @@ router.post('/errors', (req, res) => {
     return res.status(429).json({ received: false, error: 'Rate limited' });
   }
 
-  console.log(`[error-logger] Received POST to /debug/errors`);
+  logger.debug('[debug/errors] Received frontend error report');
 
   const { type, message, timestamp, url, filename, lineno, colno, stack } = req.body;
 
   if (!type || !message) {
     // Sanitize the body before logging to prevent injection
     const bodySample = sanitizeForLog(JSON.stringify(req.body));
-    console.warn(`[error-logger] Malformed error report: ${bodySample}`);
+    logger.warn({ bodySample }, '[debug/errors] Malformed error report');
     return res.json({ received: false, error: 'Missing type or message' });
   }
 
@@ -72,12 +73,21 @@ router.post('/errors', (req, res) => {
   const urlLog = sanitizeForLog(url, 300);
   const filenameLog = filename ? sanitizeForLog(filename, 100) : null;
 
-  const context = `[${typeLog}] ${urlLog}${filenameLog ? ` @ ${filenameLog}:${lineno}:${colno}` : ''}`;
-  console.error(`\n🔴 FRONTEND ERROR: ${context}\n  Message: ${messageLog}\n  Time: ${timestamp}`);
-  if (stack) {
-    const stackLines = sanitizeForLog(stack, 300).split('\\n').slice(0, 3);
-    console.error(`  Stack: ${stackLines.join('\n    ')}`);
-  }
+  const stackLog = stack
+    ? sanitizeForLog(stack, 300).split('\\n').slice(0, 3).join(' | ')
+    : undefined;
+  logger.error(
+    {
+      type: typeLog,
+      url: urlLog,
+      file: filenameLog,
+      lineno,
+      colno,
+      clientTimestamp: timestamp,
+      stack: stackLog,
+    },
+    `[debug/errors] Frontend error — ${messageLog}`
+  );
 
   res.json({ received: true });
 });
@@ -102,7 +112,10 @@ router.post('/csp-violations', (req, res) => {
   const blockedLog = sanitizeForLog(blocked, 200);
   const sourceLog = source ? sanitizeForLog(source, 200) : 'unknown';
 
-  console.warn(`\n⚠️  CSP VIOLATION: ${urlLog}\n  Directive: ${directiveLog}\n  Blocked: ${blockedLog}\n  Source: ${sourceLog}`);
+  logger.warn(
+    { url: urlLog, directive: directiveLog, blocked: blockedLog, source: sourceLog },
+    '[debug/csp-violations] CSP violation reported'
+  );
 
   res.json({ received: true });
 });
@@ -159,7 +172,7 @@ router.post('/test-complete', (req, res) => {
     return res.status(403).json({ error: 'Debug endpoints not available in production' });
   }
 
-  console.log('✅ Error logger test complete');
+  logger.info('[debug/test-complete] Error logger test complete');
   res.json({ status: 'test-complete' });
 });
 

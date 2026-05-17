@@ -12,6 +12,7 @@ import path         from 'path';
 import fs           from 'fs';
 import { fileURLToPath } from 'url';
 import { authenticate }  from '../middleware/authenticate.js';
+import { logger }        from '../utils/logger.js';
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,7 +92,7 @@ router.post('/', authenticate, upload.single('cv'), async (req, res) => {
     fs.writeFileSync(CV_PATH, req.file.buffer);
     res.status(200).json({ uploaded: true, warnings });
   } catch (err) {
-    console.error('CV upload error:', err);
+    logger.error({ err }, '[cv] CV upload failed');
     res.status(500).json({ error: 'Failed to save CV' });
   }
 });
@@ -103,7 +104,7 @@ router.delete('/', authenticate, (req, res) => {
     fs.unlinkSync(CV_PATH);
     res.json({ deleted: true });
   } catch (err) {
-    console.error('CV delete error:', err);
+    logger.error({ err }, '[cv] CV delete failed');
     res.status(500).json({ error: 'Failed to delete CV' });
   }
 });
