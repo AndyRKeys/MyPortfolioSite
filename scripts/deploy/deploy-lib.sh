@@ -550,7 +550,7 @@ _do_rollback() {
     read -r rollback_branch rollback_sha < <(_restore_last_good_state)
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -560,7 +560,7 @@ _do_rollback() {
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
     git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -568,7 +568,7 @@ _do_rollback() {
     # Same branch deploy: revert to the previous commit.
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -584,9 +584,28 @@ compose_up_with_rollback() {
   local service_name="$1"   # e.g. backend-dev or backend
 
   dsection "Phase 5: building and starting services"
-  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
+  # Warn about any containers from this compose project that are no longer
+  # defined in the current compose file — these are orphans from a service
+  # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
+  # but surfacing them first gives a clear record of what was cleaned up.
+  local orphan_check
+  orphan_check=$(docker compose -f "$COMPOSE_FILE" ps --all 2>/dev/null \
+    | grep -v 'NAME\|^$' | awk '{print $1}' || true)
+  local defined_services
+  defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null || true)
+  if [ -n "$orphan_check" ] && [ -n "$defined_services" ]; then
+    while IFS= read -r container; do
+      local svc
+      svc=$(echo "$container" | sed -E 's/.*-([a-z_-]+)-[0-9]+$/\1/' | tr '-' '_')
+      if ! echo "$defined_services" | grep -qxF "$svc"; then
+        dwarn "Orphan container detected: $container (not in current compose file — will be removed)"
+      fi
+    done <<< "$orphan_check"
+  fi
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
+  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
+
+  if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE"; then
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
     _do_rollback "docker compose up failed"
