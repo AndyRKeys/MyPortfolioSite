@@ -143,6 +143,8 @@ wait_for_health backend
 
 log_deploy_summary prod
 
+run_deploy_tests backend
+
 # Basic nginx HTTP health (localhost)
 HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health || echo "000")
 if [ "$HTTP_CODE" = "200" ]; then

@@ -803,6 +803,26 @@ wait_for_health() {
   done
 }
 
+# ── In-deployment test suite ──────────────────────────────────────────────────
+
+# Run the backend Vitest suite inside the already-running container.
+# Runs after health check so tests execute against the live deployed service.
+# Non-zero exit triggers rollback — same path as a failed health check.
+run_deploy_tests() {
+  local service_name="$1"   # e.g. backend-dev or backend
+
+  dsection "Phase 7: running backend test suite"
+  dinfo "Executing npm test inside $service_name container..."
+
+  if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | tee -a "$LOG_FILE"; then
+    dok "All tests passed ✓"
+  else
+    dfail "Test suite failed — initiating rollback"
+    _do_rollback "test suite failed post-deploy"
+    ddie "Deploy failed: tests did not pass. See log at $LOG_FILE"
+  fi
+}
+
 # ── Error Logger Test ──────────────────────────────────────────────────────────
 
 test_error_logger_all_pages() {

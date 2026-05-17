@@ -187,6 +187,8 @@ wait_for_health backend-dev
 
 log_deploy_summary dev
 
+run_deploy_tests backend-dev
+
 # ── Post-deployment Tests ──────────────────────────────────────────────────────────────
 
 test_error_logger_all_pages
