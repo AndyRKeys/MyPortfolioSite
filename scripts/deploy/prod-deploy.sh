@@ -57,6 +57,7 @@ extra_env_checks() {
 
 ROLLBACK_SHA=""
 SKIP_REGRESSION=0
+DEPLOY_QUIET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --branch)
@@ -65,10 +66,13 @@ while [[ $# -gt 0 ]]; do
       ROLLBACK_SHA="$2"; shift 2 ;;
     --skip-regression)
       SKIP_REGRESSION=1; shift ;;
+    --quiet)
+      DEPLOY_QUIET=1; shift ;;
     *)
       shift ;;
   esac
 done
+export DEPLOY_QUIET
 
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
@@ -174,4 +178,4 @@ fi
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-print_deploy_report "prod (${DEPLOY_ROLLED_BACK:+ROLLED BACK}${DEPLOY_ROLLED_BACK:-ok})"
+[ "$DEPLOY_ROLLED_BACK" = "1" ] && print_deploy_report "prod — ROLLED BACK" || print_deploy_report "prod"

@@ -79,22 +79,26 @@ _deploy_log_raw()   {
   echo -e "[$(_deploy_timestamp)] $msg" | tee -a "$LOG_FILE";
 }
 
-dlog()     { _deploy_log_raw "$*"; }
-dinfo()    { _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*"; }
-dok()      { _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}[OK]${DEPLOY_RESET}    $*"; }
+dlog()     { _verbose && _deploy_log_raw "$*" || true; }
+dinfo()    { _verbose && _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*" || true; }
+dok()      { _verbose && _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}[OK]${DEPLOY_RESET}    $*" || true; }
 dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET}  $*"; }
 dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}[ERROR]${DEPLOY_RESET} $*"; }
-dsection() { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}── $* ──────────────────────────────────────────────${DEPLOY_RESET}"; }
+dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}── $* ──────────────────────────────────────────────${DEPLOY_RESET}"; } || true; }
 
 # Machine-readable checkpoint line — grep-friendly, no colour codes.
+# Always printed regardless of DEPLOY_QUIET. Omits ts= to keep lines short in the report.
 # Usage: dstatus <phase> key=value [key=value ...]
-# Output: [deploy:<phase>] key=value key=value ts=<iso>
+# Output: [deploy:<phase>] key=value key=value
 dstatus() {
   local phase="$1"; shift
-  local ts; ts=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-  local msg="[deploy:${phase}] $* ts=${ts}"
+  local msg="[deploy:${phase}] $*"
   echo "$msg" | tee -a "$LOG_FILE"
 }
+
+# Suppress verbose output when DEPLOY_QUIET=1. Only dstatus, dwarn, dfail, and ddie
+# produce output in quiet mode — dinfo, dok, dlog, dsection are silenced.
+_verbose() { [ "${DEPLOY_QUIET:-0}" != "1" ]; }
 
 ddie() {
   dfail "$*"
@@ -972,20 +976,28 @@ log_deploy_summary() {
 
 # Print a human-readable final deploy report by extracting all [deploy:*] and
 # [regression] checkpoint lines written to LOG_FILE during this run.
-# Call this as the very last step of a deploy script (after regression tests).
+# Always printed — not suppressed by DEPLOY_QUIET.
+# Call as the very last step of a deploy script (after regression tests).
 print_deploy_report() {
-  local env_name="${1:-unknown}"
+  local label="${1:-unknown}"
+  local width=72  # inner content width (between ║  and  ║)
+  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+
   echo ""
-  echo "╔══════════════════════════════════════════════════════════════╗"
-  printf  "║  Deploy Report — %-44s║\n" "${env_name} $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "╠══════════════════════════════════════════════════════════════╣"
-  # Extract checkpoint lines written during this deploy (strip timestamp prefix and colour codes)
-  grep -E '\[deploy:|^\[regression\]' "$LOG_FILE" 2>/dev/null \
-    | sed 's/^\[[^]]*\] //' \
+  echo "╔${border}╗"
+  printf "║  %-${width}s  ║\n" "Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "╠${border}╣"
+  # Extract [deploy:*] and [regression] lines; strip colour codes and ts= field
+  grep -E '\[deploy:|\[regression\]' "$LOG_FILE" 2>/dev/null \
     | sed 's/\x1b\[[0-9;]*m//g' \
+    | sed 's/ ts=[^ ]*$//' \
     | while IFS= read -r line; do
-        printf "║  %-60s║\n" "$line"
+        # Truncate lines that are still too long to fit
+        if [ "${#line}" -gt "$width" ]; then
+          line="${line:0:$((width - 1))}…"
+        fi
+        printf "║  %-${width}s  ║\n" "$line"
       done
-  echo "╚══════════════════════════════════════════════════════════════╝"
+  echo "╚${border}╝"
   echo ""
 }

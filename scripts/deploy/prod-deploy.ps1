@@ -6,18 +6,20 @@
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
-# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression]
+# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression] [-Quiet]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = 'main',
     [string]$Rollback = '',
-    [switch]$SkipRegression
+    [switch]$SkipRegression,
+    [switch]$Quiet
 )
 
 $remoteArgs = @()
 if ($Branch)         { $remoteArgs += "--branch $Branch" }
 if ($Rollback)       { $remoteArgs += "--rollback $Rollback" }
 if ($SkipRegression) { $remoteArgs += '--skip-regression' }
+if ($Quiet)          { $remoteArgs += '--quiet' }
 
 $remoteCommand = @"
 cd ~/MyPortfolioSite

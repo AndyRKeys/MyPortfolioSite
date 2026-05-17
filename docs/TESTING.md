@@ -108,12 +108,18 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 
 Regression tests run automatically at the end of every deploy (inside `dev-deploy.sh` / `prod-deploy.sh`). They are defined in `scripts/tests/test-regression.sh` and execute on the server against the live site. On failure, each test prints `[FAIL] <name> — Expected N got M | body: ...` or `| curl error: ...` for connection-level failures.
 
-To skip regression tests during a quick iteration deploy:
+To skip regression tests during a quick iteration deploy, or suppress verbose step output:
 
 ```powershell
-.\scripts\deploy\dev-deploy.ps1 -SkipRegression
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression        # skip regression tests only
+.\scripts\deploy\dev-deploy.ps1 -Quiet                  # suppress verbose logs; show only checkpoints + report
+.\scripts\deploy\dev-deploy.ps1 -Quiet -SkipRegression  # both
+
 .\scripts\deploy\prod-deploy.ps1 -SkipRegression
+.\scripts\deploy\prod-deploy.ps1 -Quiet
 ```
+
+In quiet mode, `dinfo`/`dok`/`dsection` output is suppressed on-screen. Warnings, errors, rollback events, and the final deploy report always print regardless.
 
 To run them manually on the server:
 
@@ -130,17 +136,17 @@ bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
 Every deploy ends with a structured report block that collects all `[deploy:*]` and `[regression]` checkpoint lines:
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║  Deploy Report — dev (ok) 2026-05-17 13:30:00               ║
-╠══════════════════════════════════════════════════════════════╣
-║  [deploy:preflight] status=ok tools=docker git curl openssl  ║
-║  [deploy:git] status=updated branch=feat/x sha=abc1234       ║
-║  [deploy:compose] status=ok service=backend-dev              ║
-║  [deploy:health] status=ok url=... attempts=3                ║
-║  [deploy:vitest] status=ok service=backend-dev               ║
-║  [deploy:summary] status=ok env=dev branch=feat/x sha=...    ║
-║  [regression] status=OK passed=12 failed=0 skipped=0         ║
-╚══════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════════════════════╗
+║  Deploy Report — dev — 2026-05-17 13:30:00                                 ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  [deploy:preflight] status=ok tools=docker git curl openssl                ║
+║  [deploy:git] status=updated branch=feat/x pre=abc1234 sha=def5678         ║
+║  [deploy:compose] status=ok service=backend-dev                            ║
+║  [deploy:health] status=ok url=https://dev.andykeys.me:3001/api/h… attem… ║
+║  [deploy:vitest] status=ok service=backend-dev                             ║
+║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
+║  [regression] status=OK passed=12 failed=0 skipped=0 total=12              ║
+╚════════════════════════════════════════════════════════════════════════════╝
 ```
 
 This block is the canonical answer to "what happened?" — paste it into PR comments or AI prompts. Full verbose output is still written to the log file.

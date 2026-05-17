@@ -18,7 +18,12 @@ REPO_DIR="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
 BRANCH="${1:-dev}"
 SKIP_REGRESSION=0
-for arg in "$@"; do [[ "$arg" == "--skip-regression" ]] && SKIP_REGRESSION=1; done
+DEPLOY_QUIET=0
+for arg in "$@"; do
+  [[ "$arg" == "--skip-regression" ]] && SKIP_REGRESSION=1
+  [[ "$arg" == "--quiet" ]] && DEPLOY_QUIET=1
+done
+export DEPLOY_QUIET
 COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
 ENV_FILE="${REPO_DIR}/.env"
 ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
@@ -214,5 +219,5 @@ fi
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-print_deploy_report "dev (${DEPLOY_ROLLED_BACK:+ROLLED BACK}${DEPLOY_ROLLED_BACK:-ok})"
+[ "$DEPLOY_ROLLED_BACK" = "1" ] && print_deploy_report "dev — ROLLED BACK" || print_deploy_report "dev"
 dlog ""

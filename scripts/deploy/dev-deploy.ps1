@@ -1,11 +1,12 @@
 # Trigger a dev server deploy from Windows via SSH.
 # Connects to the Ubuntu Server and runs dev-deploy.sh (which includes regression tests).
 #
-# Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression]
+# Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression] [-Quiet]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = '',
-    [switch]$SkipRegression
+    [switch]$SkipRegression,
+    [switch]$Quiet
 )
 
 # Detect current branch if not specified
@@ -16,7 +17,10 @@ if ([string]::IsNullOrEmpty($Branch)) {
 
 Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
 
-$skipFlag = if ($SkipRegression) { '--skip-regression' } else { '' }
+$flags = @()
+if ($SkipRegression) { $flags += '--skip-regression' }
+if ($Quiet)          { $flags += '--quiet' }
+$flagStr = $flags -join ' '
 
 $remoteCommand = @"
 DEV_REPO=`$HOME/MyPortfolioSite-dev
@@ -26,7 +30,7 @@ if [ ! -d "`$DEV_REPO/.git" ]; then
     git clone "`$REPO_URL" "`$DEV_REPO"
 fi
 bash "`$DEV_REPO/scripts/deploy/switch-branch.sh" "`$BRANCH" "`$DEV_REPO"
-bash "`$DEV_REPO/scripts/deploy/dev-deploy.sh" "`$BRANCH" $skipFlag
+bash "`$DEV_REPO/scripts/deploy/dev-deploy.sh" "`$BRANCH" $flagStr
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
