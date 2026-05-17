@@ -31,6 +31,53 @@ REQUIRED_VARS=(LAN_IP WEBAUTHN_HOST DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUT
 # Placeholder values that signal the var hasn't been configured
 PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
 
+# ── Dev-specific: auto-detect LAN IP ──────────────────────────────────────────────────
+# If LAN_IP is unset or still a placeholder, detect the primary non-loopback IPv4
+# address and write it into .env so the operator doesn't have to look it up.
+
+auto_detect_lan_ip() {
+  local current="${LAN_IP:-}"
+  local is_placeholder=0
+
+  if [ -z "$current" ]; then
+    is_placeholder=1
+  else
+    for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+      if [[ "$current" == *"$pattern"* ]]; then
+        is_placeholder=1
+        break
+      fi
+    done
+  fi
+
+  [ "$is_placeholder" = "0" ] && return 0
+
+  dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
+
+  local detected
+  # Try ip route first (most reliable on Ubuntu), fall back to hostname -I
+  detected=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  if [ -z "$detected" ]; then
+    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+
+  if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
+    dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
+    return 0
+  fi
+
+  dinfo "Detected LAN IP: $detected"
+
+  if grep -qE '^LAN_IP=' "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^LAN_IP=.*|LAN_IP=${detected}|" "$ENV_FILE"
+  else
+    echo "LAN_IP=${detected}" >> "$ENV_FILE"
+  fi
+
+  export LAN_IP="$detected"
+  dok "LAN_IP set to $detected in $ENV_FILE"
+}
+
 # ── Extra env checks for dev ───────────────────────────────────────────────────────────
 
 extra_env_checks() {
@@ -85,7 +132,11 @@ sync_env_from_template
 
 load_env
 
+auto_detect_lan_ip
+
 log_env_snapshot
+
+prompt_missing_vars
 
 validate_env
 
@@ -126,11 +177,15 @@ ROLLBACK_BRANCH=dev   # fall back to stable dev branch if feature branch deploy 
 
 check_nginx_config nginx-dev
 
+check_disk_space
+
 compose_up_with_rollback backend-dev
 
 # ── Health check ───────────────────────────────────────────────────────────────────────
 
 wait_for_health backend-dev
+
+log_deploy_summary dev
 
 # ── Post-deployment Tests ──────────────────────────────────────────────────────────────
 

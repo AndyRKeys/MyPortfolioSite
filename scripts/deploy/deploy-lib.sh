@@ -414,6 +414,59 @@ validate_env() {
   dok "All required env vars set and valid."
 }
 
+# Interactively prompt the operator for any REQUIRED_VARS that are still empty or
+# contain placeholder values. Only runs when stdin is a TTY (not in CI or piped
+# deploys). Writes updated values directly to ENV_FILE so validate_env sees them.
+prompt_missing_vars() {
+  # Skip entirely if not interactive — piped/CI runs get a clear error from validate_env
+  if [ ! -t 0 ]; then
+    return 0
+  fi
+
+  local needs_reload=0
+
+  for var in "${REQUIRED_VARS[@]}"; do
+    local value="${!var:-}"
+    local is_placeholder=0
+
+    if [ -z "$value" ]; then
+      is_placeholder=1
+    else
+      for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+        if [[ "$value" == *"$pattern"* ]]; then
+          is_placeholder=1
+          break
+        fi
+      done
+    fi
+
+    if [ "$is_placeholder" = "1" ]; then
+      dwarn "$var is not set or still contains a placeholder value."
+      printf "  Enter value for %s: " "$var"
+      local new_val
+      read -r new_val
+      if [ -n "$new_val" ]; then
+        # Update or append KEY=VALUE in ENV_FILE
+        if grep -qE "^${var}=" "$ENV_FILE" 2>/dev/null; then
+          sed -i "s|^${var}=.*|${var}=${new_val}|" "$ENV_FILE"
+        else
+          echo "${var}=${new_val}" >> "$ENV_FILE"
+        fi
+        export "${var}=${new_val}"
+        needs_reload=1
+        dok "$var updated."
+      else
+        dwarn "$var left unchanged — validate_env may fail."
+      fi
+    fi
+  done
+
+  if [ "$needs_reload" = "1" ]; then
+    dinfo "Reloading .env after interactive updates..."
+    load_env
+  fi
+}
+
 # ── Dev certificates (HTTPS with self-signed) ──────────────────────────────────
 
 ensure_dev_certs() {
@@ -575,6 +628,36 @@ _do_rollback() {
   else
     dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
     dwarn "Manual intervention required — check container logs above."
+  fi
+}
+
+# ── Disk space preflight ──────────────────────────────────────────────────────
+
+# Warn if less than 1 GB free on the filesystem hosting REPO_DIR.
+# Docker image builds can fail silently when space runs out, so surface this early.
+check_disk_space() {
+  local min_gb="${1:-1}"
+  local min_kb=$(( min_gb * 1024 * 1024 ))
+  local target_dir="${REPO_DIR:-$HOME}"
+  local free_kb
+
+  dsection "Pre-build disk space check"
+
+  free_kb=$(df -k "$target_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [ -z "$free_kb" ]; then
+    dwarn "Could not determine free disk space — continuing anyway."
+    return 0
+  fi
+
+  local free_gb=$(( free_kb / 1024 / 1024 ))
+  local free_mb=$(( free_kb / 1024 ))
+
+  if [ "$free_kb" -lt "$min_kb" ]; then
+    dwarn "Low disk space: ${free_mb}MB free (recommended ≥ ${min_gb}GB for Docker builds)."
+    dwarn "Docker image builds may fail. Free space on $(df -k "$target_dir" | awk 'NR==2{print $6}') before retrying."
+    dwarn "Continuing — this is a warning, not a hard stop."
+  else
+    dok "Disk space OK: ${free_gb}GB free on $(df -k "$target_dir" | awk 'NR==2{print $6}')"
   fi
 }
 
@@ -823,4 +906,21 @@ check_ddns_sync() {
     dwarn "Or update manually in Namecheap Advanced DNS."
     dwarn "Continuing deploy — site may be unreachable externally until DNS is fixed."
   fi
+}
+
+# ── Structured deploy summary ─────────────────────────────────────────────────
+
+# Write a single machine-readable summary line to LOG_FILE after a successful deploy.
+# Format: ISO-8601 timestamp | DEPLOY_OK | env=<name> branch=<branch> sha=<sha>
+# Greppable from cron or monitoring: grep 'DEPLOY_OK' ~/prod-deploy.log
+log_deploy_summary() {
+  local env_name="${1:-unknown}"
+  local branch sha ts
+
+  ts=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+  branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  sha=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+  dlog "${ts} | DEPLOY_OK | env=${env_name} branch=${branch} sha=${sha}"
+  dok "Deploy summary: env=${env_name} branch=${branch} sha=${sha} at ${ts}"
 }

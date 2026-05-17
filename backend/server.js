@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { logger } from './utils/logger.js';
+import { pool } from './db/pool.js';
+import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
 
 if (!process.env.JWT_SECRET) {
   logger.fatal('[startup] JWT_SECRET environment variable is not set — refusing to start');
@@ -12,7 +14,37 @@ const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT }, `[startup] Backend listening on http://localhost:${PORT}`);
+  runStartupPreflight();
 });
+
+// Non-blocking preflight: check DB connectivity and Outlook OAuth2 token validity.
+// Failures are logged as warnings — the server keeps running so transient outages
+// (e.g. DB container still initialising) don't cause unnecessary restarts.
+async function runStartupPreflight() {
+  // DB check
+  try {
+    await pool.query('SELECT 1');
+    logger.info('[startup:preflight] DB connection OK');
+  } catch (err) {
+    logger.warn({ err: err.message }, '[startup:preflight] DB connection failed — check DB service and credentials');
+  }
+
+  // Outlook OAuth2 check (only if configured)
+  if (isOAuth2Configured()) {
+    try {
+      await getGraphAccessToken();
+      logger.info('[startup:preflight] Outlook OAuth2 token valid');
+    } catch (err) {
+      logger.warn(
+        { error: err.message },
+        '[startup:preflight] Outlook OAuth2 token invalid — contact form email will not work. ' +
+        'Refresh the token in Azure portal and update OUTLOOK_REFRESH_TOKEN in .env.',
+      );
+    }
+  } else {
+    logger.info('[startup:preflight] Outlook OAuth2 not configured — skipping token check');
+  }
+}
 
 // Graceful shutdown on SIGTERM (Docker stop, Kubernetes termination, etc)
 process.on('SIGTERM', () => {

@@ -83,6 +83,8 @@ load_env
 
 log_env_snapshot
 
+prompt_missing_vars
+
 validate_env
 
 check_ddns_sync
@@ -131,11 +133,15 @@ else
   HEALTH_URL_2=""
 fi
 
+check_disk_space
+
 compose_up_with_rollback backend
 
 # ── Health checks ──────────────────────────────────────────────────────────────────────
 
 wait_for_health backend
+
+log_deploy_summary prod
 
 # Basic nginx HTTP health (localhost)
 HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health || echo "000")

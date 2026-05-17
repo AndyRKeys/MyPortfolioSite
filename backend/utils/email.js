@@ -5,7 +5,7 @@ import { logger } from './logger.js';
 const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
 const GRAPH_SEND_URL  = 'https://graph.microsoft.com/v1.0/me/sendMail';
 
-function isOAuth2Configured() {
+export function isOAuth2Configured() {
   return !!(process.env.OUTLOOK_CLIENT_ID && process.env.OUTLOOK_CLIENT_SECRET && process.env.OUTLOOK_REFRESH_TOKEN && process.env.OUTLOOK_EMAIL);
 }
 
@@ -23,7 +23,7 @@ function redactEmail(email) {
   return `${user.slice(0, 2)}***@${domain}`;
 }
 
-async function getGraphAccessToken() {
+export async function getGraphAccessToken() {
   const res = await fetch(GRAPH_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
