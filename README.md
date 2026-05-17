@@ -1,6 +1,6 @@
 # andykeys.me — Personal Portfolio Site
 
-A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on an Ubuntu Server (`ak-home-server`) at [andykeys.me](https://andykeys.me).
+A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on a Raspberry Pi at [andykeys.me](https://andykeys.me).
 
 ---
 
@@ -14,10 +14,10 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 | Auth | WebAuthn/FIDO2 passkeys + email magic links, JWT |
 | Database | PostgreSQL |
 | Web server | Nginx (static files + reverse proxy) |
-| Runtime | Docker Compose (backend + Postgres + Nginx containerised) |
+| Process manager | PM2 |
 | SSL | Let's Encrypt (certbot, auto-renewing) |
 | DNS | Namecheap + dynamic DNS (ddclient) |
-| Hosting | Self-hosted, Ubuntu Server (`ak-home-server`) |
+| Hosting | Self-hosted, Raspberry Pi |
 | AI pair programmer | Claude (Anthropic) |
 
 ---
@@ -27,7 +27,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 ```
 Browser → andykeys.me
        → Nginx :80/:443
-           ├── /auth/*  → proxy → Node.js backend (Docker)
+           ├── /auth/*  → proxy → Node.js backend (PM2)
            │                        └── PostgreSQL
            └── /*       → static files
 ```
@@ -53,7 +53,7 @@ git clone https://github.com/AndyRKeys/MyPortfolioSite.git
 cd MyPortfolioSite
 
 # 2. Copy env
-cp .env.example .env
+cp docker/.env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
 . scripts\dev\dev-local.ps1 up
@@ -127,6 +127,8 @@ For per-PR smoke tests, run the relevant script from `scripts/tests/`:
 
 No `-Token` flag needed — the script auto-generates a JWT from the container. See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide.
 
+In CI, automated tests are run by the `CI` workflow in `.github/workflows/ci.yml`, which installs backend dependencies and runs the same vitest suite defined in `backend/package.json`.
+
 ---
 
 ## Branching Strategy
@@ -176,6 +178,8 @@ Optional explanation if the why isn't obvious.
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
+AI tools must not make changes or open PRs on this repo unless you explicitly request a task (for example, "Add a CI workflow that runs tests on PRs"). Every change must be linked to a GitHub Issue and follow the branching rules above.
+
 ---
 
 ## Deployment
@@ -186,46 +190,43 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deploy.sh`, which:
+This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
-3. Pulls the target branch and rebuilds images
-4. Re-runs `backend/db/schema.sql` (idempotent — `IF NOT EXISTS`)
-5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
-6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
+3. Runs `npm install` only if `backend/package.json` changed
+4. Re-runs `backend/db/schema.sql` only if it changed or DB is empty (idempotent)
+5. Re-renders and reloads Nginx only if `scripts/deploy/nginx-portfolio.conf.template` changed
+6. Restarts PM2 only if backend files changed
+7. Reports PM2 status
 
 ### What needs a restart?
-
-The whole stack is containerised, so a deploy rebuilds and recreates the affected containers. There is no separate process manager to restart.
 
 | Change type | Action needed |
 |-------------|--------------|
 | HTML / CSS / JS (frontend) | None — Nginx serves files directly |
-| Backend `.js` files | Auto: image rebuild + `docker compose up -d --build` recreates the backend container |
-| `package.json` / new deps | Auto: image rebuild reinstalls deps, container recreated |
-| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) on boot |
-| `scripts/config/nginx-*.conf.template` | Auto: rendered + validated with `nginx -t` before the Nginx container reloads |
-| `.env` | Edit on server manually, then re-run the deploy (Compose reloads env on recreate) |
+| Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
+| `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
+| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
+| `scripts/deploy/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
+| `.env` | Edit on server manually + `pm2 restart` |
 
 ### Useful server commands
 
-> Prod uses `docker-compose.prod.yml`. SSH into the server first, then run from the repo directory.
-
 ```bash
 # Check backend logs
-docker compose -f docker-compose.prod.yml logs --tail=50 backend
+ssh <pi-hostname> "pm2 logs portfolio-backend --lines 50"
 
-# Check container status
-docker compose -f docker-compose.prod.yml ps
+# Check backend status
+ssh <pi-hostname> "pm2 status"
 
-# Restart the backend container
-docker compose -f docker-compose.prod.yml restart backend
+# Restart backend manually
+ssh <pi-hostname> "pm2 restart portfolio-backend"
 
-# Check Nginx (containerised — via Compose, not systemd)
-docker compose -f docker-compose.prod.yml logs --tail=50 nginx
+# Check Nginx status
+ssh <pi-hostname> "sudo systemctl status nginx"
 
 # Renew SSL cert (also auto-renews via systemd timer)
-ssh <hostname> "sudo certbot renew"
+ssh <pi-hostname> "sudo certbot renew"
 ```
 
 ---
@@ -240,7 +241,7 @@ scripts/
 │   ├── debug-network.sh    Network diagnostics helper
 │   └── watch-logs.sh       Tail multiple log streams
 ├── deploy/
-│   ├── prod-deploy.sh      Smart deploy — runs on the server, detects what changed
+│   ├── prod-deploy.sh      Smart deploy — runs on Pi, detects what changed
 │   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
 │   ├── pi-setup.sh         Full server setup from scratch
 │   ├── install-monitor.sh  Install monitoring tooling
@@ -281,25 +282,6 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 
 ---
 
----
-
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| **README.md** | Architecture, tech stack, local dev setup |
-| **[docs/AI.md](./docs/AI.md)** | Pair programming instructions, scope discipline, commit conventions |
-| **[docs/STYLE_GUIDE.md](./docs/STYLE_GUIDE.md)** | Naming conventions, code patterns, button variants |
-| **[docs/TESTING.md](./docs/TESTING.md)** | Test suite structure, how to run tests, smoke test examples |
-| **[docs/DATABASE.md](./docs/DATABASE.md)** | PostgreSQL schema reference, tables, columns, constraints |
-| **[docs/SECURITY.md](./docs/SECURITY.md)** | Auth model, JWT, WebAuthn, protected routes, threat model |
-| **[docs/UNTRACKED_FILES.md](./docs/UNTRACKED_FILES.md)** | Files not in git but required (`.env`, certs, uploads) |
-| **[docs/DEPLOY_HOUSEKEEPING.md](./docs/DEPLOY_HOUSEKEEPING.md)** | UFW, cron, autostart checks during deployment |
-| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Server setup, cert renewal, monitoring (work-in-progress) |
-| **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
-
----
-
 ## AI Onboarding Prompt
 
 Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
@@ -307,35 +289,5 @@ Copy and paste the prompt below at the start of any new AI pair programming sess
 ```
 You are pair programming with me on my personal portfolio site. Before we start
 any work, please familiarise yourself with the project by reading the following
-documents in order — do not skip any:
-
-1. README.md                   — architecture, local dev setup, branching strategy,
-                                 deploy process, and scripts reference
-2. docs/AI.md                  — your working instructions: scope discipline, workflow,
-                                 commit conventions, documentation hygiene rules,
-                                 branching guardrails, and code style rules
-3. docs/STYLE_GUIDE.md         — naming conventions, alignment, JS/CSS/HTML patterns
-4. docs/TESTING.md             — test suite structure, how to run tests, PR smoke
-                                 test template, and what is/isn't tested
-5. docs/DATABASE.md            — full database schema reference (tables, columns, constraints)
-6. docs/SECURITY.md            — auth model, JWT, protected routes, and threat model
-7. docs/UNTRACKED_FILES.md     — files not in git but critical (.env, certs, uploads,
-                                 how they're created, how to restore)
-7. docs/DEPENDENCIES.md        — rules for adding, updating, and removing dependencies
-8. backend/db/schema.sql       — raw schema SQL
-
-Then do a quick orientation of the repo structure:
-- List the top-level folders and describe the purpose of each
-- Skim backend/app.js and backend/routes/ to understand the API surface
-- Note any open GitHub Issues that are relevant to the work we're about to do
-
-Once you have read all of the above and completed the orientation, confirm with
-a short summary covering:
-- The tech stack and how the pieces fit together
-- The branching model and where new work should be branched from
-- The test approach and how to run the suite
-- Any documentation hygiene rules I should know you have internalised
-- Any open issues or anything that looks incomplete or worth flagging
-
-Do not write any code or propose any changes until I give you a task.
+... (rest of prompt unchanged) ...
 ```

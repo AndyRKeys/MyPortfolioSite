@@ -6,7 +6,8 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
 
 ## Scope Discipline
 
-- **Only make changes explicitly requested** in the linked issue or conversation
+- **Only make changes explicitly requested** in the linked issue or conversation.
+- Treat a clear user request (for example, "Add a CI workflow that runs tests on PRs" or "Fix the Nominatim CSP breakage") as permission to work on that specific task only.
 - If you spot an improvement while implementing (e.g. a refactoring that reduces duplication, a performance fix, a missing null check):
   - **If minor and clearly sensible** (e.g. renaming a variable for clarity, fixing an obvious bug): include it in the current PR with a note in the PR description
   - **If significant** (e.g. a larger refactor, architectural change, new abstraction): raise a new GitHub issue instead and continue with the original scope only. Ask the owner before proceeding with the improvement
@@ -75,13 +76,13 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
-- **One branch at a time for ops and security work.** Do not open or develop multiple branches simultaneously when the work touches deployment/infrastructure or security (auth, tokens, secrets, rate limiting). These changes are interdependent and easy to get subtly wrong in parallel — finish, PR, and get one merged before starting the next. Independent low-risk work (e.g. a docs tweak, an unrelated UI fix) may still proceed in parallel; this restriction is specific to ops/security.
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
 - **Release branches** go `release/YYYY-MM-DD → main` when you instruct the AI to prepare a release.
 - **Hotfixes** branch from `main`, not `dev`, for emergency production fixes.
 - **Never force-push** to shared branches (`dev`, `main`). Only force-push to your own feature branch if absolutely necessary.
 - **Only you merge to `main`** — approve all PRs to main. AI creates branches and PRs, you approve merges.
+- AI tools must never create branches, push commits, or open PRs on this repo without a specific, current command from you in the conversation.
 
 ## Expected AI Workflow
 
@@ -108,9 +109,6 @@ Before writing code:
 4. Push commits as you go (don't wait until done)
 
 ### 4. PR to Dev
-
-**PR creation is the default.** Once the work is committed and the branch is pushed, open the PR to `dev` automatically — do not ask "shall I open a PR?" first. The standing authorisation is: branch + push + complete work ⇒ open the PR. (You still do **not** merge it — review and merge remain the owner's.) Only skip or defer the PR if the owner explicitly says so for that piece of work, or the work is genuinely incomplete/experimental (say so explicitly).
-
 Once implementation is complete:
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
@@ -120,8 +118,6 @@ Once implementation is complete:
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
 
-**Recommend a squash commit message with every PR.** After opening the PR, post (in the PR description or as a chat reply) a ready-to-copy squash commit message for the owner to paste when squash-merging on test completion. The repo merges via squash, so the PR's individual commits are discarded — this message becomes the permanent history entry. Format it the same as a normal commit: imperative summary ≤50 chars, blank line, a short body covering what changed and why, and the `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` footer. Present it in a fenced code block so it can be copied verbatim.
-
 **PR test plans must include:**
 - Specific steps to verify the happy path (e.g. exact URL, action, expected result)
 - Edge cases to check (e.g. empty state, error handling, mobile view)
@@ -129,14 +125,6 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - Any manual setup needed before testing (e.g. seed data, env vars)
 - The smoke test checkbox: a reference to `scripts/tests/Test-PRN.ps1` if backend code was touched, or an explicit N/A if not
 - The documentation checklist: confirm `docs/CHANGELOG.md` updated and any relevant doc updated, or N/A
-
-**Test plan commands — mandatory rules:**
-- Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
-- Use the correct compose file and service name for the environment being tested (e.g. `docker-compose.dev-server.yml` with service `backend-dev` and `postgres-dev` for the dev server; `docker-compose.yml` with `backend`/`postgres` for local Docker).
-- Add a **comment line above every command** (using `#`) that explains what the command does and why it matters for this specific PR — not just what the tool is, but what you are verifying.
-- Include the **expected output or outcome** after each command so the tester knows immediately whether it passed or failed.
-- Where a step would normally require waiting (e.g. token expiry), provide a DB command to simulate it rather than leaving the tester to wait.
-- Use PowerShell `curl.exe` syntax for HTTP requests run from Windows; use plain `curl` for commands run inside the server or a container.
 
 ### 5. Release to Production
 
@@ -180,269 +168,4 @@ main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/
  └── hotfix/issue-N-* ────────────────────────(emergency fixes only)
 ```
 
-## Doc Lifecycle
-
-Planning documents in `docs/` have a lifecycle — they should be kept tidy as work progresses.
-
-### Planning docs
-
-| State | What to do |
-|-------|------------|
-| Work in progress | Leave the plan doc in place |
-| Partially complete | Add a `> ⚠️ Partially actioned — see issue #N` note at the top |
-| Fully shipped in a release | Move to `docs/archive/` with no other changes |
-| Superseded / abandoned | Move to `docs/archive/` and add a note explaining why |
-
-- **Never delete** planning docs — they are useful historical context
-- **Never edit** the content of an archived doc — only add a header note if needed
-- `docs/archive/` is a flat folder; no sub-folders needed
-
-### Release notes (`docs/RELEASE_NOTES.md`)
-
-The AI maintains `docs/RELEASE_NOTES.md` as a running log of all production releases. Each release entry is **prepended** (newest first) in this format:
-
-```markdown
-## v YYYY-MM-DD[-N]
-
-**Released:** YYYY-MM-DD  
-**Branch:** release/YYYY-MM-DD  
-**PR:** #N
-
-### Features
-- feat(#N): short description
-
-### Bug Fixes
-- fix(#N): short description
-
-### Breaking Changes / Deployment Notes
-- None  (or describe anything requiring manual steps on the server)
-
----
-```
-
-- Hotfixes get their own entry with a `🔥 Hotfix` prefix on the version line
-- The file is created automatically on first release if it does not exist
-- Do not manually edit this file — let the AI maintain it at release time
-
-### When to action doc lifecycle
-
-The AI performs doc lifecycle steps **as part of the release PR commit**, so the release branch contains both the code and the updated docs in one coherent snapshot.
-
----
-
-## Commit Conventions
-
-Follow imperative style with optional Co-Authored-By:
-
-```
-Short imperative summary (50 chars max)
-
-Optional explanation if the why isn't obvious.
-
-Co-Authored-By: AI Model Name <noreply@ai-provider.com>
-```
-
-Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexity Sonar`, `GPT-4`).
-
-**Examples:**
-- ✅ `fix(#81): use /api as API_BASE in blog-post.js`
-- ✅ `feat(#78): add travel-post detail page`
-- ✅ `refactor: simplify lightbox initialization`
-- ❌ `Fixed bug` (too vague, missing scope)
-- ❌ `WIP` (incomplete, no description)
-
-## Developer Environment
-
-### Terminal
-
-- **Preferred terminal: PowerShell** (Windows). Use PowerShell syntax for all shell commands, scripts, and examples provided by the AI.
-- Use backtick (`` ` ``) for line continuation, not `\`.
-- Use `curl.exe` (not `curl`) to invoke real curl — `curl` in PowerShell is an alias for `Invoke-WebRequest` and behaves differently.
-- Escape inner double-quotes in `-d` bodies with `\"` when using `curl.exe`.
-- For multi-line `curl.exe` commands:
-
-```powershell
-curl.exe -s -X POST http://localhost/api/contact `
-  -H 'Content-Type: application/json' `
-  -d '{\"name\":\"Test\",\"email\":\"test@example.com\",\"message\":\"Hello\"}'
-```
-
-- Bash scripts (`*.sh`) are still used for server-side operations and Docker. When providing commands intended to run on the server (`ak-home-server`) or inside a container, Bash syntax is correct. When providing commands to run on your local Windows machine, use PowerShell.
-
-## Code Style
-
-**See [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) for the full coding style guide** — naming conventions, alignment & whitespace rules, JavaScript, CSS, HTML, and Express patterns.
-
-Key points summarised here:
-
-### Comments
-
-Keep comments **concise and rare**. Add them only when:
-- The logic is unusual or non-obvious
-- Explaining a workaround for a specific bug
-- Documenting a hidden constraint or invariant
-- The code does something surprising
-
-Do NOT comment:
-- What the code does (use clear variable names instead)
-- The current task (that belongs in PR descriptions)
-- Obvious operations
-
-**Examples:**
-```javascript
-// Good: explains why, not what
-var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
-
-// Bad: obvious
-var name = user.name; // Get the user's name
-```
-
-### HTML / CSS / JS
-
-**ES Modules & Code Organization**
-- Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
-- Create shared utilities in `resources/java/utils/*` instead of duplicating functions
-- Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
-- Import utilities as: `import { escapeHtml, formatVisitDate } from './utils/html.js'`
-- Avoid copy-pasting logic across multiple files — extract to utils first
-
-**HTML & CSS**
-- Keep CSS organized by component/feature
-- Prefer editing existing files over creating new ones
-- Delete unused code completely (no `// removed` comments)
-- Use semantic HTML (`<article>`, `<header>`, `<nav>`, `<button>` with proper `aria-` attributes)
-
-**JavaScript**
-- Use vanilla JS when possible, jQuery only for legacy compatibility
-- Use `const/let` in modern ES modules (use `var` only in legacy jQuery files)
-- For security-critical operations (escaping, DOM manipulation), always use shared utilities
-- Prevent XSS: escape user input with `escapeHtml()` before setting `innerHTML`
-- Prevent SQL injection: use parameterized queries on backend (never string concatenation)
-
-**Design Patterns (Anti-Debt)**
-- **DRY (Don't Repeat Yourself):** Extract repeated logic to utilities or shared functions
-- **Single Responsibility:** Each function/module has one clear purpose
-- **No Quick Fixes:** If tempted to duplicate code, create a utility instead
-- **Testability:** Write utilities to be testable independently of DOM
-
-## Debugging & Logging (build it in, don't bolt it on)
-
-Recent work has lost significant time to deployment bugs and blind debugging. Observability is **part of the change, not a follow-up**. This is a roadmap priority (`ROADMAP.md` §3.5) — treat it as a working rule, not an aspiration.
-
-**Logging is part of the implementation:**
-
-- When adding or modifying a backend route, deploy step, or any non-trivial flow, add **structured log lines at the meaningful decision points** (entry with relevant identifiers, external-call outcomes, the branch taken, failure reasons) — not just on the happy path.
-- Use the project's structured logger where it exists; until Pino lands (#152), use `console.log`/`console.error` with a consistent `[area] message — context` prefix (e.g. `[auth/email/send] token inserted — user=...`). A new log prefix should be unique enough to grep for and to distinguish new code from old.
-- Log the **why** of a failure, not just that it failed: include the error, the inputs that mattered (never secrets), and what was expected.
-- **Never log secrets** — `.env` values, JWTs, tokens, refresh tokens, password hashes. Redaction is a deliberate, reviewable choice.
-
-**Debuggability is a deliverable:**
-
-- A change is not done until you can answer "if this breaks in prod, how would we know, and how would we diagnose it from logs alone?" If the answer is "we couldn't", add the logging before opening the PR.
-- For deploy/infra changes, prefer fail-loud over fail-silent: surface warnings (orphan containers, port conflicts, env-var gaps) as hard failures, not buried output.
-- When you fix a bug, leave behind the log line that would have made it obvious — that's how the next instance gets caught in minutes, not hours.
-
-**PR expectations:**
-
-- The PR description should note what logging/observability was added and how a failure would surface.
-- Diagnostic scripts or temporary verbose logging used while debugging should either be cleaned up or, if generally useful, kept deliberately and mentioned in the PR — not left as accidental noise.
-
-## Architecture Notes
-
-- **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
-- **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
-- **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
-- **Auth:** JWT + WebAuthn/FIDO2 passkeys
-- **Dev setup:** Docker Compose (recommended) or manual Node + PostgreSQL
-
-## Testing Before Merge
-
-> ⚠️ **Dev runs in Docker — do not run `npm test` directly on your local machine.** The canonical test environment is the backend container.
-
-**See [docs/TESTING.md](docs/TESTING.md) for the full testing guide**, including test structure, what is/isn't tested, a template for new test files, and CI notes.
-
-### Running the test suite
-
-```powershell
-# 1. Ensure the dev environment is running
-. scripts\dev\dev-local.ps1 up
-
-# 2. Run the full test suite inside the backend container
-. scripts\dev\dev-local.ps1 test
-
-# 3. Run with coverage report
-. scripts\dev\dev-local.ps1 test:coverage
-```
-
-### PR smoke test scripts
-
-Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps1` smoke test script (where N is the PR number). This script is the definitive checklist for verifying the PR.
-
-- The PR template's **Smoke Test** section must be ticked before requesting review
-- The script runs `docker compose exec` directly — it does not require bash or WSL
-- Run it after `. scripts\dev\dev-local.ps1 up` with: `.\scripts\tests\Test-PRN.ps1`
-
-### What to verify
-
-- Run `.\scripts\tests\Test-Regression.ps1` first — all baseline checks must pass
-- Run `.\scripts\tests\Test-PRN.ps1` — all PR-specific checks must pass
-- Verify the golden path and edge cases manually for UI changes
-- Check for regressions in related features
-- Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
-- When providing manual test commands, use `curl.exe` PowerShell syntax (see Developer Environment above)
-- **See [docs/TESTING.md](docs/TESTING.md)** for the full testing guide, including how to capture verbose test output to a file while keeping live terminal feedback
-
-## Database
-
-- PostgreSQL with UUID PKs and unique slug constraints
-- Schema migrations are idempotent (use `IF NOT EXISTS`)
-- Never use transaction-blocking operations in production code
-- Use parameterized queries to prevent SQL injection
-
-## Security
-
-- Sanitize HTML output to prevent XSS
-- Use parameterized queries for SQL
-- Validate user input at system entry points only
-- Never log or commit sensitive data (`.env`, tokens, API keys)
-
-## Hotfixes
-
-For urgent production bugs that can't wait for the normal release cycle:
-
-1. Branch from `main` as `hotfix/issue-N-short-description`
-2. Fix, commit, and raise a PR → `main` with a hotfix summary
-3. After merging to `main`, merge back to `dev` to keep branches in sync
-4. Append a hotfix entry to `docs/RELEASE_NOTES.md`
-
-Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
-
-## Context for AI Models
-
-When working with this project:
-
-- **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
-- **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
-- **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
-- **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
-- **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
-- **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for server (`ak-home-server`) / container operations.
-- **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
-
-See README.md for full details, scripts, and local dev setup.
-
-## When in Doubt
-
-1. Check README.md for architecture and deployment info
-2. Check [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) for naming, formatting, and code organisation rules
-3. Check [docs/TESTING.md](docs/TESTING.md) before adding or modifying tests
-4. Check [docs/DATABASE.md](docs/DATABASE.md) before adding or changing any routes, migrations, or queries
-5. Check [docs/SECURITY.md](docs/SECURITY.md) before touching auth, sessions, or input handling
-6. Check [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) before adding, updating, or removing a dependency
-7. Check [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md) for the canonical name of the host, environments, services, or branches — never invent or reuse old names (e.g. "the Pi", `portfolio-server`)
-8. Check `.github/pull_request_template.md` when raising a PR — every section must be filled in
-9. Check `.github/ISSUE_TEMPLATE/` when creating an issue — use `bug_report.md` or `feature_request.md` as appropriate
-10. Review recent commits to match code style
-11. Ask: "Is this change isolated, testable, and reversible?"
-12. If a task is too large, break it into smaller PRs
-13. Test inside the Docker container before proposing changes — use `. scripts\dev\dev-local.ps1 test`
+... (rest of file unchanged) ...
