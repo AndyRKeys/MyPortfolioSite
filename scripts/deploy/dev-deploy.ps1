@@ -40,14 +40,28 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $SkipRegression) {
     Write-Host ""
-    Write-Host "Fetching LAN_IP from dev server for regression tests..." -ForegroundColor Cyan
-    $lanIp = ssh $Hostname "grep '^LAN_IP=' ~/MyPortfolioSite-dev/.env 2>/dev/null | cut -d= -f2 | head -1"
-    $lanIp = $lanIp.Trim()
+    Write-Host "Fetching WEBAUTHN_HOST and JWT from dev server for regression tests..." -ForegroundColor Cyan
 
-    if ($lanIp) {
-        $baseUrl = "https://${lanIp}:3001"
+    $devHost = ssh $Hostname "grep '^WEBAUTHN_HOST=' ~/MyPortfolioSite-dev/.env 2>/dev/null | cut -d= -f2 | head -1"
+    $devHost = $devHost.Trim()
+
+    # Generate JWT on the remote server so it is signed with the server's actual JWT_SECRET
+    $token = ssh $Hostname @'
+source <(grep -E '^JWT_SECRET=' ~/MyPortfolioSite-dev/.env 2>/dev/null)
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml exec -T backend-dev \
+  node -e "
+    const jwt = require('jsonwebtoken');
+    if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET\n'); process.exit(1); }
+    console.log(jwt.sign({ userId: 'dev-test-user' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
+  " 2>/dev/null
+'@
+    $token = ($token -split "`n" | Where-Object { $_ -match '^eyJ' } | Select-Object -Last 1).Trim()
+
+    if ($devHost) {
+        $baseUrl = "https://${devHost}:3001"
         Write-Host "Running regression tests against $baseUrl..." -ForegroundColor Cyan
-        & "$PSScriptRoot\..\tests\Test-Regression.ps1" -BaseUrl $baseUrl -Insecure -SkipSecurity -ComposeService backend-dev
+        $tokenArgs = if ($token) { @('-Token', $token) } else { @() }
+        & "$PSScriptRoot\..\tests\Test-Regression.ps1" -BaseUrl $baseUrl -Insecure -SkipSecurity @tokenArgs
         if ($LASTEXITCODE -ne 0) {
             Write-Host ""
             Write-Host "Regression tests failed — site is live but smoke checks did not pass." -ForegroundColor Red
@@ -55,6 +69,6 @@ if (-not $SkipRegression) {
             exit 1
         }
     } else {
-        Write-Host "Could not read LAN_IP from dev server .env — skipping regression tests." -ForegroundColor Yellow
+        Write-Host "Could not read WEBAUTHN_HOST from dev server .env — skipping regression tests." -ForegroundColor Yellow
     }
 }
