@@ -41,6 +41,7 @@ For a high-level view of where the project is heading and current priorities, se
 ## Local Development
 
 ### Prerequisites
+- Docker Desktop (recommended)
 - A passkey-capable browser (Chrome, Safari, Edge)
 - Node.js 20+ only needed if running without Docker
 
@@ -76,7 +77,7 @@ Services start in ~30s. PostgreSQL schema auto-initializes on first run. Backend
 
 Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
 
-### dev-local.ps1 Reference
+### dev-local.ps1 Reference (fall-back only)
 
 ```powershell
 . scripts\dev\dev-local.ps1 up             # Build & start all containers
@@ -84,9 +85,15 @@ Visit `http://localhost/setup.html` to create the admin account and register you
 . scripts\dev\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
 . scripts\dev\dev-local.ps1 logs           # Tail backend container logs
 . scripts\dev\dev-local.ps1 db             # Open a psql shell into the dev DB
-. scripts\dev\dev-local.ps1 test           # Run automated test suite in container (fallback only)
-. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report (fallback only)
+. scripts\dev\dev-local.ps1 test           # Run automated test suite in container
+. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report
 ```
+
+**Troubleshooting:**
+- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
+- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
+- **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
+- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email; the contact handler will return 500 in dev but validation tests will still pass
 
 ### Setup (Manual without Docker)
 
@@ -275,6 +282,12 @@ Copy `backend/.env.example` and fill in values. **Never commit `.env`.**
 | `FRONTEND_URL` | CORS allowed origin |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email magic link sending |
 | `ADMIN_EMAIL` | Address magic links are sent to |
+
+---
+
+## Outstanding Issues
+
+Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPortfolioSite/issues).
 
 ---
 
