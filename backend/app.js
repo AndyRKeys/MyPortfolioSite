@@ -33,7 +33,13 @@ export function createApp() {
   // HTTP request logging + per-request child logger (req.log) — must be
   // first so even CORS-rejected requests are recorded with method/path/
   // status/latency. Secret redaction is configured in utils/logger.js.
-  app.use(pinoHttp({ logger }));
+  // Health check polls every 10s — demote to trace so they don't flood
+  // info-level logs; visible only when LOG_LEVEL=trace.
+  app.use(pinoHttp({
+    logger,
+    customLogLevel: (req, res) =>
+      req.url === '/health' ? 'trace' : res.statusCode >= 500 ? 'error' : 'info',
+  }));
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
 
