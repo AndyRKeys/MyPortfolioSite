@@ -52,7 +52,7 @@ The canonical environment for development and testing is the shared dev server o
 When working on a feature or fix:
 - Use the usual git branching model (`feature/issue-N-*` / `fix/issue-N-*` from `dev`)
 - Push your branch and open a PR to `dev` as soon as there is something to test
-- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and any server notes in the docs folder) to run the latest `dev` branch on the server for manual testing
+- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and `docs/DEV_ENVIRONMENT.md`) to run the latest `dev` branch on the server for manual testing
 
 ### Local Docker dev (fallback only)
 
@@ -302,7 +302,9 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 | **[docs/DATABASE.md](./docs/DATABASE.md)** | PostgreSQL schema reference, tables, columns, constraints |
 | **[docs/SECURITY.md](./docs/SECURITY.md)** | Auth model, JWT, WebAuthn, protected routes, threat model |
 | **[docs/UNTRACKED_FILES.md](./docs/UNTRACKED_FILES.md)** | Files not in git but required (`.env`, certs, uploads) |
-| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Server setup, cert renewal, monitoring (work-in-progress) |
+| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Host-level infra, both environments, backups, Dropbear unlock |
+| **[docs/DEV_ENVIRONMENT.md](./docs/DEV_ENVIRONMENT.md)** | Dev server Docker stack, dev `.env`, dev deploy scripts |
+| **[docs/PROD_ENVIRONMENT.md](./docs/PROD_ENVIRONMENT.md)** | Prod Docker stack, prod `.env`, prod deploy scripts |
 | **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
 
 ---
