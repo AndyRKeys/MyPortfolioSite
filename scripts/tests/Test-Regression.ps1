@@ -15,26 +15,36 @@
     Base URL of the running dev server. Defaults to http://localhost.
 
 .PARAMETER SkipVitest
-    Skip the Vitest unit/integration suite (useful for quick smoke runs).
+    Skip the Vitest unit/integration suite. Defaults to true because Vitest now
+    runs automatically inside the deployed container during every deploy (deploy-lib.sh
+    run_deploy_tests). Only set -SkipVitest:$false if you need to run it manually.
 
 .PARAMETER SkipSecurity
     Skip the security headers check (scripts/ops/security-debug-report.sh).
 
+.PARAMETER Insecure
+    Pass -k to curl — required for dev server (self-signed certificate).
+    Set automatically by dev-deploy.ps1; not needed for prod.
+
 .EXAMPLE
-    # Standard run — Vitest + security + all regression checks
+    # Standard run against local Docker (security headers + HTTP smoke tests)
     . scripts\tests\Test-Regression.ps1
 
-    # Skip Vitest (faster)
-    . scripts\tests\Test-Regression.ps1 -SkipVitest
+    # Against dev server (self-signed cert)
+    . scripts\tests\Test-Regression.ps1 -BaseUrl https://192.168.1.x:3001 -Insecure
 
-    # Skip security check (e.g. running against non-localhost target)
-    . scripts\tests\Test-Regression.ps1 -SkipSecurity
+    # Against prod
+    . scripts\tests\Test-Regression.ps1 -BaseUrl https://andykeys.me
+
+    # Include Vitest (only needed if running standalone, not post-deploy)
+    . scripts\tests\Test-Regression.ps1 -SkipVitest:$false
 #>
 param(
     [string]$Token      = '',
     [string]$BaseUrl    = 'http://localhost',
-    [switch]$SkipVitest,
-    [switch]$SkipSecurity
+    [switch]$SkipVitest = $true,
+    [switch]$SkipSecurity,
+    [switch]$Insecure
 )
 
 # ── Output capture — console AND timestamped file ─────────────────────────────────
@@ -64,6 +74,7 @@ console.log(jwt.sign({ userId: 'dev-test-user' }, process.env.JWT_SECRET, { expi
 }
 
 $pass = 0; $fail = 0; $skip = 0; $results = @()
+$curlInsecure = if ($Insecure) { @('-k') } else { @() }
 
 # ── Test-Endpoint helper ─────────────────────────────────────────────────────────────────
 function Test-Endpoint {
@@ -83,7 +94,7 @@ function Test-Endpoint {
         $script:results += [PSCustomObject]@{ Result = 'SKIP'; Name = $Name; Detail = 'No token' }
         return
     }
-    $curlArgs = @('-s', '-o', 'tmp_body.txt', '-w', '%{http_code}', '-X', $Method)
+    $curlArgs = @('-s', '-o', 'tmp_body.txt', '-w', '%{http_code}', '-X', $Method) + $curlInsecure
     foreach ($h in $Headers) { $curlArgs += @('-H', $h) }
     if ($Body) { $curlArgs += @('-d', $Body) }
     $curlArgs += $Url

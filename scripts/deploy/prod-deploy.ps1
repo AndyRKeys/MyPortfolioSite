@@ -1,38 +1,55 @@
 # Trigger a production deploy from Windows via SSH.
-# Uses switch-branch.sh to update the repo to the target branch first,
-# then runs prod-deploy.sh — so the deploy always executes the current
-# version of the scripts, not whatever was checked out before the pull.
+# Connects to the server, runs prod-deploy.sh, then runs regression smoke tests
+# from this machine against the live site.
 #
 # IMPORTANT: If the server has rebooted, decrypt it first via Dropbear:
 #   ssh -p 2222 root@ak-home-server
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
-# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>]
+# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = 'main',
-    [string]$Rollback = ''
+    [string]$Rollback = '',
+    [switch]$SkipRegression
 )
 
 $remoteArgs = @()
 if ($Branch)   { $remoteArgs += "--branch $Branch" }
 if ($Rollback) { $remoteArgs += "--rollback $Rollback" }
 
-Write-Host "Deploying branch '$Branch' to prod server..." -ForegroundColor Green
-
 $remoteCommand = @"
-PROD_REPO=`$~/MyPortfolioSite
-BRANCH="$Branch"
-
-# Switch to the requested branch (fetch + hard reset to origin)
-bash "`$PROD_REPO/scripts/deploy/switch-branch.sh" "`$BRANCH" "`$PROD_REPO"
-
-# Run the deploy with the now-current scripts
-bash "`$PROD_REPO/scripts/deploy/prod-deploy.sh" $($remoteArgs -join ' ')
+cd ~/MyPortfolioSite
+bash scripts/deploy/prod-deploy.sh $($remoteArgs -join ' ')
 "@
 
-# Strip CRLF — bash on the server rejects Windows line endings
-$remoteCommand = $remoteCommand -replace "`r`n", "`n"
+Write-Host "Deploying branch '$Branch' to prod server..." -ForegroundColor Green
 
 ssh $Hostname $remoteCommand
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Deploy failed — skipping regression tests." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+if (-not $SkipRegression -and -not $Rollback) {
+    Write-Host ""
+    Write-Host "Fetching DOMAIN from prod server for regression tests..." -ForegroundColor Cyan
+    $domain = ssh $Hostname "grep '^DOMAIN=' ~/MyPortfolioSite/.env 2>/dev/null | cut -d= -f2"
+    $domain = $domain.Trim()
+
+    if ($domain) {
+        $baseUrl = "https://${domain}"
+        Write-Host "Running regression tests against $baseUrl..." -ForegroundColor Cyan
+        & "$PSScriptRoot\..\tests\Test-Regression.ps1" -BaseUrl $baseUrl
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "Regression tests failed — site is live but smoke checks did not pass." -ForegroundColor Red
+            Write-Host "Run .\scripts\tests\Test-Regression.ps1 -BaseUrl $baseUrl for details." -ForegroundColor Yellow
+            exit 1
+        }
+    } else {
+        Write-Host "Could not read DOMAIN from prod server .env — skipping regression tests." -ForegroundColor Yellow
+    }
+}
