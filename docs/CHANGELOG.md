@@ -20,6 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `docs/TERMINOLOGY.md` — canonical names for host, hostnames, environments, services, and branches; wired into the onboarding doc lists
 - Structured backend logging via `pino` + `pino-http` (#153): severity levels, per-request HTTP log line (method/path/status/latency), `LOG_LEVEL` env var (default `info`), and centralised secret redaction (auth headers, tokens, passwords, refresh tokens). Shared logger at `backend/utils/logger.js`
 - Docker `json-file` log rotation on all services in all three compose files: `10m / 3 files` (local dev), `20m / 5 files` (prod + dev-server) — prevents unbounded disk growth from structured log output
+- Server-side admin guard on `POST /auth/setup` (#274): registration now requires `ADMIN_EMAIL` to be configured and the submitted email to match; wrong-email and not-configured both fail with a generic 403 to avoid enumeration. Registration remains a one-time operation and still refuses if any user already exists
 
 ### Changed
 - Regression tests moved server-side: `scripts/tests/Test-Regression.ps1` replaced by `test-regression.sh`; `dev-deploy.ps1` / `prod-deploy.ps1` stripped to thin SSH wrappers. Deploy scripts reach the running site via curl `--resolve` (server can't route to its own public DNS name); regression failure now always prints the report and exits non-zero rather than aborting silently
@@ -69,7 +70,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
-## Hotfix 2026-05-06
+## Release 2026-05-06
 
 ### Fixed
 - Admin page completely non-functional — `initDeploySection()` declared twice in `admin.js` causing a `SyntaxError` that prevented the entire file from parsing (#144)
