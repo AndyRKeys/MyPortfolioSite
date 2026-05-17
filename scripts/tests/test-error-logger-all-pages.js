@@ -42,7 +42,9 @@ try {
   isInsideDocker = false;
 }
 
-const testBaseUrl = isInsideDocker ? baseUrl.replace(/https?:\/\/[^:]+/, 'https://nginx-dev') : baseUrl;
+// Inside Docker, reach nginx by its compose service name; show the original URL to the user
+const testBaseUrl = isInsideDocker ? baseUrl.replace(/https?:\/\/[^:/]+/, 'https://nginx-dev') : baseUrl;
+const displayUrl = baseUrl;
 
 let browser;
 const results = {
@@ -54,7 +56,7 @@ const results = {
 async function runTest() {
   try {
     console.log(`\n🧪 Error Logger Site-Wide Test`);
-    console.log(`📍 Testing all pages on: ${testBaseUrl}\n`);
+    console.log(`📍 Testing all pages on: ${displayUrl}\n`);
 
     browser = await puppeteer.launch({
       headless: 'new',
@@ -164,43 +166,45 @@ async function testPage(page, pagePath) {
   }
 }
 
-function printResults() {
-  console.log(`\n${'='.repeat(70)}`);
-  console.log(`📊 RESULTS — Error Logger Coverage Across All Pages`);
-  console.log(`${'='.repeat(70)}\n`);
+const DIVIDER = '═'.repeat(70);
+const THIN    = '─'.repeat(70);
 
-  // Summary table
+function printResults() {
   const pageEntries = Object.entries(results.pages);
   const loadedCount = pageEntries.filter(([, r]) => r.errorLoggerLoaded).length;
   const totalPages = pageEntries.length;
+  const allPassed = results.failed.length === 0;
+
+  console.log(`\n${DIVIDER}`);
+  console.log(`📊 RESULTS — Error Logger Coverage Across All Pages`);
+  console.log(`${DIVIDER}\n`);
 
   console.log(`Coverage: ${loadedCount}/${totalPages} pages have error-logger loaded\n`);
 
-  // Details
   console.log(`${'Page'.padEnd(20)} ${'Status'.padEnd(8)} ${'Logger'.padEnd(10)} ${'Errors'.padEnd(8)} ${'Sent'}`);
-  console.log(`${'-'.repeat(70)}`);
+  console.log(THIN);
 
-  for (const [key, result] of pageEntries) {
+  for (const [, result] of pageEntries) {
     const statusStr = result.status === 200 ? '✓ 200' : `✗ ${result.status}`;
     const loggerStr = result.errorLoggerLoaded ? '✓ Yes' : '✗ No';
     const errorsStr = String(result.consoleErrors > 0 ? result.consoleErrors : '—');
-    const sentStr = String(result.errorsSent > 0 ? result.errorsSent : '—');
+    const sentStr   = String(result.errorsSent > 0 ? result.errorsSent : '—');
 
     console.log(
       `${result.path.padEnd(20)} ${statusStr.padEnd(8)} ${loggerStr.padEnd(10)} ${errorsStr.padEnd(8)} ${sentStr}`
     );
   }
 
-  console.log(`\n${'='.repeat(70)}`);
+  console.log(`\n${DIVIDER}`);
 
-  if (results.failed.length === 0) {
+  if (allPassed) {
     console.log(`✅ All checks passed: ${results.passed.length}`);
-    console.log(`${'='.repeat(70)}\n`);
+    console.log(`${DIVIDER}\n`);
     process.exit(0);
   } else {
     console.log(`❌ Failed: ${results.failed.length}`);
     results.failed.forEach((r) => console.log(`   • ${r}`));
-    console.log(`${'='.repeat(70)}\n`);
+    console.log(`${DIVIDER}\n`);
     process.exit(1);
   }
 }
