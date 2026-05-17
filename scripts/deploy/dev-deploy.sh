@@ -215,6 +215,7 @@ if [ "$SKIP_REGRESSION" = "0" ]; then
     --compose-file "$COMPOSE_FILE" \
     --service backend-dev \
     --insecure \
+    --reset-rate-limits \
     2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
 fi
 

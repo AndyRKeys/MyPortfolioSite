@@ -32,15 +32,17 @@ COMPOSE_FILE=""
 SERVICE="backend"
 INSECURE=""
 RESOLVE=""
+RESET_RL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base-url)      BASE_URL="$2";      shift 2 ;;
-    --token)         TOKEN="$2";         shift 2 ;;
-    --compose-file)  COMPOSE_FILE="$2";  shift 2 ;;
-    --service)       SERVICE="$2";       shift 2 ;;
-    --insecure)      INSECURE="-k";      shift   ;;
-    --resolve)       RESOLVE="$2";       shift 2 ;;
+    --base-url)           BASE_URL="$2";      shift 2 ;;
+    --token)              TOKEN="$2";         shift 2 ;;
+    --compose-file)       COMPOSE_FILE="$2";  shift 2 ;;
+    --service)            SERVICE="$2";       shift 2 ;;
+    --insecure)           INSECURE="-k";      shift   ;;
+    --resolve)            RESOLVE="$2";       shift 2 ;;
+    --reset-rate-limits)  RESET_RL=1;         shift   ;;
     *) shift ;;
   esac
 done
@@ -79,7 +81,27 @@ fi
 PASS=0; FAIL=0; SKIP=0
 TMPFILE=$(mktemp)
 TMPERR=$(mktemp)
-trap 'rm -f "$TMPFILE" "$TMPERR"' EXIT
+
+# Best-effort reset of the DB-backed rate-limit counters via the backend
+# container's own pool (same mechanism as JWT generation). Dev-only — never
+# called for prod, where clearing real visitors' counters is undesirable.
+# Failing open (warn + continue) matches the rate-limit middleware itself.
+reset_rate_limits() {
+  [ "$RESET_RL" = "1" ] || return 0
+  [ -n "$COMPOSE_FILE" ] || return 0
+  if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node -e "
+    import('./db/pool.js')
+      .then(async ({ pool }) => { await pool.query('DELETE FROM rate_limits'); await pool.end(); })
+      .then(() => process.exit(0))
+      .catch((e) => { process.stderr.write(String(e) + '\n'); process.exit(1); });
+  " >/dev/null 2>&1; then
+    echo -e "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Rate-limit counters reset (dev)"
+  else
+    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not reset rate-limit counters — continuing"
+  fi
+}
+
+trap 'rm -f "$TMPFILE" "$TMPERR"; reset_rate_limits' EXIT
 
 check() {
   local name="$1" method="$2" url="$3" expect_status="$4" expect_body="${5:-}"
@@ -143,6 +165,10 @@ printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN"
 echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
 echo ""
 
+# Clean slate so contact validation checks aren't tripped by counters left
+# over from earlier deploys within the rate-limit window (dev only).
+reset_rate_limits
+
 # ── No-auth baseline ─────────────────────────────────────────────────────────────
 
 echo -e "${C_CYAN}${C_BOLD}🔷 ── No-auth baseline ──────────────────────────────────────${C_RESET}"
@@ -200,6 +226,31 @@ check "GET /api/stats/visits without auth returns 401" \
   GET "$BASE_URL/api/stats/visits" 401
 
 echo ""
+
+# ── Rate limiting (dev only) ──────────────────────────────────────────────────────
+# /api/contact is limited to 3 requests/hour. The limiter runs BEFORE validation,
+# so invalid payloads still increment the counter (no emails sent). Reset first
+# for a deterministic window, then prove the 4th request is blocked with 429.
+# Gated on --reset-rate-limits so it only runs where we can reset (dev).
+
+if [ "$RESET_RL" = "1" ]; then
+  echo -e "${C_CYAN}${C_BOLD}🔷 ── Rate limiting ─────────────────────────────────────────${C_RESET}"
+  reset_rate_limits
+
+  for n in 1 2 3; do
+    check "POST /api/contact #$n within limit returns 400" \
+      POST "$BASE_URL/api/contact" 400 "" \
+      -H "Content-Type: application/json" \
+      -d '{"email":"bad","message":"x"}'
+  done
+
+  check "POST /api/contact #4 over limit returns 429" \
+    POST "$BASE_URL/api/contact" 429 "Too many requests" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"bad","message":"x"}'
+
+  echo ""
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────────
 
