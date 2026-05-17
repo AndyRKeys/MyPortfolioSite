@@ -104,16 +104,28 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 . scripts\dev\dev-local.ps1 test | Tee-Object -FilePath "test-results\run-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 ```
 
-### PR validation scripts — use `Start-Transcript` (built in)
+### Regression smoke tests
 
-All scripts in `scripts/tests/` use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
+Regression tests run automatically at the end of every deploy (inside `dev-deploy.sh` / `prod-deploy.sh`). They are defined in `scripts/tests/test-regression.sh` and execute on the server against the live site.
+
+To run them manually on the server:
+
+```bash
+bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
+  --base-url https://dev.andykeys.me:3001 \
+  --compose-file ~/MyPortfolioSite-dev/docker-compose.dev-server.yml \
+  --service backend-dev \
+  --insecure
+```
+
+### PR smoke tests
+
+Every PR that touches backend code should also have a `Test-PR<N>.ps1` script covering the new or changed endpoints. These still run from Windows against the dev server:
 
 ```powershell
 # Output goes to console AND test-results\PR<N>-<timestamp>.txt automatically
-.\scripts\tests\Test-PR<N>.ps1
+.\scripts\tests\Test-PR<N>.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
 ```
-
-The log file path is printed in the script header and footer so you always know where to find it.
 
 ### Setup (one-time)
 

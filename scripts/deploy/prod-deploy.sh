@@ -56,12 +56,15 @@ extra_env_checks() {
 # ── Parse arguments (rollback) ─────────────────────────────────────────────────────────
 
 ROLLBACK_SHA=""
+SKIP_REGRESSION=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --branch)
       BRANCH="$2"; shift 2 ;;
     --rollback)
       ROLLBACK_SHA="$2"; shift 2 ;;
+    --skip-regression)
+      SKIP_REGRESSION=1; shift ;;
     *)
       shift ;;
   esac
@@ -154,6 +157,17 @@ else
 fi
 
 # Secondary HTTPS health is already covered by HEALTH_URL_2 above when set.
+
+# ── Regression smoke tests ─────────────────────────────────────────────────────────────
+
+if [ "$SKIP_REGRESSION" = "0" ] && [ -n "${DOMAIN:-}" ]; then
+  dsection "Regression smoke tests"
+  bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    --base-url "https://${DOMAIN}" \
+    --compose-file "$COMPOSE_FILE" \
+    --service backend \
+    2>&1 | tee -a "$LOG_FILE" || ddie "Regression smoke tests failed — see output above"
+fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 

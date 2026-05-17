@@ -17,6 +17,8 @@ set -euo pipefail
 REPO_DIR="${HOME}/MyPortfolioSite-dev"
 REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
 BRANCH="${1:-dev}"
+SKIP_REGRESSION=0
+for arg in "$@"; do [[ "$arg" == "--skip-regression" ]] && SKIP_REGRESSION=1; done
 COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
 ENV_FILE="${REPO_DIR}/.env"
 ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
@@ -194,6 +196,18 @@ run_deploy_tests backend-dev
 test_error_logger_all_pages
 
 test_csp_reporting
+
+# ── Regression smoke tests ─────────────────────────────────────────────────────────────
+
+if [ "$SKIP_REGRESSION" = "0" ]; then
+  dsection "Regression smoke tests"
+  bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    --base-url "https://${WEBAUTHN_HOST}:3001" \
+    --compose-file "$COMPOSE_FILE" \
+    --service backend-dev \
+    --insecure \
+    2>&1 | tee -a "$LOG_FILE" || ddie "Regression smoke tests failed — see output above"
+fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 
