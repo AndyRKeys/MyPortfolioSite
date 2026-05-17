@@ -1,13 +1,12 @@
-name: CI
+# CI tests are now run inside the deployed container as part of the deploy scripts.
+# Test failures trigger automatic rollback via deploy-lib.sh run_deploy_tests().
+# See scripts/deploy/deploy-lib.sh and issue #270.
+#
+# This workflow is disabled (workflow_dispatch only) — kept for reference.
+name: CI (disabled — tests run in deployment)
 
 on:
-  push:
-    branches:
-      - dev
-  pull_request:
-    branches:
-      - dev
-      - main
+  workflow_dispatch:
 
 jobs:
   tests:
