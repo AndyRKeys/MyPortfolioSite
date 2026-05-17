@@ -186,17 +186,42 @@ check "POST /api/contact invalid email returns 400" \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","email":"not-an-email","message":"hello"}'
 
+check "GET /api/travel returns 200" \
+  GET "$BASE_URL/api/travel" 200
+
 check "GET /api/cv/exists returns 200 with exists field" \
   GET "$BASE_URL/api/cv/exists" 200 "exists"
 
 check "POST /api/stats/visit?page=unknown returns 400" \
   POST "$BASE_URL/api/stats/visit?page=unknown" 400
 
-check "GET /api/health returns 200 with status ok" \
-  GET "$BASE_URL/api/health" 200 "ok"
+# Assert the DB-connectivity flag, not just a shallow ping — a 200 with
+# db!=ok means the backend is up but Postgres is unreachable.
+check "GET /api/health returns 200 with db ok" \
+  GET "$BASE_URL/api/health" 200 '"db":"ok"'
 
 check "Unknown route returns 404" \
   GET "$BASE_URL/api/does-not-exist" 404
+
+echo ""
+
+# ── Auth gating (protected routes must reject anonymous requests) ─────────────────
+# One cheap request each — catches the worst regression: a protected mutating
+# route going public. No token sent; all must be 401.
+
+echo -e "${C_CYAN}${C_BOLD}🔷 ── Auth gating ───────────────────────────────────────────${C_RESET}"
+
+check "GET /api/deploy/status without auth returns 401" \
+  GET "$BASE_URL/api/deploy/status" 401
+
+check "POST /api/upload without auth returns 401" \
+  POST "$BASE_URL/api/upload" 401
+
+check "DELETE /api/posts/1 without auth returns 401" \
+  DELETE "$BASE_URL/api/posts/1" 401
+
+check "DELETE /api/travel/1 without auth returns 401" \
+  DELETE "$BASE_URL/api/travel/1" 401
 
 echo ""
 
