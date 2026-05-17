@@ -22,7 +22,7 @@ if ($Rollback) { $remoteArgs += "--rollback $Rollback" }
 Write-Host "Deploying branch '$Branch' to prod server..." -ForegroundColor Green
 
 $remoteCommand = @"
-PROD_REPO=`$HOME/MyPortfolioSite
+PROD_REPO=`$~/MyPortfolioSite
 BRANCH="$Branch"
 
 # Switch to the requested branch (fetch + hard reset to origin)

@@ -17,7 +17,7 @@ if ([string]::IsNullOrEmpty($Branch)) {
 Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
 
 $remoteCommand = @"
-DEV_REPO=`$HOME/MyPortfolioSite-dev
+DEV_REPO=`$~/MyPortfolioSite-dev
 REPO_URL=https://github.com/AndyRKeys/MyPortfolioSite.git
 BRANCH="$Branch"
 
