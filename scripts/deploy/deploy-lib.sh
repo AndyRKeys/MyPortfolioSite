@@ -723,19 +723,20 @@ compose_up_with_rollback() {
   # defined in the current compose file — these are orphans from a service
   # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
   # but surfacing them first gives a clear record of what was cleaned up.
-  local orphan_check
-  orphan_check=$(docker compose -f "$COMPOSE_FILE" ps --all 2>/dev/null \
-    | grep -v 'NAME\|^$' | awk '{print $1}' || true)
-  local defined_services
-  defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null || true)
-  if [ -n "$orphan_check" ] && [ -n "$defined_services" ]; then
-    while IFS= read -r container; do
-      local svc
-      svc=$(echo "$container" | sed -E 's/.*-([a-z_-]+)-[0-9]+$/\1/' | tr '-' '_')
+  # Ask compose for the service name directly ({{.Service}}) rather than
+  # regex-parsing container names — service names contain hyphens
+  # (backend-dev), which broke the old parser and false-flagged every
+  # running container as an orphan on every deploy.
+  local running_services defined_services
+  running_services=$(docker compose -f "$COMPOSE_FILE" ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
+  defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | sort -u || true)
+  if [ -n "$running_services" ] && [ -n "$defined_services" ]; then
+    while IFS= read -r svc; do
+      [ -z "$svc" ] && continue
       if ! echo "$defined_services" | grep -qxF "$svc"; then
-        dwarn "Orphan container detected: $container (not in current compose file — will be removed)"
+        dwarn "Orphan container detected: service '$svc' (not in current compose file — will be removed)"
       fi
-    done <<< "$orphan_check"
+    done <<< "$running_services"
   fi
 
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
