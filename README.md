@@ -296,6 +296,7 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 | Document | Purpose |
 |----------|---------|
 | **README.md** | Architecture, tech stack, local dev setup |
+| **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Deeper architecture, flows, and component boundaries |
 | **[docs/AI.md](./docs/AI.md)** | Pair programming instructions, scope discipline, commit conventions |
 | **[docs/STYLE_GUIDE.md](./docs/STYLE_GUIDE.md)** | Naming conventions, code patterns, button variants |
 | **[docs/TESTING.md](./docs/TESTING.md)** | Test suite structure, how to run tests, smoke test examples |
