@@ -6,12 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../app.js';
 
-// Mock pg pool — contact route uses it for rate-limit checks
-vi.mock('pg', () => {
-  const query = vi.fn();
-  const Pool  = vi.fn(() => ({ query }));
-  return { default: { Pool }, Pool };
-});
+// Mock pool directly — contact route uses it for rate-limit checks
+vi.mock('../../db/pool.js', () => ({
+  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+}));
 
 // Mock nodemailer so no real SMTP is needed
 vi.mock('nodemailer', () => ({
@@ -24,18 +22,12 @@ vi.mock('nodemailer', () => ({
 
 const app = createApp();
 
-const VALID_CONTACT = {
-  name:    'Alice',
-  email:   'alice@example.com',
-  message: 'Hello there',
-};
-
 describe('POST /contact', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Default: no existing rate-limit record
-    const { Pool } = vi.mocked(await import('pg'));
-    Pool.mock.results[0]?.value.query.mockResolvedValue({ rows: [] });
+    const { pool } = vi.mocked(await import('../../db/pool.js'));
+    pool.query.mockResolvedValue({ rows: [] });
   });
 
   it('returns 400 with error message when name is missing', async () => {
