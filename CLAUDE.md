@@ -86,9 +86,8 @@ npm test -- --reporter=verbose    # Verbose output
 # From Windows (runs inside container):
 . scripts\dev\dev-local.ps1 test
 
-# Smoke tests for a PR:
-.\scripts\tests\Test-Regression.ps1
-.\scripts\tests\Test-PR148.ps1     # Example for PR #148
+# Smoke tests for a PR (regression runs automatically post-deploy; run PR-specific tests from Windows):
+.\scripts\tests\Test-PR148.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
 ```
 
 ### Git Workflow
@@ -129,6 +128,8 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 # After review, merge to dev (user does this, not you)
 # User will then create a release PR: dev → main for deploy
 ```
+
+**Every PR must use and fully fill in the template at `.github/pull_request_template.md`** — summary, changes, detailed test plan, smoke test section, and documentation checklist (including ops docs). Treat any unchecked or "N/A" box as a deliberate decision that needs to be correct.
 
 ### Deployment (From Windows)
 
@@ -276,9 +277,8 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - Coverage tracked; aim for routes and middleware, not 100% everywhere
 
 **Smoke tests (per-PR):**
-- `scripts/tests/Test-Regression.ps1` — baseline (all basic flows)
-- `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed)
-- Run on your machine to verify no regressions before merging
+- `scripts/tests/test-regression.sh` — baseline (all basic flows); runs automatically post-deploy on the server
+- `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed); run from Windows against dev server
 
 **PR test plan rules (every PR that touches backend code):**
 - Every step must include the **exact copy-paste command** — no assumed knowledge, no "run the usual command"
@@ -291,16 +291,30 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 
 ### Documentation
 
-**When to write docs:**
-- Adding a new database table → update `docs/DATABASE.md`
-- Changing auth → update `docs/SECURITY.md`
-- Adding a dependency → update `docs/DEPENDENCIES.md`
-- New feature in deployment → update README or `docs/INFRASTRUCTURE.md` (coming)
+**Docs must move in lockstep with code.** Keeping them accurate is part of the change, not a later clean-up.
 
-**When NOT to add docs:**
-- Generic "what this function does" — good naming is better than comments
-- Obvious code patterns
-- Implementation details that don't affect future work
+**When to update docs (same PR):**
+- Scripts are added, removed, or renamed
+- Deploy / testing / operational workflows change (e.g. adding deploy-time Vitest or regression steps)
+- Routes, APIs, or env vars are added or changed
+- Any behaviour change that affects how someone develops, deploys, tests, or debugs the system
+
+**What to update:**
+- `README.md` — top-level workflow, script tables, command examples, directory trees
+- `docs/AI.md` — working rules for AI helpers (scope, branching, testing expectations, documentation hygiene)
+- `docs/TESTING.md` — test commands, deploy-time checks, regression scripts, PR smoke tests
+- Ops docs — `docs/RUNBOOK.md`, `docs/BACKUP.md`, `docs/INCIDENTS.md`, `docs/INFRASTRUCTURE.md`, `docs/DEV_ENVIRONMENT.md`, `docs/PROD_ENVIRONMENT.md`
+
+**How to avoid drift:**
+- Treat the documentation checklist in the PR template as mandatory. If no docs change is needed, explicitly state why (`N/A: behaviour and operator docs already match`).
+- When code and docs disagree, fix both in the same PR so history stays coherent.
+- Prefer small, incremental doc edits tied to each behavioural change over broad "docs tidy-up" PRs.
+- For detailed rules, follow **[docs/AI.md](docs/AI.md) → Documentation Hygiene**; this section is a summary, not a replacement.
+
+**When NOT to add extra docs:**
+- Generic "what this function does" explanations — prefer clear naming
+- Obvious patterns that match the existing style
+- Implementation details that don't affect future work or operator behaviour
 
 **Commit messages:**
 - Imperative present tense: "fix", "add", "refactor", not "fixed", "added", "refactored"
