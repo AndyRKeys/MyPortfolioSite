@@ -303,8 +303,12 @@ redact_env() {
 sync_env_from_template() {
   dsection "Phase 3b: syncing .env against template"
 
-  if [ -z "${ENV_TEMPLATE:-}" ] || [ ! -f "$ENV_TEMPLATE" ]; then
-    dinfo "No ENV_TEMPLATE set — skipping template sync"
+  if [ -z "${ENV_TEMPLATE:-}" ]; then
+    dwarn "ENV_TEMPLATE not set — .env drift detection disabled (set ENV_TEMPLATE to enable)"
+    return 0
+  fi
+  if [ ! -f "$ENV_TEMPLATE" ]; then
+    dwarn "ENV_TEMPLATE '$ENV_TEMPLATE' not found — .env drift detection skipped"
     return 0
   fi
 
