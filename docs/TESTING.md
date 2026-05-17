@@ -30,6 +30,25 @@ The dev server at `http://<LAN_IP>:3001` is the canonical test environment. Depl
 
 This approach catches integration issues that unit tests cannot (database state, authentication, third-party services) and lets you test on a real environment before committing.
 
+### Automatic tests during deploy
+
+Dev and prod deploy scripts now run automated checks as part of every deployment to the server:
+
+- **Backend Vitest suite** runs inside the already-deployed container (`backend-dev` on dev, `backend` on prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
+- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<WEBAUTHN_HOST>:3001`, prod: `https://<DOMAIN>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
+
+You can skip the regression smoke tests (for example, during quick iteration) using the `-SkipRegression` switch in the PowerShell wrappers:
+
+```powershell
+# Dev deploy without regression smoke tests
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression
+
+# Prod deploy without regression smoke tests
+.\scripts\deploy\prod-deploy.ps1 -SkipRegression
+```
+
+Vitest remains part of the normal `npm test` flow (locally and in CI), but it is now also executed automatically inside the dev/prod backend containers during every deploy.
+
 ---
 
 ## Supplementary: Unit & Integration Tests
@@ -90,9 +109,6 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 All scripts in `scripts/tests/` use `Start-Transcript` internally, so output is captured automatically — no extra flags needed. Token generation is also automatic:
 
 ```powershell
-# Output goes to console AND test-results\Regression-<timestamp>.txt automatically
-.\scripts\tests\Test-Regression.ps1
-
 # Output goes to console AND test-results\PR<N>-<timestamp>.txt automatically
 .\scripts\tests\Test-PR<N>.ps1
 ```
@@ -109,26 +125,20 @@ New-Item -ItemType Directory -Force -Path test-results
 
 ### PR Smoke Tests (Fallback)
 
-If you're testing locally without access to the dev server, every PR that touches backend code should run **two scripts** before requesting review:
+If you're testing locally without access to the dev server, every PR that touches backend code should still be covered by a `Test-PR<N>.ps1` script before requesting review:
 
 ```powershell
-# Step 1 — always run the regression baseline first
-. scripts\tests\Test-Regression.ps1
-
-# Step 2 — run the PR-specific tests on top
 . scripts\tests\Test-PR<N>.ps1
 ```
 
-Both must pass. The regression script ensures that existing stable behaviour has not regressed. The PR-specific script covers the new or changed endpoints introduced by the PR.
-
-The PR template's **Smoke Test** section requires both to be ticked before requesting review.
+The regression baseline is now handled server-side by `test-regression.sh` as part of the dev/prod deploys. PR-specific scripts should focus only on the endpoints and behaviour introduced or changed by the PR.
 
 ### What each script covers
 
 | Script | Purpose |
 |---|---|
-| `Test-Regression.ps1` | Stable always-run baseline: Vitest suite, core public endpoints, key auth checks, 404 handler |
-| `Test-PR<N>.ps1` | Endpoints and behaviour introduced or changed by PR #N only |
+| `test-regression.sh` | Stable always-run baseline: core public endpoints, key auth checks, 404 handler — runs server-side post-deploy |
+| `Test-PR<N>.ps1` | Endpoints and behaviour introduced or changed by PR #N only — run from Windows when dev server access is available or as a local fallback |
 
 ### Script template — Test-PR\<N\>.ps1
 
@@ -217,7 +227,7 @@ Write-Host "  Log file : $logFile"
 Write-Host ("═" * 54) -ForegroundColor Cyan
 
 # --- add Test-Endpoint calls here (new/changed endpoints for this PR only) ---
-# Do NOT duplicate checks already covered by Test-Regression.ps1
+# Do NOT duplicate checks already covered by test-regression.sh
 
 Write-Host ""
 Write-Host ("═" * 54) -ForegroundColor Cyan
