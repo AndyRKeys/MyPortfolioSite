@@ -158,10 +158,12 @@ ufw_status=""
 ufw_readable=0
 
 if ! command -v ufw &>/dev/null; then
+  dstatus firewall status=skipped reason=ufw-not-installed
   dinfo "UFW not installed — skipping firewall check"
 elif ufw_status=$(try_root ufw status 2>/dev/null); then
   ufw_readable=1
 else
+  dstatus firewall status=skipped reason=needs-root-no-passwordless-sudo
   dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
   dinfo "To enable the check, allow just this read-only command without a password:"
   dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
@@ -169,8 +171,10 @@ fi
 
 if [ "$ufw_readable" -eq 1 ]; then
   if echo "$ufw_status" | grep -q "3001"; then
+    dstatus firewall status=ok port=3001
     dok "UFW rule for port 3001 is present"
   else
+    dstatus firewall status=warn port=3001 reason=no-rule
     dwarn "No UFW rule found for port 3001."
     dwarn "The dev site may not be reachable from other LAN devices."
     dwarn "To open port 3001 to your LAN:"
