@@ -151,23 +151,16 @@ validate_env
 
 dsection "Checking firewall (UFW)"
 
-# `ufw status` needs root. This script runs non-interactively over SSH, so a
-# plain `sudo` would prompt for a password and hang (or silently fail and make
-# every deploy falsely report "no UFW rule"). Resolve how we can read status
-# without ever blocking on a password prompt:
-#   - running as root          → call ufw directly
-#   - passwordless sudo (`-n`) → use it
-#   - sudo needs a password    → SKIP (info, not a false warning) + one-time
-#                                guidance to allow just this command
+# `ufw status` needs root. try_root never blocks on a password prompt:
+# runs directly if root, uses passwordless sudo if available, else returns
+# 126 so we skip with an info note rather than a misleading "no UFW rule".
 ufw_status=""
 ufw_readable=0
 
 if ! command -v ufw &>/dev/null; then
   dinfo "UFW not installed — skipping firewall check"
-elif [ "$(id -u)" -eq 0 ]; then
-  ufw_status=$(ufw status 2>/dev/null || true); ufw_readable=1
-elif sudo -n true 2>/dev/null; then
-  ufw_status=$(sudo -n ufw status 2>/dev/null || true); ufw_readable=1
+elif ufw_status=$(try_root ufw status 2>/dev/null); then
+  ufw_readable=1
 else
   dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
   dinfo "To enable the check, allow just this read-only command without a password:"

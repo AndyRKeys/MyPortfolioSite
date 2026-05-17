@@ -109,6 +109,26 @@ ddie() {
   exit 1
 }
 
+# Run a command with root privileges WITHOUT ever blocking on a password
+# prompt — deploys run non-interactively over SSH, so a plain `sudo` would
+# hang or silently fail. Resolution order: already root → run directly;
+# passwordless sudo available → `sudo -n`; otherwise return 126 (root
+# required but unavailable) so callers can skip gracefully rather than
+# emit a misleading failure/warning.
+# Usage:
+#   out=$(try_root ufw status) && echo "$out" | grep ...
+#   if try_root systemctl is-active docker; then ...; fi
+#   try_root returns 126 → caller should dinfo-skip, not dwarn
+try_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif sudo -n true 2>/dev/null; then
+    sudo -n "$@"
+  else
+    return 126
+  fi
+}
+
 # ── Last-good state tracking ──────────────────────────────────────────────────
 
 _save_last_good_state() {
