@@ -131,6 +131,22 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 
 **Every PR must use and fully fill in the template at `.github/pull_request_template.md`** — summary, changes, detailed test plan, smoke test section, and documentation checklist (including ops docs). Treat any unchecked or "N/A" box as a deliberate decision that needs to be correct.
 
+**Issue labelling (AI-managed):**
+- **State labels**
+  - When starting work on an issue: apply the `in progress` label.
+  - When opening a PR to `dev` for that issue: switch the label to `awaiting review`.
+  - After the PR is merged to `dev` but before it is released to `main`: switch the label to `awaiting release`.
+  - After the change is deployed to production (release PR merged to `main`): switch the label to `released`.
+- **Type labels** (add all that apply)
+  - `bug` / `feature` — based on the issue template or description.
+  - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
+  - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
+  - `workflow`, `meta` — process, templates, automation, AI instructions.
+  - `high priority` — issues explicitly called out as urgent or blocking.
+  - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
+  - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
+
 ### Deployment (From Windows)
 
 ```powershell
