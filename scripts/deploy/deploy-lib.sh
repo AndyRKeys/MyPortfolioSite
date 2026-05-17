@@ -959,9 +959,6 @@ check_ddns_sync() {
 
 # ── Structured deploy summary ─────────────────────────────────────────────────
 
-# Write a single machine-readable summary line to LOG_FILE after a successful deploy.
-# Format: ISO-8601 timestamp | DEPLOY_OK | env=<name> branch=<branch> sha=<sha>
-# Greppable from cron or monitoring: grep 'DEPLOY_OK' ~/prod-deploy.log
 log_deploy_summary() {
   local env_name="${1:-unknown}"
   local branch sha ts
@@ -971,5 +968,24 @@ log_deploy_summary() {
   sha=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
   dstatus summary status=ok env="${env_name}" branch="${branch}" sha="${sha}"
-  dok "Deploy summary: env=${env_name} branch=${branch} sha=${sha} at ${ts}"
+}
+
+# Print a human-readable final deploy report by extracting all [deploy:*] and
+# [regression] checkpoint lines written to LOG_FILE during this run.
+# Call this as the very last step of a deploy script (after regression tests).
+print_deploy_report() {
+  local env_name="${1:-unknown}"
+  echo ""
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  printf  "║  Deploy Report — %-44s║\n" "${env_name} $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "╠══════════════════════════════════════════════════════════════╣"
+  # Extract checkpoint lines written during this deploy (strip timestamp prefix and colour codes)
+  grep -E '\[deploy:|^\[regression\]' "$LOG_FILE" 2>/dev/null \
+    | sed 's/^\[[^]]*\] //' \
+    | sed 's/\x1b\[[0-9;]*m//g' \
+    | while IFS= read -r line; do
+        printf "║  %-60s║\n" "$line"
+      done
+  echo "╚══════════════════════════════════════════════════════════════╝"
+  echo ""
 }

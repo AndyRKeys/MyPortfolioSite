@@ -171,20 +171,7 @@ fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 
-POST_SHA=$(git rev-parse HEAD)
-dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') deploy $PRE_SHA -> $POST_SHA" >> "$LOG_FILE"
-
-dsection "Deploy complete"
-
-dok "  Domain:  https://${DOMAIN:-<unset>}"
-dok "  Commit:  $(git rev-parse --short HEAD)"
-dok "  Log:     $LOG_FILE"
-
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-dlog ""
-dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}║          Prod deploy complete ✓          ║${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-dlog ""
+print_deploy_report "prod (${DEPLOY_ROLLED_BACK:+ROLLED BACK}${DEPLOY_ROLLED_BACK:-ok})"

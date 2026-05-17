@@ -58,7 +58,8 @@ fi
 
 PASS=0; FAIL=0; SKIP=0
 TMPFILE=$(mktemp)
-trap 'rm -f "$TMPFILE"' EXIT
+TMPERR=$(mktemp)
+trap 'rm -f "$TMPFILE" "$TMPERR"' EXIT
 
 check() {
   local name="$1" method="$2" url="$3" expect_status="$4"
@@ -68,9 +69,11 @@ check() {
   local extra=("$@")
 
   local status
-  status=$(curl -s -o "$TMPFILE" -w "%{http_code}" -X "$method" $INSECURE "${extra[@]}" "$url" 2>/dev/null || echo "000")
-  local body
+  status=$(curl -s -o "$TMPFILE" -w "%{http_code}" -X "$method" $INSECURE "${extra[@]}" \
+    --stderr "$TMPERR" "$url" || echo "000")
+  local body curl_err
   body=$(cat "$TMPFILE" 2>/dev/null || true)
+  curl_err=$(cat "$TMPERR" 2>/dev/null | head -1 || true)
 
   local ok=true
   [ "$status" != "$expect_status" ] && ok=false
@@ -81,7 +84,13 @@ check() {
     PASS=$((PASS + 1))
   else
     local detail="Expected $expect_status got $status"
-    [ -n "$expect_body" ] && [[ "$body" != *"$expect_body"* ]] && detail="$detail | body: $(echo "$body" | head -c 200 | tr -d '\n')"
+    if [ "$status" = "000" ] && [ -n "$curl_err" ]; then
+      detail="$detail | curl error: $curl_err"
+    elif [ -n "$expect_body" ] && [[ "$body" != *"$expect_body"* ]]; then
+      detail="$detail | body: $(echo "$body" | head -c 300 | tr -d '\n')"
+    elif [ -n "$body" ] && [ "$status" != "$expect_status" ]; then
+      detail="$detail | body: $(echo "$body" | head -c 300 | tr -d '\n')"
+    fi
     echo "  [FAIL] $name — $detail"
     FAIL=$((FAIL + 1))
   fi

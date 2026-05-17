@@ -211,23 +211,8 @@ fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 
-dsection "Deploy complete"
-
-dok "  Site:    https://${LAN_IP}:3001"
-dok "  Commit:  $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
-dok "  Log:     $LOG_FILE"
-
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-dlog ""
-if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║        Dev rolled back (recovered)       ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-else
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║           Dev deploy complete ✓          ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-fi
+print_deploy_report "dev (${DEPLOY_ROLLED_BACK:+ROLLED BACK}${DEPLOY_ROLLED_BACK:-ok})"
 dlog ""

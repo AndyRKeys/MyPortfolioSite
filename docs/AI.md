@@ -386,8 +386,8 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 
 ### What to verify
 
-- Run `.\scripts\tests\Test-Regression.ps1` first — all baseline checks must pass
-- Run `.\scripts\tests\Test-PRN.ps1` — all PR-specific checks must pass
+- Regression baseline runs automatically server-side post-deploy via `scripts/tests/test-regression.sh` — check `[regression]` line in deploy output
+- Run `.\scripts\tests\Test-PRN.ps1` from Windows against the dev server — all PR-specific checks must pass
 - Verify the golden path and edge cases manually for UI changes
 - Check for regressions in related features
 - Type checking and linting provide code correctness, **not feature correctness** — test the behaviour
