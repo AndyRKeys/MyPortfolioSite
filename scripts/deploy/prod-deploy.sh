@@ -177,18 +177,26 @@ if [ "$SKIP_REGRESSION" = "0" ] && [ -n "${DOMAIN:-}" ]; then
     2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
 fi
 
+# Regression failure rolls back, same as health/Vitest failures.
+if [ "$REGRESSION_RC" -ne 0 ]; then
+  _do_rollback "regression smoke tests failed"
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────────────────────
 
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-# Always print the AI-friendly report — even when regression failed.
+# Loud verdict banner, then the AI-friendly report — always printed.
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  print_deploy_status "ROLLED BACK" "prod"
   print_deploy_report "prod — ROLLED BACK"
 elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_status "FAILED" "prod"
   print_deploy_report "prod — REGRESSION FAILED"
 else
+  print_deploy_status "COMPLETE" "prod"
   print_deploy_report "prod"
 fi
 
-[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — see report above"
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — rolled back; see report above"

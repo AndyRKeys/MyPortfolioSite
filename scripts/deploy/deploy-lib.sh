@@ -1007,6 +1007,24 @@ log_deploy_summary() {
   dstatus summary status=ok env="${env_name}" branch="${branch}" sha="${sha}"
 }
 
+# Loud final verdict banner printed immediately before the report box so the
+# overall outcome is unmissable. Always printed (not gated by DEPLOY_QUIET).
+# Usage: print_deploy_status <COMPLETE|ROLLED BACK|FAILED> <env-label>
+print_deploy_status() {
+  local status="$1" label="${2:-unknown}"
+  local colour icon
+  case "$status" in
+    COMPLETE)      colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="✅" ;;
+    "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
+    *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
+  esac
+  echo "" | tee -a "$LOG_FILE"
+  echo -e "${colour}╔══════════════════════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}║  ${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}╚══════════════════════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+}
+
 # Print a human-readable final deploy report by extracting all [deploy:*] and
 # [regression] checkpoint lines written to LOG_FILE during this run.
 # Always printed — not suppressed by DEPLOY_QUIET.
