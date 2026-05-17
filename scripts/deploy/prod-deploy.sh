@@ -77,7 +77,11 @@ ensure_repo_cloned
 
 ensure_env_file
 
+sync_env_from_template
+
 load_env
+
+log_env_snapshot
 
 validate_env
 
