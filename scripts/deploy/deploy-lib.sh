@@ -147,11 +147,22 @@ _restore_last_good_state() {
 
 init_log_banner() {
   local title="$1"
-  dlog ""
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║  ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-  dlog ""
+  # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
+  echo "" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_BOLD}║  ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+}
+
+# Pipe command output to the log. In verbose mode also echoes to terminal.
+# Usage: some_command 2>&1 | _log_cmd
+_log_cmd() {
+  if _verbose; then
+    tee -a "$LOG_FILE"
+  else
+    cat >> "$LOG_FILE"
+  fi
 }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
@@ -203,11 +214,13 @@ ensure_repo_cloned() {
 
   if [ ! -d "$REPO_DIR" ]; then
     dinfo "Repo not found at $REPO_DIR — cloning..."
-    git clone "$REPO_URL" "$REPO_DIR" || ddie "git clone failed. Check your internet connection."
+    git clone "$REPO_URL" "$REPO_DIR" 2>&1 | _log_cmd || ddie "git clone failed. Check your internet connection."
     cd "$REPO_DIR"
-    git checkout "$BRANCH" || ddie "Could not switch to $BRANCH branch."
+    git checkout "$BRANCH" 2>&1 | _log_cmd || ddie "Could not switch to $BRANCH branch."
+    dstatus repo status=cloned branch="$BRANCH"
     dok "Repo cloned and set to $BRANCH branch."
   else
+    dstatus repo status=exists
     dok "Repo found at $REPO_DIR"
   fi
 }
@@ -220,8 +233,8 @@ update_to_branch() {
   PRE_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
   dinfo "Current commit: $PRE_SHA"
 
-  git fetch origin "$BRANCH" 2>&1 | tee -a "$LOG_FILE" || ddie "git fetch failed. Check your internet connection."
-  git reset --hard "origin/$BRANCH" 2>&1 | tee -a "$LOG_FILE"
+  git fetch origin "$BRANCH" 2>&1 | _log_cmd || ddie "git fetch failed. Check your internet connection."
+  git reset --hard "origin/$BRANCH" 2>&1 | _log_cmd
 
   NEW_SHA=$(git rev-parse HEAD)
   if [ "$NEW_SHA" = "$PRE_SHA" ]; then
@@ -423,6 +436,7 @@ validate_env() {
   fi
 
   if [ "${#errors[@]}" -gt 0 ]; then
+    dstatus env status=failed
     dfail ".env validation failed:"
     for err in "${errors[@]}"; do
       dfail "  • $err"
@@ -430,6 +444,7 @@ validate_env() {
     ddie "Fix the above .env issues then re-run."
   fi
 
+  dstatus env status=ok
   dok "All required env vars set and valid."
 }
 
@@ -523,23 +538,27 @@ ensure_dev_certs() {
 
   # Generate certificates if needed
   if [ "$should_regenerate" = true ]; then
-    if bash "$cert_script" "$lan_ip" "$webauthn_host" 2>&1 | tee -a "$LOG_FILE"; then
+    if bash "$cert_script" "$lan_ip" "$webauthn_host" 2>&1 | _log_cmd; then
       dinfo "Certificate generation passed"
     else
+      dstatus certs status=failed reason=generation-failed
       ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
     fi
   fi
 
   # Verify certificate files exist
   if ! [ -f "$cert_file" ]; then
+    dstatus certs status=failed reason=cert-file-missing
     ddie "Certificate file not found at $cert_file after generation"
   fi
   if ! [ -f "$key_file" ]; then
+    dstatus certs status=failed reason=key-file-missing
     ddie "Certificate key file not found at $key_file after generation"
   fi
 
   # Verify certificate validity
   if ! openssl x509 -in "$cert_file" -noout >/dev/null 2>&1; then
+    dstatus certs status=failed reason=invalid-cert
     ddie "Certificate at $cert_file is invalid or corrupted"
   fi
 
@@ -559,9 +578,11 @@ ensure_dev_certs() {
 
   # Verify file permissions (nginx needs read access)
   if ! [ -r "$cert_file" ] || ! [ -r "$key_file" ]; then
+    dstatus certs status=failed reason=permissions
     ddie "Certificate files exist but are not readable (permissions issue)"
   fi
 
+  dstatus certs status=ok host="$cert_match"
   dok "SSL certificates verified and ready for $cert_match"
 }
 
@@ -575,7 +596,8 @@ check_nginx_config() {
   # Runs nginx -t inside a throw-away container using the same compose env and
   # volume mounts, so template substitution and cert paths are tested for real.
   if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
-      2>&1 | tee -a "$LOG_FILE"; then
+      2>&1 | _log_cmd; then
+    dstatus nginx status=failed reason=config-test-failed
     dfail ""
     dfail "Nginx config test failed. Common causes:"
     dfail "  • SSL cert or key file missing at the path mounted into the container"
@@ -584,6 +606,7 @@ check_nginx_config() {
     ddie "Fix the nginx config then re-run."
   fi
 
+  dstatus nginx status=ok
   dok "Nginx config test passed"
 
   # Compare what the template renders NOW against what is live in the running
@@ -605,8 +628,8 @@ check_nginx_config() {
       dinfo "Nginx config changed — removing container for clean start"
     fi
     dinfo "Rendered nginx config:"
-    echo "$new_config" | tee -a "$LOG_FILE"
-    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | tee -a "$LOG_FILE" || true
+    echo "$new_config" | _log_cmd
+    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | _log_cmd || true
   fi
 }
 
@@ -711,7 +734,7 @@ compose_up_with_rollback() {
 
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE"; then
+  if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | _log_cmd; then
     dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
@@ -843,9 +866,9 @@ run_deploy_tests() {
   dsection "Phase 7: running backend test suite"
   dinfo "Executing npm test inside $service_name container..."
 
-  if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | tee -a "$LOG_FILE"; then
+  if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | _log_cmd; then
     dstatus vitest status=ok service="$service_name"
-    dok "All tests passed ✓"
+    dok "All tests passed"
   else
     dstatus vitest status=failed service="$service_name"
     dfail "Test suite failed — initiating rollback"
@@ -866,11 +889,12 @@ test_error_logger_all_pages() {
   dinfo "  Testing all pages for error-logger deployment"
 
   # Run comprehensive test inside the backend container
-  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | tee -a "$LOG_FILE"; then
-    dok "✓ Error logger site-wide test passed"
+  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
+    dstatus error-logger status=ok
+    dok "Error logger site-wide test passed"
   else
-    dwarn "⚠ Error logger site-wide test failed or had warnings"
-    dwarn "  See output above for details"
+    dstatus error-logger status=failed
+    dwarn "Error logger site-wide test failed or had warnings — see log above"
   fi
 }
 
@@ -899,14 +923,17 @@ test_csp_reporting() {
 
   if [ -n "$csp_header" ]; then
     if echo "$csp_header" | grep -q "report-uri"; then
-      dok "✓ CSP report-uri is configured"
+      dstatus csp status=ok report-uri=present
+      dok "CSP report-uri is configured"
     else
-      dwarn "⚠ CSP header present but report-uri not found"
+      dstatus csp status=warn report-uri=missing
+      dwarn "CSP header present but report-uri not found"
       dinfo "  Full CSP header:"
-      echo "$csp_header" | tee -a "$LOG_FILE" | sed 's/^/    /'
+      echo "$csp_header" | _log_cmd | sed 's/^/    /'
     fi
   else
-    dwarn "⚠ CSP header not found (not being sent by server)"
+    dstatus csp status=warn header=missing
+    dwarn "CSP header not found (not being sent by server)"
   fi
 }
 
