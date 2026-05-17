@@ -8,11 +8,9 @@ import request   from 'supertest';
 import jwt        from 'jsonwebtoken';
 import { createApp } from '../../app.js';
 
-vi.mock('pg', () => {
-  const query = vi.fn().mockResolvedValue({ rows: [] });
-  const Pool  = vi.fn(() => ({ query }));
-  return { default: { Pool }, Pool };
-});
+vi.mock('../../db/pool.js', () => ({
+  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+}));
 
 const app = createApp();
 
@@ -35,9 +33,8 @@ describe('POST /posts', () => {
   });
 
   it('returns 400 when title is missing (DB not touched)', async () => {
-    const { Pool } = vi.mocked(await import('pg'));
-    const querySpy = Pool.mock.results[0].value.query;
-    querySpy.mockClear();
+    const { pool } = vi.mocked(await import('../../db/pool.js'));
+    pool.query.mockClear();
 
     const res = await request(app)
       .post('/posts')
@@ -47,7 +44,7 @@ describe('POST /posts', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/title/i);
     // Validation fires before DB — no query should have run
-    expect(querySpy).not.toHaveBeenCalled();
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });
 
