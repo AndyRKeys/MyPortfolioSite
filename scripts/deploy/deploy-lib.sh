@@ -86,6 +86,16 @@ dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET
 dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}[ERROR]${DEPLOY_RESET} $*"; }
 dsection() { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}── $* ──────────────────────────────────────────────${DEPLOY_RESET}"; }
 
+# Machine-readable checkpoint line — grep-friendly, no colour codes.
+# Usage: dstatus <phase> key=value [key=value ...]
+# Output: [deploy:<phase>] key=value key=value ts=<iso>
+dstatus() {
+  local phase="$1"; shift
+  local ts; ts=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+  local msg="[deploy:${phase}] $* ts=${ts}"
+  echo "$msg" | tee -a "$LOG_FILE"
+}
+
 ddie() {
   dfail "$*"
   dlog "See full log at: $LOG_FILE"
@@ -165,6 +175,7 @@ require_tools() {
   done
 
   if [ "${#missing[@]}" -gt 0 ]; then
+    dstatus preflight status=failed missing="${missing[*]}"
     dfail "Missing required tools:"
     for t in "${missing[@]}"; do
       dfail "  • $t"
@@ -173,9 +184,11 @@ require_tools() {
   fi
 
   if ! docker info >/dev/null 2>&1; then
+    dstatus preflight status=failed reason=docker-daemon-not-running
     ddie "Docker daemon is not running. Start it with: sudo systemctl start docker"
   fi
 
+  dstatus preflight status=ok tools="$*"
   dok "All prerequisites satisfied (${*})"
 }
 
@@ -209,8 +222,10 @@ update_to_branch() {
   NEW_SHA=$(git rev-parse HEAD)
   if [ "$NEW_SHA" = "$PRE_SHA" ]; then
     dinfo "Already at latest commit — no code changes."
+    dstatus git status=up-to-date branch="$BRANCH" sha="${NEW_SHA:0:7}"
   else
     dok "Updated: ${PRE_SHA:0:7} → ${NEW_SHA:0:7}"
+    dstatus git status=updated branch="$BRANCH" pre="${PRE_SHA:0:7}" sha="${NEW_SHA:0:7}"
   fi
 }
 
@@ -601,6 +616,7 @@ _do_rollback() {
   # Try to restore last-good state first
   if _restore_last_good_state > /dev/null 2>&1; then
     read -r rollback_branch rollback_sha < <(_restore_last_good_state)
+    dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
@@ -610,6 +626,7 @@ _do_rollback() {
   elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
     # Roll back to a known-stable branch (e.g. dev or main) rather than a
     # previous commit on the same potentially-broken feature branch.
+    dstatus rollback reason="$reason" target="$ROLLBACK_BRANCH" method=stable-branch
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
     git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
@@ -619,6 +636,7 @@ _do_rollback() {
 
   elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
     # Same branch deploy: revert to the previous commit.
+    dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
@@ -626,6 +644,7 @@ _do_rollback() {
     DEPLOY_ROLLED_BACK=1
 
   else
+    dstatus rollback reason="$reason" method=none status=no-rollback-available
     dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
     dwarn "Manual intervention required — check container logs above."
   fi
@@ -689,6 +708,7 @@ compose_up_with_rollback() {
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
 
   if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE"; then
+    dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
     _do_rollback "docker compose up failed"
@@ -705,6 +725,7 @@ compose_up_with_rollback() {
       || echo "unknown")
 
     if [[ "$nginx_state" != "running" ]]; then
+      dstatus compose status=failed service="$NGINX_SERVICE" reason="nginx-not-running state=${nginx_state}"
       dfail "Nginx container is not running (state: $nginx_state)"
       dfail ""
       dfail "Nginx logs:"
@@ -715,6 +736,8 @@ compose_up_with_rollback() {
 
     dok "Nginx container is running"
   fi
+
+  dstatus compose status=ok service="$service_name"
 }
 
 # ── Health checks ─────────────────────────────────────────────────────────────
@@ -761,10 +784,12 @@ wait_for_health() {
       current_sha=$(git rev-parse HEAD)
       _save_last_good_state "$current_branch" "$current_sha"
 
+      dstatus health status=ok url="$url" attempts="$i"
       return
     fi
 
     if [ "$i" -eq "$attempts" ]; then
+      dstatus health status=failed url="$url" attempts="$i" timeout="${timeout}s"
       dfail "Health check failed after ${timeout}s"
       dfail ""
 
@@ -815,8 +840,10 @@ run_deploy_tests() {
   dinfo "Executing npm test inside $service_name container..."
 
   if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | tee -a "$LOG_FILE"; then
+    dstatus vitest status=ok service="$service_name"
     dok "All tests passed ✓"
   else
+    dstatus vitest status=failed service="$service_name"
     dfail "Test suite failed — initiating rollback"
     _do_rollback "test suite failed post-deploy"
     ddie "Deploy failed: tests did not pass. See log at $LOG_FILE"
@@ -918,8 +945,10 @@ check_ddns_sync() {
   dinfo "DNS A record     : $dns_ip (for $domain)"
 
   if [ "$public_ip" = "$dns_ip" ]; then
+    dstatus ddns status=ok domain="$domain"
     dok "DDNS in sync: $domain → $public_ip ✓"
   else
+    dstatus ddns status=mismatch domain="$domain"
     dwarn "DDNS out of sync: $domain resolves to $dns_ip but server IP is $public_ip"
     dwarn "Traffic may be going to the wrong server."
     dwarn "Run: sudo ddclient -daemon=0 -verbose -noquiet"
@@ -941,6 +970,6 @@ log_deploy_summary() {
   branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
   sha=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-  dlog "${ts} | DEPLOY_OK | env=${env_name} branch=${branch} sha=${sha}"
+  dstatus summary status=ok env="${env_name}" branch="${branch}" sha="${sha}"
   dok "Deploy summary: env=${env_name} branch=${branch} sha=${sha} at ${ts}"
 }
