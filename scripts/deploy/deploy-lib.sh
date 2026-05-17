@@ -263,11 +263,11 @@ load_env() {
 }
 
 # Print the current .env with secret values masked.
-# Keys matching *SECRET*|*TOKEN*|*PASS*|*KEY*|*REFRESH*|*CREDENTIAL*|*EMAIL* have their
+# Keys matching *SECRET*|*TOKEN*|*PASS*|*KEY*|*REFRESH*|*CREDENTIAL*|*EMAIL*|*_ID have their
 # value replaced with [redacted]. Safe to include in deploy logs.
 redact_env() {
   local file="${1:-$ENV_FILE}"
-  local sensitive_pattern='SECRET|TOKEN|PASS|KEY|REFRESH|CREDENTIAL|EMAIL'
+  local sensitive_pattern='SECRET|TOKEN|PASS|KEY|REFRESH|CREDENTIAL|EMAIL|_ID'
 
   while IFS= read -r line; do
     # Pass through blank lines and comments unchanged
