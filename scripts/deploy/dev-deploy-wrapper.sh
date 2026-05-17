@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # dev-server-deploy-wrapper.sh — Bootstrap wrapper for dev deploys.
 #
+# DEPRECATED — superseded by switch-branch.sh + dev-deploy.sh called directly
+# from dev-deploy.ps1. Retained for reference only; schedule for removal once
+# no callers remain.
+#
+# Replacement pattern (used by dev-deploy.ps1 and Seed-DevData.ps1):
+#   bash scripts/deploy/switch-branch.sh <branch> <repo-path>
+#   bash scripts/deploy/dev-deploy.sh <branch>
+#
 # Solves the self-updating script problem: updates the working tree to the
 # requested branch BEFORE invoking dev-deploy.sh, so the deploy always runs
 # the latest version of the script, not the version that was loaded before the pull.
-#
-# This is the correct entrypoint for dev deploys. Call this, not dev-deploy.sh directly.
 #
 # Usage:
 #   bash scripts/deploy/dev-server-deploy-wrapper.sh [branch]
