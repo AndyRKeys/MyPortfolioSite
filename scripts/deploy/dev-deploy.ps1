@@ -6,7 +6,7 @@ param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = '',
     [bool]$SkipRegression = $false,
-    [bool]$Quiet = $false
+    [bool]$Quiet = $true
 )
 
 # Detect current branch if not specified
