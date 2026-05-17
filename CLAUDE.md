@@ -131,6 +131,12 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 
 **Every PR must use and fully fill in the template at `.github/pull_request_template.md`** — summary, changes, detailed test plan, smoke test section, and documentation checklist (including ops docs). Treat any unchecked or "N/A" box as a deliberate decision that needs to be correct.
 
+**Issue labelling (AI-managed):**
+- When starting work on an issue: apply the `in progress` label.
+- When opening a PR to `dev` for that issue: switch the label to `awaiting review`.
+- After the PR is merged to `dev` but before it is released to `main`: switch the label to `awaiting release`.
+- After the change is deployed to production (release PR merged to `main`): switch the label to `released`.
+
 ### Deployment (From Windows)
 
 ```powershell
