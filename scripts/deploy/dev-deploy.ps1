@@ -1,12 +1,12 @@
 # Trigger a dev server deploy from Windows via SSH.
 # Connects to the Ubuntu Server and runs dev-deploy.sh (which includes regression tests).
 #
-# Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression] [-Quiet]
+# Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression $true] [-Quiet $true]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = '',
-    [switch]$SkipRegression,
-    [switch]$Quiet
+    [bool]$SkipRegression = $false,
+    [bool]$Quiet = $false
 )
 
 # Detect current branch if not specified

@@ -37,14 +37,14 @@ Dev and prod deploy scripts now run automated checks as part of every deployment
 - **Backend Vitest suite** runs inside the already-deployed container (`backend-dev` on dev, `backend` on prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
 - **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<WEBAUTHN_HOST>:3001`, prod: `https://<DOMAIN>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
 
-You can skip the regression smoke tests (for example, during quick iteration) using the `-SkipRegression` switch in the PowerShell wrappers:
+You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
 ```powershell
 # Dev deploy without regression smoke tests
-.\scripts\deploy\dev-deploy.ps1 -SkipRegression
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression $true
 
 # Prod deploy without regression smoke tests
-.\scripts\deploy\prod-deploy.ps1 -SkipRegression
+.\scripts\deploy\prod-deploy.ps1 -SkipRegression $true
 ```
 
 Vitest remains part of the normal `npm test` flow (locally and in CI), but it is now also executed automatically inside the dev/prod backend containers during every deploy.
@@ -111,12 +111,12 @@ Regression tests run automatically at the end of every deploy (inside `dev-deplo
 To skip regression tests during a quick iteration deploy, or suppress verbose step output:
 
 ```powershell
-.\scripts\deploy\dev-deploy.ps1 -SkipRegression        # skip regression tests only
-.\scripts\deploy\dev-deploy.ps1 -Quiet                  # suppress verbose logs; show only checkpoints + report
-.\scripts\deploy\dev-deploy.ps1 -Quiet -SkipRegression  # both
+.\scripts\deploy\dev-deploy.ps1 -SkipRegression $true              # skip regression tests only
+.\scripts\deploy\dev-deploy.ps1 -Quiet $true                       # suppress verbose logs; show only checkpoints + report
+.\scripts\deploy\dev-deploy.ps1 -Quiet $true -SkipRegression $true # both
 
-.\scripts\deploy\prod-deploy.ps1 -SkipRegression
-.\scripts\deploy\prod-deploy.ps1 -Quiet
+.\scripts\deploy\prod-deploy.ps1 -SkipRegression $true
+.\scripts\deploy\prod-deploy.ps1 -Quiet $true
 ```
 
 In quiet mode, `dinfo`/`dok`/`dsection` output is suppressed on-screen. Warnings, errors, rollback events, and the final deploy report always print regardless.

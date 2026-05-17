@@ -6,13 +6,13 @@
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
-# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression] [-Quiet]
+# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression $true] [-Quiet $true]
 param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = 'main',
     [string]$Rollback = '',
-    [switch]$SkipRegression,
-    [switch]$Quiet
+    [bool]$SkipRegression = $false,
+    [bool]$Quiet = $false
 )
 
 $remoteArgs = @()
