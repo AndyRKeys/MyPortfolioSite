@@ -71,7 +71,7 @@ done
 
 init_log_banner "Prod Deploy"
 
-require_tools docker git curl
+require_tools docker git curl dig
 
 ensure_repo_cloned
 
@@ -84,6 +84,8 @@ load_env
 log_env_snapshot
 
 validate_env
+
+check_ddns_sync
 
 cd "$REPO_DIR"
 
