@@ -775,3 +775,52 @@ test_csp_reporting() {
     dwarn "⚠ CSP header not found (not being sent by server)"
   fi
 }
+
+# ── DDNS sync check ───────────────────────────────────────────────────────────
+
+# Warn if the public DNS A record for DOMAIN doesn't match the server's current
+# public IP. Runs as a warning-only preflight — a mismatch means traffic is
+# going to the wrong server but it shouldn't block the deploy itself.
+# Requires: DOMAIN env var set, dig available (dnsutils), curl available.
+check_ddns_sync() {
+  local domain="${DOMAIN:-}"
+
+  if [ -z "$domain" ]; then
+    dwarn "DDNS check skipped — DOMAIN not set"
+    return 0
+  fi
+
+  dsection "DDNS sync check"
+
+  if ! command -v dig >/dev/null 2>&1; then
+    dwarn "dig not found — install dnsutils to enable DDNS check: sudo apt install dnsutils"
+    return 0
+  fi
+
+  local public_ip dns_ip
+  public_ip=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo "")
+  dns_ip=$(dig +short "$domain" @8.8.8.8 2>/dev/null | tail -1 || echo "")
+
+  if [ -z "$public_ip" ]; then
+    dwarn "Could not determine server public IP — skipping DDNS check"
+    return 0
+  fi
+
+  if [ -z "$dns_ip" ]; then
+    dwarn "Could not resolve DNS for $domain — skipping DDNS check"
+    return 0
+  fi
+
+  dinfo "Server public IP : $public_ip"
+  dinfo "DNS A record     : $dns_ip (for $domain)"
+
+  if [ "$public_ip" = "$dns_ip" ]; then
+    dok "DDNS in sync: $domain → $public_ip ✓"
+  else
+    dwarn "DDNS out of sync: $domain resolves to $dns_ip but server IP is $public_ip"
+    dwarn "Traffic may be going to the wrong server."
+    dwarn "Run: sudo ddclient -daemon=0 -verbose -noquiet"
+    dwarn "Or update manually in Namecheap Advanced DNS."
+    dwarn "Continuing deploy — site may be unreachable externally until DNS is fixed."
+  fi
+}
