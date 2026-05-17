@@ -1,6 +1,6 @@
 # andykeys.me — Personal Portfolio Site
 
-A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on a Raspberry Pi at [andykeys.me](https://andykeys.me).
+A full-stack personal portfolio site built with plain HTML/CSS/JS on the frontend and a Node.js/Express backend, self-hosted on an Ubuntu Server (`ak-home-server`) at [andykeys.me](https://andykeys.me).
 
 ---
 
@@ -14,10 +14,10 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 | Auth | WebAuthn/FIDO2 passkeys + email magic links, JWT |
 | Database | PostgreSQL |
 | Web server | Nginx (static files + reverse proxy) |
-| Process manager | PM2 |
+| Runtime | Docker Compose (backend + Postgres + Nginx containerised) |
 | SSL | Let's Encrypt (certbot, auto-renewing) |
 | DNS | Namecheap + dynamic DNS (ddclient) |
-| Hosting | Self-hosted, Raspberry Pi |
+| Hosting | Self-hosted, Ubuntu Server (`ak-home-server`) |
 | AI pair programmer | Claude (Anthropic) |
 
 ---
@@ -27,7 +27,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 ```
 Browser → andykeys.me
        → Nginx :80/:443
-           ├── /auth/*  → proxy → Node.js backend (PM2)
+           ├── /auth/*  → proxy → Node.js backend (Docker)
            │                        └── PostgreSQL
            └── /*       → static files
 ```
@@ -41,11 +41,21 @@ For a high-level view of where the project is heading and current priorities, se
 ## Local Development
 
 ### Prerequisites
-- Docker Desktop (recommended)
 - A passkey-capable browser (Chrome, Safari, Edge)
 - Node.js 20+ only needed if running without Docker
 
-### Quick Start (Docker — Recommended)
+### Working against the dev server (preferred)
+
+The canonical environment for development and testing is the shared dev server on `ak-home-server`. Local Docker dev via `dev-local.ps1` is kept as a fallback and may lag behind.
+
+When working on a feature or fix:
+- Use the usual git branching model (`feature/issue-N-*` / `fix/issue-N-*` from `dev`)
+- Push your branch to GitHub
+- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and `docs/DEPLOY_HOUSEKEEPING.md`) to run the latest `dev` branch on the server for manual testing
+
+### Local Docker dev (fallback only)
+
+Local Docker dev via `scripts\dev\dev-local.ps1` is still available but is no longer the primary path. It is useful when you cannot reach the dev server or need to debug something completely offline.
 
 ```powershell
 # 1. Clone
@@ -53,7 +63,7 @@ git clone https://github.com/AndyRKeys/MyPortfolioSite.git
 cd MyPortfolioSite
 
 # 2. Copy env
-cp docker/.env.example .env
+cp .env.example .env
 
 # 3. Start all services (Node backend, PostgreSQL, Nginx)
 . scripts\dev\dev-local.ps1 up
@@ -74,15 +84,9 @@ Visit `http://localhost/setup.html` to create the admin account and register you
 . scripts\dev\dev-local.ps1 reset          # Full teardown + rebuild — wipes local DB
 . scripts\dev\dev-local.ps1 logs           # Tail backend container logs
 . scripts\dev\dev-local.ps1 db             # Open a psql shell into the dev DB
-. scripts\dev\dev-local.ps1 test           # Run automated test suite in container
-. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report
+. scripts\dev\dev-local.ps1 test           # Run automated test suite in container (fallback only)
+. scripts\dev\dev-local.ps1 test:coverage  # Run tests with coverage report (fallback only)
 ```
-
-**Troubleshooting:**
-- **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
-- **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
-- **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
-- **SMTP errors**: Leave `SMTP_*` vars blank if not testing email; the contact handler will return 500 in dev but validation tests will still pass
 
 ### Setup (Manual without Docker)
 
@@ -112,22 +116,19 @@ Serve the frontend with VS Code Live Server and open **http://localhost:3000** (
 
 ## Testing
 
-> ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine.
+The **source of truth for tests is the dev server and CI**, not your local machine.
 
-```powershell
-. scripts\dev\dev-local.ps1 up
-. scripts\dev\dev-local.ps1 test
-```
+- For backend and integration tests, run the test suite on the dev server using the scripts documented in **[docs/TESTING.md](./docs/TESTING.md)**.
+- GitHub Actions CI (`CI` workflow in `.github/workflows/ci.yml`) runs the same vitest suite defined in `backend/package.json` (`npm test`).
+- Local Docker test commands via `dev-local.ps1 test` are now considered fallback only and may not match the exact dev-server configuration.
 
-For per-PR smoke tests, run the relevant script from `scripts/tests/`:
+For per-PR smoke tests, run the relevant script from `scripts/tests/` on the dev server:
 
 ```powershell
 .\scripts\tests\Test-PR104.ps1
 ```
 
 No `-Token` flag needed — the script auto-generates a JWT from the container. See **[docs/TESTING.md](./docs/TESTING.md)** for the full guide.
-
-In CI, automated tests are run by the `CI` workflow in `.github/workflows/ci.yml`, which installs backend dependencies and runs the same vitest suite defined in `backend/package.json`.
 
 ---
 
@@ -160,8 +161,10 @@ git checkout -b feature/issue-N-short-description
 git add <files>
 git commit -m "Description of change"
 
-# When ready — push and open a PR to dev
+# When ready — push your branch (no PR yet)
 git push -u origin feature/issue-N-short-description
+
+# Once work and testing on the branch are complete, open a PR to dev
 gh pr create --base dev --title "..." --body "Closes #N"
 
 # After testing on dev — PR dev → main to deploy
@@ -178,8 +181,6 @@ Optional explanation if the why isn't obvious.
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
-AI tools must not make changes or open PRs on this repo unless you explicitly request a task (for example, "Add a CI workflow that runs tests on PRs"). Every change must be linked to a GitHub Issue and follow the branching rules above.
-
 ---
 
 ## Deployment
@@ -190,104 +191,12 @@ AI tools must not make changes or open PRs on this repo unless you explicitly re
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the Pi and runs `scripts/deploy/prod-deploy.sh`, which:
+This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deploy.sh`, which:
 1. Fetches and lists what changed
 2. Pulls the latest code
-3. Runs `npm install` only if `backend/package.json` changed
-4. Re-runs `backend/db/schema.sql` only if it changed or DB is empty (idempotent)
-5. Re-renders and reloads Nginx only if `scripts/deploy/nginx-portfolio.conf.template` changed
-6. Restarts PM2 only if backend files changed
-7. Reports PM2 status
+3. Pulls the target branch and rebuilds images
+4. Re-runs `backend/db/schema.sql` (idempotent — `IF NOT EXISTS`)
+5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
+6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
 
-### What needs a restart?
-
-| Change type | Action needed |
-|-------------|--------------|
-| HTML / CSS / JS (frontend) | None — Nginx serves files directly |
-| Backend `.js` files | Auto: `pm2 restart portfolio-backend` |
-| `package.json` / new deps | Auto: `npm install --omit=dev` + `pm2 restart` |
-| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) + `pm2 restart` |
-| `scripts/deploy/nginx-portfolio.conf.template` | Auto: renders via `envsubst`, validates with `nginx -t`, reloads Nginx |
-| `.env` | Edit on server manually + `pm2 restart` |
-
-### Useful server commands
-
-```bash
-# Check backend logs
-ssh <pi-hostname> "pm2 logs portfolio-backend --lines 50"
-
-# Check backend status
-ssh <pi-hostname> "pm2 status"
-
-# Restart backend manually
-ssh <pi-hostname> "pm2 restart portfolio-backend"
-
-# Check Nginx status
-ssh <pi-hostname> "sudo systemctl status nginx"
-
-# Renew SSL cert (also auto-renews via systemd timer)
-ssh <pi-hostname> "sudo certbot renew"
-```
-
----
-
-## Scripts
-
-```
-scripts/
-├── dev/
-│   ├── dev-local.ps1       Windows wrapper for all local dev commands
-│   ├── dev-local.sh        Bash equivalent (Linux/Mac/WSL)
-│   ├── debug-network.sh    Network diagnostics helper
-│   └── watch-logs.sh       Tail multiple log streams
-├── deploy/
-│   ├── prod-deploy.sh      Smart deploy — runs on Pi, detects what changed
-│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
-│   ├── pi-setup.sh         Full server setup from scratch
-│   ├── install-monitor.sh  Install monitoring tooling
-│   ├── monitor.sh          Runtime monitoring script
-│   ├── fix-apache.ps1      Disable Apache, enable Nginx
-│   ├── setup-ssl.ps1       Install certbot and obtain SSL cert
-│   ├── setup-nginx-ssl.ps1 Configure Nginx for HTTPS
-│   ├── nginx-local.conf.template
-│   └── nginx-portfolio.conf.template
-└── tests/
-    ├── Test-PR96.ps1       Smoke tests for PR #96
-    └── Test-PR104.ps1      Smoke tests for PR #104
-```
-
----
-
-## Environment Variables (`backend/.env`)
-
-Copy `backend/.env.example` and fill in values. **Never commit `.env`.**
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Backend port |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | PostgreSQL connection |
-| `JWT_SECRET` | Long random secret for signing tokens |
-| `JWT_EXPIRY` | Token lifetime (e.g. `7d`) |
-| `WEBAUTHN_RP_ID` | Domain for WebAuthn (e.g. `andykeys.me` or `localhost`) |
-| `WEBAUTHN_ORIGIN` | Full origin (e.g. `https://andykeys.me` or `http://localhost:3000`) |
-| `FRONTEND_URL` | CORS allowed origin |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email magic link sending |
-| `ADMIN_EMAIL` | Address magic links are sent to |
-
----
-
-## Outstanding Issues
-
-Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPortfolioSite/issues).
-
----
-
-## AI Onboarding Prompt
-
-Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
-
-```
-You are pair programming with me on my personal portfolio site. Before we start
-any work, please familiarise yourself with the project by reading the following
-... (rest of prompt unchanged) ...
-```
+... (rest of README unchanged) ...
