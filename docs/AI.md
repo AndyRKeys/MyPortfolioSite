@@ -96,6 +96,28 @@ If the issue doesn't exist yet, create it on GitHub with:
 
 Use the appropriate issue template from `.github/ISSUE_TEMPLATE/` — `bug_report.md` for bugs, `feature_request.md` for new functionality.
 
+**Issue labelling (AI-managed):**
+
+Always apply both a **state label** and any relevant **type labels**:
+
+- **State labels**
+  - When starting work on an issue: apply `in progress`.
+  - When opening a PR to `dev` for that issue: switch to `awaiting review`.
+  - After the PR is merged to `dev` but before it is released to `main`: switch to `awaiting release`.
+  - After the change is deployed to production (release PR merged to `main`): switch to `released`.
+
+- **Type labels** (add all that apply)
+  - `bug` / `feature` — based on the issue template or description.
+  - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
+  - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
+  - `workflow`, `meta` — process, templates, automation, AI instructions.
+  - `high priority` — issues explicitly called out as urgent or blocking.
+  - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
+  - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
+
+The AI is responsible for adding/removing these labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.
+
 ### 2. Planning
 Before writing code:
 1. Read the issue and any linked context
@@ -118,7 +140,8 @@ Once implementation is complete:
 2. Link the issue number (`Closes #N`)
 3. Include a clear summary of what changed and why
 4. Fill in the PR template at `.github/pull_request_template.md` in full — summary, changes, test plan, smoke test checkbox, and documentation checklist
-5. Wait for review, testing, and approval before merging
+5. Update the linked issue's state label to `awaiting review` (if not already set)
+6. Wait for review, testing, and approval before merging
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
 
@@ -157,6 +180,8 @@ The AI will:
    - Links to all related PRs merged since last release
 4. Append an entry to `docs/RELEASE_NOTES.md` (see [Doc Lifecycle](#doc-lifecycle) below)
 5. Archive or clean up any planning docs whose work is now fully shipped (see [Doc Lifecycle](#doc-lifecycle) below)
+6. Update all linked issues:
+   - Change state label from `awaiting release` to `released`.
 
 You will:
 1. Review the release summary
@@ -173,6 +198,7 @@ If a critical bug is discovered on production:
 4. After merging to `main`, instruct: `Merge hotfix into dev to keep branches in sync`
 5. The AI will merge `main` back to `dev`
 6. A hotfix entry is appended to `docs/RELEASE_NOTES.md`
+7. Update the linked issue's state label to `released` once the hotfix is live on `main`.
 
 ### Branching diagram
 
@@ -416,6 +442,7 @@ For urgent production bugs that can't wait for the normal release cycle:
 2. Fix, commit, and raise a PR → `main` with a hotfix summary
 3. After merging to `main`, merge back to `dev` to keep branches in sync
 4. Append a hotfix entry to `docs/RELEASE_NOTES.md`
+5. Update the linked issue's state label to `released` once the hotfix is live on `main`.
 
 Pattern: `hotfix/issue-N-* → main` (you approve), then `main → dev`
 
