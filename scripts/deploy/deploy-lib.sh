@@ -150,6 +150,9 @@ _restore_last_good_state() {
 
 init_log_banner() {
   local title="$1"
+  # Record where this run starts in the (append-only) log so the final report
+  # only includes checkpoints from THIS deploy, not every prior run.
+  DEPLOY_LOG_START=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
   # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
   echo "" | tee -a "$LOG_FILE"
   echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
@@ -1017,8 +1020,11 @@ print_deploy_report() {
   echo "╔${border}╗"
   printf "║  %-${width}s  ║\n" "Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
   echo "╠${border}╣"
-  # Extract [deploy:*] and [regression] lines; strip colour codes and ts= field
-  grep -E '\[deploy:|\[regression\]' "$LOG_FILE" 2>/dev/null \
+  # Only this run's lines (log is append-only across deploys), and only
+  # checkpoint lines anchored at column 0 — so prose / commit-message text
+  # that happens to contain "[deploy:" is never matched.
+  tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
+    | grep -E '^\[deploy:|^\[regression\]' \
     | sed 's/\x1b\[[0-9;]*m//g' \
     | sed 's/ ts=[^ ]*$//' \
     | while IFS= read -r line; do
