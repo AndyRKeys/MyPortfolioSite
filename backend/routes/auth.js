@@ -11,6 +11,7 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { sendMagicLink } from '../utils/email.js';
+import { logger } from '../utils/logger.js';
 import {
   validate,
   SetupSchema,
@@ -54,7 +55,7 @@ router.get('/setup/status', async (req, res) => {
     const result = await pool.query('SELECT COUNT(*) FROM users');
     res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] setup/status DB error');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -76,7 +77,7 @@ router.post('/setup', validate(SetupSchema), async (req, res) => {
     const user = result.rows[0];
     res.json({ token: signJWT(user), user: { id: user.id, email: user.email, username: user.username } });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] setup — failed to create user');
     res.status(500).json({ error: 'Failed to create user' });
   }
 });
@@ -92,7 +93,7 @@ router.get('/me', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] /me DB error');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -139,7 +140,7 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
 
     res.json({ options, sessionKey });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] passkey register start failed');
     res.status(500).json({ error: 'Failed to start registration' });
   }
 });
@@ -189,7 +190,7 @@ router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate
 
     res.json({ verified: true });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] passkey register finish failed');
     res.status(500).json({ error: 'Failed to finish registration' });
   }
 });
@@ -233,7 +234,7 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
 
     res.json({ options, sessionKey });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] passkey login start failed');
     res.status(500).json({ error: 'Failed to start authentication' });
   }
 });
@@ -290,7 +291,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     const token = signJWT({ id: passkey.user_id, email: passkey.email, username: passkey.username });
     res.json({ token, user: { id: passkey.user_id, email: passkey.email, username: passkey.username } });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] passkey login finish failed');
     res.status(500).json({ error: 'Failed to finish authentication' });
   }
 });
@@ -303,25 +304,30 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 
-    // Debug: confirm we entered the handler
-    console.log(`[auth/email/send] Request received`);
-    console.log(`[auth/email/send] ADMIN_EMAIL configured: ${normalizedAdmin ? 'yes' : 'NO — blank!'}`);
-    console.log(`[auth/email/send] Submitted email length: ${normalizedEmail.length}`);
-    console.log(`[auth/email/send] Admin email length: ${normalizedAdmin.length}`);
-    console.log(`[auth/email/send] Emails match: ${normalizedEmail === normalizedAdmin}`);
+    // Never log raw emails (PII) — only lengths/match so the admin-gate is
+    // diagnosable without leaking the address.
+    logger.info(
+      {
+        adminConfigured: Boolean(normalizedAdmin),
+        submittedLen: normalizedEmail.length,
+        adminLen: normalizedAdmin.length,
+        match: normalizedEmail === normalizedAdmin,
+      },
+      '[auth/email/send] Request received'
+    );
 
     // Gate magic link to admin email only — prevents email bombing/enumeration
     if (normalizedEmail !== normalizedAdmin) {
-      console.log(`[auth/email/send] Gate blocked — submitted email does not match ADMIN_EMAIL`);
+      logger.info('[auth/email/send] Gate blocked — submitted email does not match ADMIN_EMAIL');
       return res.json({ sent: true });
     }
 
-    console.log(`[auth/email/send] Gate passed — looking up user in DB`);
+    logger.info('[auth/email/send] Gate passed — looking up user in DB');
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
       normalizedEmail,
     ]);
 
-    console.log(`[auth/email/send] DB lookup complete — rows found: ${userResult.rows.length}`);
+    logger.info({ rows: userResult.rows.length }, '[auth/email/send] DB lookup complete');
 
     if (userResult.rows.length) {
       const token = uuidv4();
@@ -330,21 +336,21 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
          VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
         [userResult.rows[0].id, token]
       );
-      console.log(`[auth/email/send] Token inserted — attempting email send`);
+      logger.info('[auth/email/send] Token inserted — attempting email send');
       await sendMagicLink(normalizedEmail, token).catch(err => {
-        console.error('[auth] Failed to send magic link:', err.message);
-        console.error('[auth] SMTP error stack:', err.stack);
-        console.error('[auth] Check SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+        logger.error(
+          { err },
+          '[auth/email/send] Failed to send magic link — check OUTLOOK_*/SMTP_* in .env'
+        );
       });
     } else {
-      console.log(`[auth/email/send] No user found for this email — skipping send`);
+      logger.info('[auth/email/send] No user found for this email — skipping send');
     }
 
     // Deliberate anti-enumeration: always same response regardless of whether email exists
     res.json({ sent: true });
   } catch (err) {
-    console.error('[auth/email/send] Unexpected error:', err.message);
-    console.error(err.stack);
+    logger.error({ err }, '[auth/email/send] Unexpected error');
     res.status(500).json({ error: 'Failed to send email' });
   }
 });
@@ -353,9 +359,9 @@ router.get('/email/verify', async (req, res) => {
   try {
     const { token } = req.query;
     // Never log the raw token — it is a bearer credential.
-    console.log(`[auth/email/verify] Request received — token present: ${token ? 'yes' : 'no'}`);
+    logger.info({ tokenPresent: Boolean(token) }, '[auth/email/verify] Request received');
     if (!token) {
-      console.log(`[auth/email/verify] Rejected — no token in query`);
+      logger.info('[auth/email/verify] Rejected — no token in query');
       return res.status(400).json({ error: 'Token required' });
     }
 
@@ -395,14 +401,20 @@ router.get('/email/verify', async (req, res) => {
          FROM email_tokens`
       );
       const d = diag.rows[0];
-      console.log(
-        `[auth/email/verify] No match — total=${d.total} valid_candidates=${d.valid_candidates} ` +
-        `expired=${d.expired} used=${d.used} legacy_plaintext=${d.legacy_plaintext}`
+      logger.warn(
+        {
+          total: Number(d.total),
+          valid_candidates: Number(d.valid_candidates),
+          expired: Number(d.expired),
+          used: Number(d.used),
+          legacy_plaintext: Number(d.legacy_plaintext),
+        },
+        '[auth/email/verify] No match'
       );
       if (Number(d.legacy_plaintext) > 0) {
-        console.warn(
-          `[auth/email/verify] ${d.legacy_plaintext} legacy non-bcrypt row(s) present — ` +
-          `boot cleanup may not have run (#134)`
+        logger.warn(
+          { legacy_plaintext: Number(d.legacy_plaintext) },
+          '[auth/email/verify] Legacy non-bcrypt row(s) present — boot cleanup may not have run (#134)'
         );
       }
       return res.status(400).json({ error: 'Invalid or expired link' });
@@ -410,13 +422,13 @@ router.get('/email/verify', async (req, res) => {
 
     const row = result.rows[0];
     await pool.query('UPDATE email_tokens SET used = TRUE WHERE id = $1', [row.id]);
-    console.log(`[auth/email/verify] Match — token consumed for user_id=${row.user_id}; issuing JWT`);
+    logger.info({ userId: row.user_id }, '[auth/email/verify] Match — token consumed; issuing JWT');
 
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
     // Log the failure reason (not the token) so crypt/DB errors are diagnosable.
-    console.error(`[auth/email/verify] Verification failed — ${err.message}`);
+    logger.error({ err }, '[auth/email/verify] Verification failed');
     res.status(500).json({ error: 'Verification failed' });
   }
 });
@@ -432,7 +444,7 @@ router.get('/passkeys', authenticate, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] list passkeys DB error');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -446,7 +458,7 @@ router.delete('/passkeys/:id', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Passkey not found' });
     res.json({ deleted: true });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[auth] delete passkey DB error');
     res.status(500).json({ error: 'Database error' });
   }
 });

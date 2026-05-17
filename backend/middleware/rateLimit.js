@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { logger } from '../utils/logger.js';
 
 export function createRateLimiter(options = {}) {
   const {
@@ -42,7 +43,7 @@ export function createRateLimiter(options = {}) {
 
       next();
     } catch (err) {
-      console.error('[rateLimit] DB error (failing open):', err.message);
+      logger.error({ err }, '[rateLimit] DB error (failing open)');
       next();
     }
   };

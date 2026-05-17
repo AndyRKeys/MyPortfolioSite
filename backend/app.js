@@ -9,6 +9,9 @@ import express  from 'express';
 import cors     from 'cors';
 import path     from 'path';
 import { fileURLToPath } from 'url';
+import pinoHttp from 'pino-http';
+
+import { logger } from './utils/logger.js';
 
 import authRoutes    from './routes/auth.js';
 import travelRoutes  from './routes/travel.js';
@@ -26,6 +29,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
+
+  // HTTP request logging + per-request child logger (req.log) — must be
+  // first so even CORS-rejected requests are recorded with method/path/
+  // status/latency. Secret redaction is configured in utils/logger.js.
+  // Health check polls every 10s — demote to trace so they don't flood
+  // info-level logs; visible only when LOG_LEVEL=trace.
+  app.use(pinoHttp({
+    logger,
+    customLogLevel: (req, res) =>
+      req.url === '/health' ? 'trace' : res.statusCode >= 500 ? 'error' : 'info',
+  }));
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
 
