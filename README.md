@@ -197,4 +197,139 @@ This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deplo
 5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
 6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
 
-... (rest of README unchanged) ...
+### What needs a restart?
+
+The whole stack is containerised, so a deploy rebuilds and recreates the affected containers. There is no separate process manager to restart.
+
+| Change type | Action needed |
+|-------------|--------------|
+| HTML / CSS / JS (frontend) | None — Nginx serves files directly |
+| Backend `.js` files | Auto: image rebuild + `docker compose up -d --build` recreates the backend container |
+| `package.json` / new deps | Auto: image rebuild reinstalls deps, container recreated |
+| `backend/db/schema.sql` | Auto: re-runs schema (uses `IF NOT EXISTS`) on boot |
+| `scripts/config/nginx-*.conf.template` | Auto: rendered + validated with `nginx -t` before the Nginx container reloads |
+| `.env` | Edit on server manually, then re-run the deploy (Compose reloads env on recreate) |
+
+### Useful server commands
+
+> Prod uses `docker-compose.prod.yml`. SSH into the server first, then run from the repo directory.
+
+```bash
+# Check backend logs
+docker compose -f docker-compose.prod.yml logs --tail=50 backend
+
+# Check container status
+docker compose -f docker-compose.prod.yml ps
+
+# Restart the backend container
+docker compose -f docker-compose.prod.yml restart backend
+
+# Check Nginx (containerised — via Compose, not systemd)
+docker compose -f docker-compose.prod.yml logs --tail=50 nginx
+
+# Renew SSL cert (also auto-renews via systemd timer)
+ssh <hostname> "sudo certbot renew"
+```
+
+---
+
+## Scripts
+
+```
+scripts/
+├── dev/
+│   ├── dev-local.ps1       Windows wrapper for all local dev commands
+│   ├── dev-local.sh        Bash equivalent (Linux/Mac/WSL)
+│   ├── debug-network.sh    Network diagnostics helper
+│   └── watch-logs.sh       Tail multiple log streams
+├── deploy/
+│   ├── prod-deploy.sh      Smart deploy — runs on the server, detects what changed
+│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
+│   ├── pi-setup.sh         Full server setup from scratch
+│   ├── install-monitor.sh  Install monitoring tooling
+│   ├── monitor.sh          Runtime monitoring script
+│   ├── fix-apache.ps1      Disable Apache, enable Nginx
+│   ├── setup-ssl.ps1       Install certbot and obtain SSL cert
+│   ├── setup-nginx-ssl.ps1 Configure Nginx for HTTPS
+│   ├── nginx-local.conf.template
+│   └── nginx-portfolio.conf.template
+└── tests/
+    ├── Test-PR96.ps1       Smoke tests for PR #96
+    └── Test-PR104.ps1      Smoke tests for PR #104
+```
+
+---
+
+## Environment Variables (`backend/.env`)
+
+Copy `backend/.env.example` and fill in values. **Never commit `.env`.**
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | Backend port |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | PostgreSQL connection |
+| `JWT_SECRET` | Long random secret for signing tokens |
+| `JWT_EXPIRY` | Token lifetime (e.g. `7d`) |
+| `WEBAUTHN_RP_ID` | Domain for WebAuthn (e.g. `andykeys.me` or `localhost`) |
+| `WEBAUTHN_ORIGIN` | Full origin (e.g. `https://andykeys.me` or `http://localhost:3000`) |
+| `FRONTEND_URL` | CORS allowed origin |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email magic link sending |
+| `ADMIN_EMAIL` | Address magic links are sent to |
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **README.md** | Architecture, tech stack, local dev setup |
+| **[docs/AI.md](./docs/AI.md)** | Pair programming instructions, scope discipline, commit conventions |
+| **[docs/STYLE_GUIDE.md](./docs/STYLE_GUIDE.md)** | Naming conventions, code patterns, button variants |
+| **[docs/TESTING.md](./docs/TESTING.md)** | Test suite structure, how to run tests, smoke test examples |
+| **[docs/DATABASE.md](./docs/DATABASE.md)** | PostgreSQL schema reference, tables, columns, constraints |
+| **[docs/SECURITY.md](./docs/SECURITY.md)** | Auth model, JWT, WebAuthn, protected routes, threat model |
+| **[docs/UNTRACKED_FILES.md](./docs/UNTRACKED_FILES.md)** | Files not in git but required (`.env`, certs, uploads) |
+| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Server setup, cert renewal, monitoring (work-in-progress) |
+| **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
+
+---
+
+## AI Onboarding Prompt
+
+Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
+
+```
+You are pair programming with me on my personal portfolio site. Before we start
+any work, please familiarise yourself with the project by reading the following
+documents in order — do not skip any:
+
+1. README.md                   — architecture, local dev setup, branching strategy,
+                                 deploy process, and scripts reference
+2. docs/AI.md                  — your working instructions: scope discipline, workflow,
+                                 commit conventions, documentation hygiene rules,
+                                 branching guardrails, and code style rules
+3. docs/STYLE_GUIDE.md         — naming conventions, alignment, JS/CSS/HTML patterns
+4. docs/TESTING.md             — test suite structure, how to run tests, PR smoke
+                                 test template, and what is/isn't tested
+5. docs/DATABASE.md            — full database schema reference (tables, columns, constraints)
+6. docs/SECURITY.md            — auth model, JWT, protected routes, and threat model
+7. docs/UNTRACKED_FILES.md     — files not in git but critical (.env, certs, uploads,
+                                 how they're created, how to restore)
+7. docs/DEPENDENCIES.md        — rules for adding, updating, and removing dependencies
+8. backend/db/schema.sql       — raw schema SQL
+
+Then do a quick orientation of the repo structure:
+- List the top-level folders and describe the purpose of each
+- Skim backend/app.js and backend/routes/ to understand the API surface
+- Note any open GitHub Issues that are relevant to the work we're about to do
+
+Once you have read all of the above and completed the orientation, confirm with
+a short summary covering:
+- The tech stack and how the pieces fit together
+- The branching model and where new work should be branched from
+- The test approach and how to run the suite
+- Any documentation hygiene rules I should know you have internalised
+- Any open issues or anything that looks incomplete or worth flagging
+
+Do not write any code or propose any changes until I give you a task.
+```
