@@ -6,7 +6,8 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
 
 ## Scope Discipline
 
-- **Only make changes explicitly requested** in the linked issue or conversation
+- **Only make changes explicitly requested** in the linked issue or conversation.
+- Treat a clear user request (for example, "Add a CI workflow that runs tests on PRs" or "Fix the Nominatim CSP breakage") as permission to work on that specific task only.
 - If you spot an improvement while implementing (e.g. a refactoring that reduces duplication, a performance fix, a missing null check):
   - **If minor and clearly sensible** (e.g. renaming a variable for clarity, fixing an obvious bug): include it in the current PR with a note in the PR description
   - **If significant** (e.g. a larger refactor, architectural change, new abstraction): raise a new GitHub issue instead and continue with the original scope only. Ask the owner before proceeding with the improvement
@@ -82,6 +83,7 @@ feature/* or fix/* (per GitHub issue)
 - **Hotfixes** branch from `main`, not `dev`, for emergency production fixes.
 - **Never force-push** to shared branches (`dev`, `main`). Only force-push to your own feature branch if absolutely necessary.
 - **Only you merge to `main`** — approve all PRs to main. AI creates branches and PRs, you approve merges.
+- AI tools must never create branches, push commits, or open PRs on this repo without a specific, current command from you in the conversation.
 
 ## Expected AI Workflow
 

@@ -45,7 +45,18 @@ For a high-level view of where the project is heading and current priorities, se
 - A passkey-capable browser (Chrome, Safari, Edge)
 - Node.js 20+ only needed if running without Docker
 
-### Quick Start (Docker — Recommended)
+### Working against the dev server (preferred)
+
+The canonical environment for development and testing is the shared dev server on `ak-home-server`. Local Docker dev via `dev-local.ps1` is kept as a fallback and may lag behind.
+
+When working on a feature or fix:
+- Use the usual git branching model (`feature/issue-N-*` / `fix/issue-N-*` from `dev`)
+- Push your branch and open a PR to `dev` as soon as there is something to test
+- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and `docs/DEV_ENVIRONMENT.md`) to run the latest `dev` branch on the server for manual testing
+
+### Local Docker dev (fallback only)
+
+Local Docker dev via `scripts\dev\dev-local.ps1` is still available but is no longer the primary path. It is useful when you cannot reach the dev server or need to debug something completely offline.
 
 ```powershell
 # 1. Clone
@@ -66,7 +77,7 @@ Services start in ~30s. PostgreSQL schema auto-initializes on first run. Backend
 
 Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
 
-### dev-local.ps1 Reference
+### dev-local.ps1 Reference (fall-back only)
 
 ```powershell
 . scripts\dev\dev-local.ps1 up             # Build & start all containers
@@ -112,14 +123,13 @@ Serve the frontend with VS Code Live Server and open **http://localhost:3000** (
 
 ## Testing
 
-> ⚠️ Tests run inside the Docker container — do not run `npm test` directly on your local machine.
+The **source of truth for tests is the dev server and CI**, not your local machine.
 
-```powershell
-. scripts\dev\dev-local.ps1 up
-. scripts\dev\dev-local.ps1 test
-```
+- For backend and integration tests, run the test suite on the dev server using the scripts documented in **[docs/TESTING.md](./docs/TESTING.md)**.
+- GitHub Actions CI (`CI` workflow in `.github/workflows/ci.yml`) runs the same vitest suite defined in `backend/package.json` (`npm test`).
+- Local Docker test commands via `dev-local.ps1 test` are now considered fallback only and may not match the exact dev-server configuration.
 
-For per-PR smoke tests, run the relevant script from `scripts/tests/`:
+For per-PR smoke tests, run the relevant script from `scripts/tests/` on the dev server:
 
 ```powershell
 .\scripts\tests\Test-PR104.ps1
@@ -281,21 +291,21 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 
 ---
 
----
-
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
 | **README.md** | Architecture, tech stack, local dev setup |
+| **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Deeper architecture, flows, and component boundaries |
 | **[docs/AI.md](./docs/AI.md)** | Pair programming instructions, scope discipline, commit conventions |
 | **[docs/STYLE_GUIDE.md](./docs/STYLE_GUIDE.md)** | Naming conventions, code patterns, button variants |
 | **[docs/TESTING.md](./docs/TESTING.md)** | Test suite structure, how to run tests, smoke test examples |
 | **[docs/DATABASE.md](./docs/DATABASE.md)** | PostgreSQL schema reference, tables, columns, constraints |
 | **[docs/SECURITY.md](./docs/SECURITY.md)** | Auth model, JWT, WebAuthn, protected routes, threat model |
 | **[docs/UNTRACKED_FILES.md](./docs/UNTRACKED_FILES.md)** | Files not in git but required (`.env`, certs, uploads) |
-| **[docs/DEPLOY_HOUSEKEEPING.md](./docs/DEPLOY_HOUSEKEEPING.md)** | UFW, cron, autostart checks during deployment |
-| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Server setup, cert renewal, monitoring (work-in-progress) |
+| **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Host-level infra, both environments, backups, Dropbear unlock |
+| **[docs/DEV_ENVIRONMENT.md](./docs/DEV_ENVIRONMENT.md)** | Dev server Docker stack, dev `.env`, dev deploy scripts |
+| **[docs/PROD_ENVIRONMENT.md](./docs/PROD_ENVIRONMENT.md)** | Prod Docker stack, prod `.env`, prod deploy scripts |
 | **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
 
 ---
