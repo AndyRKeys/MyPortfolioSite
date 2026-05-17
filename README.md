@@ -51,7 +51,7 @@ The canonical environment for development and testing is the shared dev server o
 When working on a feature or fix:
 - Use the usual git branching model (`feature/issue-N-*` / `fix/issue-N-*` from `dev`)
 - Push your branch and open a PR to `dev` as soon as there is something to test
-- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and `docs/DEPLOY_HOUSEKEEPING.md`) to run the latest `dev` branch on the server for manual testing
+- Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and any server notes in the docs folder) to run the latest `dev` branch on the server for manual testing
 
 ### Local Docker dev (fallback only)
 
