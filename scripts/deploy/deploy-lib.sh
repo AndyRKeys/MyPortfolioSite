@@ -80,11 +80,11 @@ _deploy_log_raw()   {
 }
 
 dlog()     { _verbose && _deploy_log_raw "$*" || true; }
-dinfo()    { _verbose && _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*" || true; }
-dok()      { _verbose && _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}[OK]${DEPLOY_RESET}    $*" || true; }
-dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET}  $*"; }
-dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}[ERROR]${DEPLOY_RESET} $*"; }
-dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}── $* ──────────────────────────────────────────────${DEPLOY_RESET}"; } || true; }
+dinfo()    { _verbose && _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}ℹ  [INFO]${DEPLOY_RESET}  $*" || true; }
+dok()      { _verbose && _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}✅ [OK]${DEPLOY_RESET}    $*" || true; }
+dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}⚠️  [WARN]${DEPLOY_RESET}  $*"; }
+dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}❌ [ERROR]${DEPLOY_RESET} $*"; }
+dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}🔷 ── $* ───────────────────────────────────────────${DEPLOY_RESET}"; } || true; }
 
 # Machine-readable checkpoint line — grep-friendly, no colour codes.
 # Always printed regardless of DEPLOY_QUIET. Omits ts= to keep lines short in the report.
@@ -93,7 +93,10 @@ dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}�
 dstatus() {
   local phase="$1"; shift
   local msg="[deploy:${phase}] $*"
+  # No colour codes — these lines are parsed by print_deploy_report
   echo "$msg" | tee -a "$LOG_FILE"
+  # Also print a coloured human-friendly echo in verbose mode
+  _verbose && echo -e "${DEPLOY_BOLD}${DEPLOY_CYAN}📋 checkpoint:${DEPLOY_RESET} ${msg}" || true
 }
 
 # Suppress verbose output when DEPLOY_QUIET=1. Only dstatus, dwarn, dfail, and ddie
@@ -149,9 +152,9 @@ init_log_banner() {
   local title="$1"
   # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
   echo "" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_BOLD}║  ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}║  🚀 ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
   echo "" | tee -a "$LOG_FILE"
 }
 
@@ -868,7 +871,7 @@ run_deploy_tests() {
 
   if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | _log_cmd; then
     dstatus vitest status=ok service="$service_name"
-    dok "All tests passed"
+    dok "All tests passed ✓"
   else
     dstatus vitest status=failed service="$service_name"
     dfail "Test suite failed — initiating rollback"
@@ -891,7 +894,7 @@ test_error_logger_all_pages() {
   # Run comprehensive test inside the backend container
   if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
     dstatus error-logger status=ok
-    dok "Error logger site-wide test passed"
+    dok "Error logger site-wide test passed ✓"
   else
     dstatus error-logger status=failed
     dwarn "Error logger site-wide test failed or had warnings — see log above"
@@ -924,7 +927,7 @@ test_csp_reporting() {
   if [ -n "$csp_header" ]; then
     if echo "$csp_header" | grep -q "report-uri"; then
       dstatus csp status=ok report-uri=present
-      dok "CSP report-uri is configured"
+      dok "CSP report-uri is configured ✓"
     else
       dstatus csp status=warn report-uri=missing
       dwarn "CSP header present but report-uri not found"
