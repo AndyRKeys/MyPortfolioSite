@@ -15,6 +15,15 @@
 
 set -euo pipefail
 
+# ── Colours ──────────────────────────────────────────────────────────────────────
+
+if [ -t 1 ]; then
+  C_RED='\033[0;31m'; C_YELLOW='\033[0;33m'; C_GREEN='\033[0;32m'
+  C_CYAN='\033[0;36m'; C_BOLD='\033[1m'; C_DIM='\033[2m'; C_RESET='\033[0m'
+else
+  C_RED=''; C_YELLOW=''; C_GREEN=''; C_CYAN=''; C_BOLD=''; C_DIM=''; C_RESET=''
+fi
+
 # ── Args ────────────────────────────────────────────────────────────────────────
 
 BASE_URL=""
@@ -48,9 +57,9 @@ if [ -z "$TOKEN" ] && [ -n "$COMPOSE_FILE" ]; then
     console.log(jwt.sign({ userId: 'regression-test' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
   " 2>/dev/null | grep '^eyJ' | tail -1 || true)
   if [ -n "$TOKEN" ]; then
-    echo "  [INFO] JWT generated from $SERVICE container (1h expiry)"
+    echo -e "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  JWT generated from $SERVICE container (1h expiry)"
   else
-    echo "  [WARN] Could not generate JWT — auth tests will be skipped"
+    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not generate JWT — auth tests will be skipped"
   fi
 fi
 
@@ -79,10 +88,10 @@ check() {
   [ -n "$expect_body" ] && [[ "$body" != *"$expect_body"* ]] && ok=false
 
   if $ok; then
-    echo "  [PASS] $name"
+    echo -e "  ${C_GREEN}${C_BOLD}✅ [PASS]${C_RESET}  $name"
     PASS=$((PASS + 1))
   else
-    local detail="Expected $expect_status got $status"
+    local detail="expected $expect_status got $status"
     if [ "$status" = "000" ] && [ -n "$curl_err" ]; then
       detail="$detail | curl error: $curl_err"
     elif [ -n "$expect_body" ] && [[ "$body" != *"$expect_body"* ]]; then
@@ -90,7 +99,7 @@ check() {
     elif [ -n "$body" ] && [ "$status" != "$expect_status" ]; then
       detail="$detail | body: $(echo "$body" | head -c 300 | tr -d '\n')"
     fi
-    echo "  [FAIL] $name — $detail"
+    echo -e "  ${C_RED}${C_BOLD}❌ [FAIL]${C_RESET}  $name — ${C_DIM}${detail}${C_RESET}"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -101,7 +110,7 @@ check_auth() {
   local extra=("$@")
 
   if [ -z "$TOKEN" ]; then
-    echo "  [SKIP] $name (no token)"
+    echo -e "  ${C_YELLOW}${C_DIM}⏭  [SKIP]${C_RESET}  $name ${C_DIM}(no token)${C_RESET}"
     SKIP=$((SKIP + 1))
     return
   fi
@@ -113,16 +122,16 @@ check_auth() {
 # ── Header ───────────────────────────────────────────────────────────────────────
 
 echo ""
-echo "════════════════════════════════════════════════════════════"
-echo "  Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')"
-echo "  Base URL : $BASE_URL"
-echo "  Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
-echo "════════════════════════════════════════════════════════════"
+echo -e "${C_CYAN}${C_BOLD}╔════════════════════════════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}${C_BOLD}║  🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')  ║${C_RESET}"
+printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Base URL : $BASE_URL"
+printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
+echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
 echo ""
 
 # ── No-auth baseline ─────────────────────────────────────────────────────────────
 
-echo "--- No-auth baseline ---"
+echo -e "${C_CYAN}${C_BOLD}🔷 ── No-auth baseline ──────────────────────────────────────${C_RESET}"
 
 check "GET /api/posts returns 200" \
   GET "$BASE_URL/api/posts" 200
@@ -153,7 +162,7 @@ echo ""
 
 # ── Auth-required baseline ────────────────────────────────────────────────────────
 
-echo "--- Auth-required baseline ---"
+echo -e "${C_CYAN}${C_BOLD}🔷 ── Auth-required baseline ────────────────────────────────${C_RESET}"
 
 check_auth "POST /api/posts missing title returns 400" \
   POST "$BASE_URL/api/posts" 400 "" \
@@ -183,14 +192,25 @@ echo ""
 TOTAL=$((PASS + FAIL + SKIP))
 STATUS=$([ "$FAIL" -eq 0 ] && echo "OK" || echo "FAIL")
 
-echo "════════════════════════════════════════════════════════════"
-printf "  PASSED : %s\n" "$PASS"
-[ "$SKIP" -gt 0 ] && printf "  SKIPPED: %s\n" "$SKIP"
-printf "  FAILED : %s\n" "$FAIL"
-echo "════════════════════════════════════════════════════════════"
+if [ "$FAIL" -eq 0 ]; then
+  RESULT_COLOUR="${C_GREEN}${C_BOLD}"
+  RESULT_ICON="✅"
+else
+  RESULT_COLOUR="${C_RED}${C_BOLD}"
+  RESULT_ICON="❌"
+fi
+
+echo ""
+echo -e "${RESULT_COLOUR}╔════════════════════════════════════════════════════════════╗${C_RESET}"
+echo -e "${RESULT_COLOUR}║  ${RESULT_ICON} Regression Results — ${STATUS}$(printf '%*s' $((36 - ${#STATUS})) '')║${C_RESET}"
+echo -e "${RESULT_COLOUR}╠════════════════════════════════════════════════════════════╣${C_RESET}"
+printf "${RESULT_COLOUR}║  %-60s║${C_RESET}\n" "Passed : $PASS / $TOTAL"
+[ "$SKIP" -gt 0 ] && printf "${C_YELLOW}${C_BOLD}║  %-60s║${C_RESET}\n" "Skipped: $SKIP"
+[ "$FAIL" -gt 0 ] && printf "${C_RED}${C_BOLD}║  %-60s║${C_RESET}\n" "Failed : $FAIL"
+echo -e "${RESULT_COLOUR}╚════════════════════════════════════════════════════════════╝${C_RESET}"
 echo ""
 
-# Machine-readable summary line — easy to grep in CI logs or deploy output
+# Machine-readable summary line — parsed by print_deploy_report, no colour codes
 echo "[regression] status=${STATUS} passed=${PASS} failed=${FAIL} skipped=${SKIP} total=${TOTAL} url=${BASE_URL}"
 
 [ "$FAIL" -eq 0 ]
