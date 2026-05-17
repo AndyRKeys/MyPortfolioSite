@@ -39,6 +39,7 @@ set -euo pipefail
 # ── Deployment state tracking ─────────────────────────────────────────────────
 
 DEPLOY_ROLLED_BACK=0  # Set to 1 if we rolled back instead of deploying the intended branch
+DEPLOY_STEP=0         # Auto-incrementing checkpoint counter (see dstatus)
 
 # ── Colours and logging ───────────────────────────────────────────────────────
 
@@ -87,12 +88,15 @@ dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}❌ [ERROR]${DEPLOY_RES
 dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}🔷 ── $* ───────────────────────────────────────────${DEPLOY_RESET}"; } || true; }
 
 # Machine-readable checkpoint line — grep-friendly, no colour codes.
-# Always printed regardless of DEPLOY_QUIET. Omits ts= to keep lines short in the report.
+# Always printed regardless of DEPLOY_QUIET. Omits ts= to keep lines short in
+# the report. Each line carries an auto-incrementing step= number so the
+# phase order is visible even in quiet mode (where section headers are hidden).
 # Usage: dstatus <phase> key=value [key=value ...]
-# Output: [deploy:<phase>] key=value key=value
+# Output: [deploy:<phase>] step=<n> key=value key=value
 dstatus() {
   local phase="$1"; shift
-  local msg="[deploy:${phase}] $*"
+  DEPLOY_STEP=$((DEPLOY_STEP + 1))
+  local msg="[deploy:${phase}] step=${DEPLOY_STEP} $*"
   # No colour codes — these lines are parsed by print_deploy_report
   echo "$msg" | tee -a "$LOG_FILE"
   # Also print a coloured human-friendly echo in verbose mode

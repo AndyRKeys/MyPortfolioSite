@@ -24,6 +24,13 @@ else
   C_RED=''; C_YELLOW=''; C_GREEN=''; C_CYAN=''; C_BOLD=''; C_DIM=''; C_RESET=''
 fi
 
+# Honour the deploy's quiet mode (exported by dev/prod-deploy.sh). In quiet
+# mode, suppress the header box, section headers, INFO lines and per-test
+# PASS/SKIP rows — but ALWAYS keep FAIL rows, the final results box and the
+# machine-readable [regression] line so failures stay diagnosable.
+QUIET="${DEPLOY_QUIET:-0}"
+say() { [ "$QUIET" = "1" ] || echo -e "$@"; }
+
 # ── Args ────────────────────────────────────────────────────────────────────────
 
 BASE_URL=""
@@ -70,7 +77,7 @@ if [ -z "$TOKEN" ] && [ -n "$COMPOSE_FILE" ]; then
     console.log(jwt.sign({ userId: 'regression-test' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
   " 2>/dev/null | grep '^eyJ' | tail -1 || true)
   if [ -n "$TOKEN" ]; then
-    echo -e "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  JWT generated from $SERVICE container (1h expiry)"
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  JWT generated from $SERVICE container (1h expiry)"
   else
     echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not generate JWT — auth tests will be skipped"
   fi
@@ -95,7 +102,7 @@ reset_rate_limits() {
       .then(() => process.exit(0))
       .catch((e) => { process.stderr.write(String(e) + '\n'); process.exit(1); });
   " >/dev/null 2>&1; then
-    echo -e "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Rate-limit counters reset (dev)"
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Rate-limit counters reset (dev)"
   else
     echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not reset rate-limit counters — continuing"
   fi
@@ -124,7 +131,7 @@ check() {
   [ -n "$expect_body" ] && [[ "$body" != *"$expect_body"* ]] && ok=false
 
   if $ok; then
-    echo -e "  ${C_GREEN}${C_BOLD}✅ [PASS]${C_RESET}  $name"
+    say "  ${C_GREEN}${C_BOLD}✅ [PASS]${C_RESET}  $name"
     PASS=$((PASS + 1))
   else
     local detail="expected $expect_status got $status"
@@ -146,7 +153,7 @@ check_auth() {
   local extra=("$@")
 
   if [ -z "$TOKEN" ]; then
-    echo -e "  ${C_YELLOW}${C_DIM}⏭  [SKIP]${C_RESET}  $name ${C_DIM}(no token)${C_RESET}"
+    say "  ${C_YELLOW}${C_DIM}⏭  [SKIP]${C_RESET}  $name ${C_DIM}(no token)${C_RESET}"
     SKIP=$((SKIP + 1))
     return
   fi
@@ -157,13 +164,15 @@ check_auth() {
 
 # ── Header ───────────────────────────────────────────────────────────────────────
 
-echo ""
-echo -e "${C_CYAN}${C_BOLD}╔════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_CYAN}${C_BOLD}║  🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')  ║${C_RESET}"
-printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Base URL : $BASE_URL"
-printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
-echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
-echo ""
+if [ "$QUIET" != "1" ]; then
+  echo ""
+  echo -e "${C_CYAN}${C_BOLD}╔════════════════════════════════════════════════════════════╗${C_RESET}"
+  echo -e "${C_CYAN}${C_BOLD}║  🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')  ║${C_RESET}"
+  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Base URL : $BASE_URL"
+  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
+  echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
+  echo ""
+fi
 
 # Clean slate so contact validation checks aren't tripped by counters left
 # over from earlier deploys within the rate-limit window (dev only).
@@ -171,7 +180,7 @@ reset_rate_limits
 
 # ── No-auth baseline ─────────────────────────────────────────────────────────────
 
-echo -e "${C_CYAN}${C_BOLD}🔷 ── No-auth baseline ──────────────────────────────────────${C_RESET}"
+say "${C_CYAN}${C_BOLD}🔷 ── No-auth baseline ──────────────────────────────────────${C_RESET}"
 
 check "GET /api/posts returns 200" \
   GET "$BASE_URL/api/posts" 200
@@ -203,13 +212,13 @@ check "GET /api/health returns 200 with db ok" \
 check "Unknown route returns 404" \
   GET "$BASE_URL/api/does-not-exist" 404
 
-echo ""
+say ""
 
 # ── Auth gating (protected routes must reject anonymous requests) ─────────────────
 # One cheap request each — catches the worst regression: a protected mutating
 # route going public. No token sent; all must be 401.
 
-echo -e "${C_CYAN}${C_BOLD}🔷 ── Auth gating ───────────────────────────────────────────${C_RESET}"
+say "${C_CYAN}${C_BOLD}🔷 ── Auth gating ───────────────────────────────────────────${C_RESET}"
 
 check "GET /api/deploy/status without auth returns 401" \
   GET "$BASE_URL/api/deploy/status" 401
@@ -223,11 +232,11 @@ check "DELETE /api/posts/1 without auth returns 401" \
 check "DELETE /api/travel/1 without auth returns 401" \
   DELETE "$BASE_URL/api/travel/1" 401
 
-echo ""
+say ""
 
 # ── Auth-required baseline ────────────────────────────────────────────────────────
 
-echo -e "${C_CYAN}${C_BOLD}🔷 ── Auth-required baseline ────────────────────────────────${C_RESET}"
+say "${C_CYAN}${C_BOLD}🔷 ── Auth-required baseline ────────────────────────────────${C_RESET}"
 
 check_auth "POST /api/posts missing title returns 400" \
   POST "$BASE_URL/api/posts" 400 "" \
@@ -250,7 +259,7 @@ check_auth "GET /api/stats/visits with auth returns 200" \
 check "GET /api/stats/visits without auth returns 401" \
   GET "$BASE_URL/api/stats/visits" 401
 
-echo ""
+say ""
 
 # ── Rate limiting (dev only) ──────────────────────────────────────────────────────
 # /api/contact is limited to 3 requests/hour. The limiter runs BEFORE validation,
@@ -259,7 +268,7 @@ echo ""
 # Gated on --reset-rate-limits so it only runs where we can reset (dev).
 
 if [ "$RESET_RL" = "1" ]; then
-  echo -e "${C_CYAN}${C_BOLD}🔷 ── Rate limiting ─────────────────────────────────────────${C_RESET}"
+  say "${C_CYAN}${C_BOLD}🔷 ── Rate limiting ─────────────────────────────────────────${C_RESET}"
   reset_rate_limits
 
   for n in 1 2 3; do
@@ -274,7 +283,7 @@ if [ "$RESET_RL" = "1" ]; then
     -H "Content-Type: application/json" \
     -d '{"email":"bad","message":"x"}'
 
-  echo ""
+  say ""
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────────
