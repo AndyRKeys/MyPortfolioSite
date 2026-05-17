@@ -62,9 +62,8 @@ TMPERR=$(mktemp)
 trap 'rm -f "$TMPFILE" "$TMPERR"' EXIT
 
 check() {
-  local name="$1" method="$2" url="$3" expect_status="$4"
-  local expect_body="${5:-}"
-  shift 5
+  local name="$1" method="$2" url="$3" expect_status="$4" expect_body="${5:-}"
+  shift $(( $# >= 5 ? 5 : $# ))
   # remaining args forwarded to curl (e.g. -H, -d)
   local extra=("$@")
 
@@ -97,9 +96,8 @@ check() {
 }
 
 check_auth() {
-  local name="$1" method="$2" url="$3" expect_status="$4"
-  local expect_body="${5:-}"
-  shift 5
+  local name="$1" method="$2" url="$3" expect_status="$4" expect_body="${5:-}"
+  shift $(( $# >= 5 ? 5 : $# ))
   local extra=("$@")
 
   if [ -z "$TOKEN" ]; then
