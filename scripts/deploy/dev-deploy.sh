@@ -151,14 +151,39 @@ validate_env
 
 dsection "Checking firewall (UFW)"
 
-if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "3001"; then
-  dok "UFW rule for port 3001 is present"
+# `ufw status` needs root. This script runs non-interactively over SSH, so a
+# plain `sudo` would prompt for a password and hang (or silently fail and make
+# every deploy falsely report "no UFW rule"). Resolve how we can read status
+# without ever blocking on a password prompt:
+#   - running as root          → call ufw directly
+#   - passwordless sudo (`-n`) → use it
+#   - sudo needs a password    → SKIP (info, not a false warning) + one-time
+#                                guidance to allow just this command
+ufw_status=""
+ufw_readable=0
+
+if ! command -v ufw &>/dev/null; then
+  dinfo "UFW not installed — skipping firewall check"
+elif [ "$(id -u)" -eq 0 ]; then
+  ufw_status=$(ufw status 2>/dev/null || true); ufw_readable=1
+elif sudo -n true 2>/dev/null; then
+  ufw_status=$(sudo -n ufw status 2>/dev/null || true); ufw_readable=1
 else
-  dwarn "No UFW rule found for port 3001."
-  dwarn "The dev site may not be reachable from other LAN devices."
-  dwarn "To open port 3001 to your LAN:"
-  dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-  dwarn "Continuing anyway — this is a warning, not an error."
+  dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
+  dinfo "To enable the check, allow just this read-only command without a password:"
+  dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
+fi
+
+if [ "$ufw_readable" -eq 1 ]; then
+  if echo "$ufw_status" | grep -q "3001"; then
+    dok "UFW rule for port 3001 is present"
+  else
+    dwarn "No UFW rule found for port 3001."
+    dwarn "The dev site may not be reachable from other LAN devices."
+    dwarn "To open port 3001 to your LAN:"
+    dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
+    dwarn "Continuing anyway — this is a warning, not an error."
+  fi
 fi
 
 # ── Git update ─────────────────────────────────────────────────────────────────────────
