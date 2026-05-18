@@ -83,6 +83,7 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 | `GET /api/stats` | Yes | Page visit counts |
 | `POST /api/contact` | No | Rate-limited |
 | `POST /api/auth/*` | No | Auth endpoints |
+| `GET /health` | No | **Internal only** — direct backend port; nginx does not proxy this path (#279) |
 
 ---
 

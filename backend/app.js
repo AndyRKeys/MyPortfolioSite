@@ -76,9 +76,8 @@ export function createApp() {
   app.use('/deploy',  deployRoutes);
   app.use('/debug',   debugRoutes);
 
-  // Health check endpoint — no auth required, lightweight DB verification
+  // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);
-  app.get('/api/health', healthRouter);
 
   // Centralised error handler — must be last
   app.use(errorHandler);

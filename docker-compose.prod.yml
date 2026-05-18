@@ -63,6 +63,10 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       UPLOADS_DIR: /app/uploads
+    # Bound to localhost only — allows deploy health checks from the host
+    # without exposing the backend port to the public internet
+    ports:
+      - "127.0.0.1:${PORT:-8080}:${PORT:-8080}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:

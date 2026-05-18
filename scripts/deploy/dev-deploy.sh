@@ -202,10 +202,11 @@ ensure_dev_certs "$LAN_IP" "$WEBAUTHN_HOST"
 
 # ── Docker build & up ─────────────────────────────────────────────────────────────────
 
-# Health URL depends on LAN_IP, so set it after env load
-HEALTH_URL="https://${LAN_IP}:3001/api/health"
-HEALTH_URL_2=""       # dev doesn't use a second health URL
-HEALTH_INSECURE=1     # self-signed cert — skip curl SSL verification
+# Health check hits the backend directly (internal port, not via nginx).
+# /health is not proxied by nginx — internal only (#279).
+HEALTH_URL="http://localhost:${PORT:-8081}/health"
+HEALTH_URL_2=""
+HEALTH_INSECURE=0
 NGINX_SERVICE=nginx-dev
 ROLLBACK_BRANCH=dev   # fall back to stable dev branch if feature branch deploy fails
 
