@@ -26,14 +26,8 @@ $label = if ($Branch) { $Branch } else { 'main' }
 Write-Host "Deploying '$label' to prod..." -ForegroundColor Green
 
 $remoteCommand = @"
-REPO=~/MyPortfolioSite
-TARGET_BRANCH="$Branch"
-# Switch to the target branch first so the correct version of prod-deploy.sh runs
-if [ -n "`$TARGET_BRANCH" ]; then
-  git -C "`$REPO" fetch origin
-  git -C "`$REPO" switch -C "`$TARGET_BRANCH" "origin/`$TARGET_BRANCH"
-fi
-bash "`$REPO/scripts/deploy/prod-deploy.sh" $remoteArgStr
+DEPLOY_SCRIPT=~/MyPortfolioSite/scripts/deploy/prod-deploy.sh
+bash "`$DEPLOY_SCRIPT" $remoteArgStr
 "@
 
 ssh $Hostname $remoteCommand
