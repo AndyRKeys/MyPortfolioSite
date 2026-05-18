@@ -22,9 +22,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Docker `json-file` log rotation on all services in all three compose files: `10m / 3 files` (local dev), `20m / 5 files` (prod + dev-server) — prevents unbounded disk growth from structured log output
 - Server-side admin guard on `POST /auth/setup` (#274): registration now requires `ADMIN_EMAIL` to be configured and the submitted email to match; wrong-email and not-configured both fail with a generic 403 to avoid enumeration. Registration remains a one-time operation and still refuses if any user already exists; covered by unit tests in `backend/tests/routes/auth.test.js`
 
-### Security
-- Server-side admin registration guard on `POST /auth/setup` (#274): submitted email must match `ADMIN_EMAIL` env var, and no user may already exist; if `ADMIN_EMAIL` is unset the route refuses all registration (fail-closed). Both the not-configured and wrong-email cases return the same generic 403 to prevent probing. Guard is gated before any DB access; covered by unit tests in `backend/tests/routes/auth.test.js`
-
 ### Changed
 - Regression tests moved server-side: `scripts/tests/Test-Regression.ps1` replaced by `test-regression.sh`; `dev-deploy.ps1` / `prod-deploy.ps1` stripped to thin SSH wrappers. Deploy scripts reach the running site via curl `--resolve` (server can't route to its own public DNS name); regression failure now always prints the report and exits non-zero rather than aborting silently
 - GitHub Actions CI disabled (`workflow_dispatch` only) — tests run in the deployed container instead (#270)
