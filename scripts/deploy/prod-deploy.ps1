@@ -6,13 +6,13 @@
 #   cryptroot-unlock
 #   (enter disk encryption passphrase, wait for system to boot)
 #
-# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression $true] [-Quiet $true]
+# Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-Rollback <sha>] [-SkipRegression] [-Quiet]
 param(
     [string]$Hostname = 'ak-home-server',
-    [string]$Branch = 'main',
+    [string]$Branch = '',
     [string]$Rollback = '',
-    [bool]$SkipRegression = $false,
-    [bool]$Quiet = $false
+    [switch]$SkipRegression,
+    [switch]$Quiet
 )
 
 $remoteArgs = @()
@@ -20,13 +20,15 @@ if ($Branch)         { $remoteArgs += "--branch $Branch" }
 if ($Rollback)       { $remoteArgs += "--rollback $Rollback" }
 if ($SkipRegression) { $remoteArgs += '--skip-regression' }
 if ($Quiet)          { $remoteArgs += '--quiet' }
+$remoteArgStr = $remoteArgs -join ' '
+
+$label = if ($Branch) { $Branch } else { 'main' }
+Write-Host "Deploying '$label' to prod..." -ForegroundColor Green
 
 $remoteCommand = @"
-cd ~/MyPortfolioSite
-bash scripts/deploy/prod-deploy.sh $($remoteArgs -join ' ')
+DEPLOY_SCRIPT=~/MyPortfolioSite/scripts/deploy/prod-deploy.sh
+bash "`$DEPLOY_SCRIPT" $remoteArgStr
 "@
-
-Write-Host "Deploying branch '$Branch' to prod server..." -ForegroundColor Green
 
 ssh $Hostname $remoteCommand
 exit $LASTEXITCODE
