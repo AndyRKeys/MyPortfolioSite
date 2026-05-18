@@ -63,18 +63,41 @@ router.get('/setup/status', async (req, res) => {
 router.post('/setup', validate(SetupSchema), async (req, res) => {
   try {
     const { email, username } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
+    // Server-side admin allowlist (#274). The setup.html client redirect is
+    // not a security control — anyone can POST here directly. The only
+    // account that may ever be created is the configured ADMIN_EMAIL. Fail
+    // closed when ADMIN_EMAIL is unset: no admin email configured means no
+    // one may register. Checked before the user-count query so a non-admin
+    // caller cannot probe whether setup has been completed (anti-enumeration:
+    // same generic 403 for "not configured" and "wrong email").
+    if (!normalizedAdmin) {
+      logger.warn('[auth/setup] Rejected — ADMIN_EMAIL not configured on server');
+      return res.status(403).json({ error: 'Registration is not available' });
+    }
+    if (normalizedEmail !== normalizedAdmin) {
+      logger.warn(
+        { adminConfigured: true, match: false },
+        '[auth/setup] Rejected — submitted email does not match ADMIN_EMAIL'
+      );
+      return res.status(403).json({ error: 'Registration is not available' });
+    }
 
     const count = await pool.query('SELECT COUNT(*) FROM users');
     if (parseInt(count.rows[0].count) > 0) {
+      logger.warn('[auth/setup] Rejected — a user already exists');
       return res.status(403).json({ error: 'Setup already complete' });
     }
 
     const result = await pool.query(
       'INSERT INTO users (email, username) VALUES ($1, $2) RETURNING *',
-      [email.toLowerCase().trim(), username.trim()]
+      [normalizedEmail, username.trim()]
     );
 
     const user = result.rows[0];
+    logger.info({ userId: user.id }, '[auth/setup] Admin user created');
     res.json({ token: signJWT(user), user: { id: user.id, email: user.email, username: user.username } });
   } catch (err) {
     logger.error({ err }, '[auth] setup — failed to create user');
