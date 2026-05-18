@@ -134,9 +134,12 @@ mkdir -p "$REPO_DIR/uploads"
 HEALTH_URL="http://localhost:${PORT:-8080}/health"
 HEALTH_URL_2=""
 SITE_URL="https://${DOMAIN}"  # external URL for CSP curl check
+NGINX_SERVICE=nginx
 ROLLBACK_BRANCH=main  # fall back to stable main branch if non-main deploy fails
 
 check_disk_space
+
+check_nginx_config nginx
 
 compose_up_with_rollback backend
 
@@ -148,15 +151,7 @@ log_deploy_summary prod
 
 run_deploy_tests backend
 
-# Basic nginx HTTP health (localhost)
-HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health || echo "000")
-if [ "$HTTP_CODE" = "200" ]; then
-  dok "HTTP nginx proxy ✓"
-else
-  dwarn "HTTP returned $HTTP_CODE for http://localhost/health"
-fi
-
-# Secondary HTTPS health is already covered by HEALTH_URL_2 above when set.
+test_csp_reporting
 
 # ── Regression smoke tests ─────────────────────────────────────────────────────────────
 
