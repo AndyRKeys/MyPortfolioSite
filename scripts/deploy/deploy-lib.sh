@@ -757,11 +757,8 @@ compose_up_with_rollback() {
   # defined in the current compose file — these are orphans from a service
   # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
   # but surfacing them first gives a clear record of what was cleaned up.
-  # Use ps WITHOUT --all so exited run containers (from check_nginx_config's
-  # docker compose run --rm) are excluded — they're harmless and get cleaned
-  # by --remove-orphans anyway.
   local running_services defined_services
-  running_services=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.Service}}' 2>/dev/null | sort -u || true)
+  running_services=$(docker compose -f "$COMPOSE_FILE" ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
   defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | sort -u || true)
   if [ -n "$running_services" ] && [ -n "$defined_services" ]; then
     while IFS= read -r svc; do
