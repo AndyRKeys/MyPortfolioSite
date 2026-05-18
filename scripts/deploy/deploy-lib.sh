@@ -757,12 +757,11 @@ compose_up_with_rollback() {
   # defined in the current compose file — these are orphans from a service
   # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
   # but surfacing them first gives a clear record of what was cleaned up.
-  # Ask compose for the service name directly ({{.Service}}) rather than
-  # regex-parsing container names — service names contain hyphens
-  # (backend-dev), which broke the old parser and false-flagged every
-  # running container as an orphan on every deploy.
+  # Use ps WITHOUT --all so exited run containers (from check_nginx_config's
+  # docker compose run --rm) are excluded — they're harmless and get cleaned
+  # by --remove-orphans anyway.
   local running_services defined_services
-  running_services=$(docker compose -f "$COMPOSE_FILE" ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
+  running_services=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.Service}}' 2>/dev/null | sort -u || true)
   defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | sort -u || true)
   if [ -n "$running_services" ] && [ -n "$defined_services" ]; then
     while IFS= read -r svc; do
@@ -923,8 +922,14 @@ run_deploy_tests() {
 test_error_logger_all_pages() {
   dsection "Testing error logger across all site pages"
 
-  # Extract base URL from HEALTH_URL
-  local base_url=$(echo "$HEALTH_URL" | sed -E 's|/api/health.*||')
+  # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx-dev:3001)
+  # so that puppeteer, running inside the backend container, can reach nginx.
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping error logger test"
+    dstatus error-logger status=skipped reason=no-nginx-url
+    return
+  fi
 
   dinfo "Running comprehensive page coverage test..."
   dinfo "  Testing all pages for error-logger deployment"
@@ -944,10 +949,14 @@ test_error_logger_all_pages() {
 test_csp_reporting() {
   dsection "Testing CSP violation reporting"
 
-  # Extract host from HEALTH_URL
-  local host_port=$(echo "$HEALTH_URL" | sed -E 's|^https?://([^/]+).*|\1|')
-  local protocol=$(echo "$HEALTH_URL" | sed -E 's|^(https?)://.*|\1|')
-  local test_url="${protocol}://${host_port}"
+  # SITE_URL must be the external nginx URL (e.g. https://dev.andykeys.me:3001)
+  # so curl reaches nginx and checks the real CSP headers.
+  local test_url="${SITE_URL:-}"
+  if [ -z "$test_url" ]; then
+    dwarn "SITE_URL not set — skipping CSP test"
+    dstatus csp status=skipped reason=no-site-url
+    return
+  fi
 
   dinfo "CSP report-uri configured at /api/debug/csp-violations"
   dinfo "CSP violations will be logged when resources violate policy"

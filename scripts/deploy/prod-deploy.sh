@@ -133,6 +133,7 @@ mkdir -p "$REPO_DIR/uploads"
 # /health is not proxied by nginx — internal only (#279).
 HEALTH_URL="http://localhost:${PORT:-8080}/health"
 HEALTH_URL_2=""
+SITE_URL="https://${DOMAIN}"  # external URL for CSP curl check
 ROLLBACK_BRANCH=main  # fall back to stable main branch if non-main deploy fails
 
 check_disk_space

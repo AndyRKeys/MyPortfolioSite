@@ -206,7 +206,11 @@ ensure_dev_certs "$LAN_IP" "$WEBAUTHN_HOST"
 # /health is not proxied by nginx — internal only (#279).
 HEALTH_URL="http://localhost:${PORT:-8081}/health"
 HEALTH_URL_2=""
-HEALTH_INSECURE=0
+HEALTH_INSECURE=1    # nginx uses a self-signed cert; skip SSL verify for curl-based tests
+# Docker-internal nginx URL for puppeteer-based tests (error logger runs inside the container)
+NGINX_URL="https://nginx-dev:3001"
+# External nginx URL for curl-based tests (CSP header check)
+SITE_URL="https://${WEBAUTHN_HOST}:3001"
 NGINX_SERVICE=nginx-dev
 ROLLBACK_BRANCH=dev   # fall back to stable dev branch if feature branch deploy fails
 
