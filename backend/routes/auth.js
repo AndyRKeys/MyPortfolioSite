@@ -378,7 +378,7 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
   }
 });
 
-router.get('/email/verify', async (req, res) => {
+router.get('/email/verify', emailRateLimit, async (req, res) => {
   try {
     const { token } = req.query;
     // Never log the raw token — it is a bearer credential.
