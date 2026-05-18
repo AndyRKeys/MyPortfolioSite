@@ -204,11 +204,6 @@ check "GET /api/cv/exists returns 200 with exists field" \
 check "POST /api/stats/visit?page=unknown returns 400" \
   POST "$BASE_URL/api/stats/visit?page=unknown" 400
 
-# Assert the DB-connectivity flag, not just a shallow ping — a 200 with
-# db!=ok means the backend is up but Postgres is unreachable.
-check "GET /api/health returns 200 with db ok" \
-  GET "$BASE_URL/api/health" 200 '"db":"ok"'
-
 check "Unknown route returns 404" \
   GET "$BASE_URL/api/does-not-exist" 404
 

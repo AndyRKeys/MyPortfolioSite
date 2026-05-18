@@ -129,16 +129,12 @@ mkdir -p "$REPO_DIR/uploads"
 
 # ── Build and restart containers ───────────────────────────────────────────────────────
 
-# Primary health is backend HTTP; secondary is public HTTPS if DOMAIN + certs exist
+# Health check hits the backend directly (localhost-bound port, not via nginx).
+# /health is not proxied by nginx — internal only (#279).
 HEALTH_URL="http://localhost:${PORT:-8080}/health"
+HEALTH_URL_2=""
+SITE_URL="https://${DOMAIN}"  # external URL for CSP curl check
 ROLLBACK_BRANCH=main  # fall back to stable main branch if non-main deploy fails
-
-# Only set secondary health URL if certs exist for DOMAIN
-if [ -n "${DOMAIN:-}" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-  HEALTH_URL_2="https://${DOMAIN}/health"
-else
-  HEALTH_URL_2=""
-fi
 
 check_disk_space
 

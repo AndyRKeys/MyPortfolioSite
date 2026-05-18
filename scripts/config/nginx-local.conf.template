@@ -26,12 +26,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Health check
-    location /health {
-        proxy_pass http://${BACKEND_HOST}:${APP_PORT}/health;
-        proxy_set_header Host $host;
-    }
-
     # Uploaded media served directly by Nginx
     location /uploads/ {
         alias ${REPO_DIR}/uploads/;
