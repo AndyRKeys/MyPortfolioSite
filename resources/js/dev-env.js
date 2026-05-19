@@ -1,3 +1,10 @@
+/**
+ * dev-env.js — Visual indicator for non-production environments.
+ * Prepends [DEV] to the page title, tints the A|K nav logo orange,
+ * and tints the favicon when running on localhost, 127.0.0.1, or
+ * port 3001 (dev server), so the browser tab and nav are immediately
+ * distinguishable from the live site.
+ */
 (function () {
     const isDev =
         location.hostname === 'localhost' ||
