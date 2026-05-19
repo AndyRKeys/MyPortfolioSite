@@ -8,6 +8,8 @@ Authentication and security reference for andykeys.me. Read this before touching
 
 The site has **one admin user**. There is no registration flow for the public — `setup.html` creates the account and is a one-time operation. All protected routes check for a valid JWT and assume the bearer is the admin.
 
+**Server-side registration guard (#274):** `POST /auth/setup` is not protected by the `setup.html` redirect alone (trivially bypassed by POSTing directly). The route enforces two server-side checks before creating the account: (1) the submitted email must equal `ADMIN_EMAIL`, and (2) no user may already exist. It **fails closed** — if `ADMIN_EMAIL` is unset the route refuses all registration. Both the not-configured and wrong-email cases return the same generic `403` so a caller cannot probe whether setup has completed.
+
 ---
 
 ## Authentication Flows
@@ -34,14 +36,19 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 
 ### 2. Email Magic Links (fallback)
 
-1. Admin requests a magic link at `/auth/magic-link/request` with their registered email
-2. A secure random token is generated, stored in `email_tokens` with a short expiry, and emailed
-3. Admin clicks the link; `/auth/magic-link/verify` validates the token
+1. Admin requests a magic link at `/auth/email/send` with their registered email
+2. A secure random token (UUID) is generated, its bcrypt hash is stored in `email_tokens` via `crypt(token, gen_salt('bf'))`, and the raw token is emailed
+3. Admin clicks the link; `/auth/email/verify` validates the token by re-hashing (`crypt($1, et.token) = et.token`)
 4. Token is marked `used = TRUE` (single-use)
 5. On success, a signed JWT is returned
 
 **Expiry:** Tokens expire based on `expires_at`. Expired tokens are rejected regardless of `used` status.
 **Single-use:** Once a token is used, `used = TRUE` and any subsequent attempt with the same token is rejected.
+**At-rest protection:** Only the bcrypt hash of the token is persisted, so a stolen DB dump cannot be replayed to forge magic-link logins (#134).
+**Recipient gate:** Tokens are only sent to `ADMIN_EMAIL`. Requests for any other address return the same success response (no enumeration signal) but no email is sent.
+**Rate limit:** `/auth/email/send` is limited to 5 requests/hour/IP (DB-backed, survives restarts).
+
+**Email transport:** Outlook OAuth2 via the Microsoft Graph API (`/v1.0/me/sendMail`). Microsoft has disabled SMTP basic auth, so a long-lived refresh token (delegated `Mail.Send` scope, personal-account `/consumers/` endpoint) is exchanged for a short-lived access token on each send. The refresh token is stored in `.env` only. SMTP basic auth (`nodemailer`) is retained as a fallback for non-Outlook providers.
 
 ---
 
@@ -76,6 +83,7 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 | `GET /api/stats` | Yes | Page visit counts |
 | `POST /api/contact` | No | Rate-limited |
 | `POST /api/auth/*` | No | Auth endpoints |
+| `GET /health` | No | **Internal only** — direct backend port; nginx does not proxy this path (#279) |
 
 ---
 
@@ -85,6 +93,16 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 - **XSS — frontend:** User-supplied strings are escaped with `escapeHtml()` (`resources/java/utils/html.js`) before being set as `innerHTML`. Markdown is parsed with `marked` then sanitized with a custom `sanitizeHtml()` function that strips `<script>`, `<iframe>`, `<object>`, `<embed>`, and `on*` event handler attributes.
 - **XSS — backend:** The API returns JSON; the frontend is responsible for safe rendering.
 - **Input validation middleware:** `backend/middleware/validate.js` provides reusable validators for common fields (title, notes, lat/lng, dates). Used on POST/PUT routes.
+
+---
+
+## Logging & Secret Redaction
+
+- Backend logging goes through a single structured logger (`backend/utils/logger.js`, pino — #153). No bare `console.log` in runtime code.
+- **Secrets are never logged.** The logger redacts `authorization`/`cookie` headers, `set-cookie`, and any `token` / `refresh_token` / `password` / `jwt` field centrally. Redaction is a deliberate, reviewable choice — do not log raw tokens, JWTs, password hashes, or the Outlook refresh token, and do not bypass the shared logger.
+- Magic-link verification logs token *presence* and a diagnostic count breakdown, never the raw bearer token (see `/auth/email/verify`).
+- Email addresses (PII) are masked via `redactEmail()` before logging; the admin-gate logs only lengths and a match boolean, never the raw address.
+- Log level is controlled by `LOG_LEVEL` (default `info`); production emits JSON, non-production pretty-prints.
 
 ---
 
@@ -104,9 +122,10 @@ Other routes have no rate limiting. This is a known trade-off for a low-traffic 
 
 | Area | Trade-off |
 |------|-----------|
-| Rate limiting scope | Only the contact form is rate-limited — admin routes rely on JWT expiry |
+| Rate limiting scope | Contact form and auth endpoints (`/auth/email/send`, passkey register/login) are rate-limited; other admin routes rely on JWT expiry |
 | CSRF | Not implemented — admin actions use JWT Bearer tokens (not cookies by default), so standard CSRF attacks are not applicable |
-| Email delivery | SMTP credentials in `.env` — if SMTP is unavailable, magic links fail silently (fallback: use passkey) |
+| Email delivery | Outlook OAuth2 (Graph API) credentials in `.env`; if email is unavailable, magic links fail (fallback: use passkey) |
+| Refresh token | Outlook refresh token in `.env` is long-lived; if leaked it allows sending mail as the admin until revoked in Azure |
 | Passkey-only deployment | WebAuthn requires HTTPS in production and `localhost` in dev — other origins will fail |
 | Single user | No multi-user, role-based access control, or public signup — intentional |
 
@@ -120,7 +139,8 @@ Other routes have no rate limiting. This is a known trade-off for a low-traffic 
 | `JWT_EXPIRY` | Token lifetime, e.g. `7d` |
 | `WEBAUTHN_RP_ID` | Relying Party ID — must match the domain exactly (`andykeys.me` in prod, `localhost` in dev) |
 | `WEBAUTHN_ORIGIN` | Full origin — must match exactly (`https://andykeys.me` or `http://localhost`) |
-| `SMTP_HOST/PORT/USER/PASS` | Email magic link sending — leave blank to disable |
+| `OUTLOOK_CLIENT_ID/SECRET/REFRESH_TOKEN/EMAIL` | Outlook OAuth2 (Graph API) email sending — preferred method |
+| `SMTP_HOST/PORT/USER/PASS` | SMTP fallback for non-Outlook providers — used only if `OUTLOOK_*` absent |
 | `ADMIN_EMAIL` | The only address magic links are sent to |
 
 Never commit `.env`. See `backend/.env.example` for the full list.

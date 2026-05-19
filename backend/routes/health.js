@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { logger } from '../utils/logger.js';
 
 export async function healthRouter(req, res) {
   try {
@@ -13,7 +14,7 @@ export async function healthRouter(req, res) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Health check failed:', error.message);
+    logger.error({ err: error }, '[health] Health check failed — DB unreachable');
     res.status(503).json({
       status: 'error',
       db: 'error',

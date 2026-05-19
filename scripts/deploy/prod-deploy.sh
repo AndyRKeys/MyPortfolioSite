@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # prod-deploy.sh — Production deploy script for andykeys.me (Docker Compose).
 #
-# Fetches latest main, rebuilds images, and restarts containers with health checks
-# and rollback behaviour shared via deploy-lib.sh.
+# Fetches latest main (or specified branch), rebuilds images, and restarts containers
+# with health checks and rollback behaviour shared via deploy-lib.sh.
 # Run on the Ubuntu Server as the non-root deploy user.
 #
 # Usage:
 #   bash scripts/deploy/prod-deploy.sh
+#   bash scripts/deploy/prod-deploy.sh --branch main
 #   bash scripts/deploy/prod-deploy.sh --rollback <sha>
 
 set -euo pipefail
@@ -55,28 +56,45 @@ extra_env_checks() {
 # ── Parse arguments (rollback) ─────────────────────────────────────────────────────────
 
 ROLLBACK_SHA=""
+SKIP_REGRESSION=0
+DEPLOY_QUIET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --branch)
+      BRANCH="$2"; shift 2 ;;
     --rollback)
       ROLLBACK_SHA="$2"; shift 2 ;;
+    --skip-regression)
+      SKIP_REGRESSION=1; shift ;;
+    --quiet)
+      DEPLOY_QUIET=1; shift ;;
     *)
       shift ;;
   esac
 done
+export DEPLOY_QUIET
 
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
 init_log_banner "Prod Deploy"
 
-require_tools docker git curl
+require_tools docker git curl dig
 
 ensure_repo_cloned
 
 ensure_env_file
 
+sync_env_from_template
+
 load_env
 
+log_env_snapshot
+
+prompt_missing_vars
+
 validate_env
+
+check_ddns_sync
 
 cd "$REPO_DIR"
 
@@ -103,21 +121,25 @@ fi
 
 update_to_branch
 
+show_deployment_info
+
 # ── Ensure uploads dir exists ──────────────────────────────────────────────────────────
 
 mkdir -p "$REPO_DIR/uploads"
 
 # ── Build and restart containers ───────────────────────────────────────────────────────
 
-# Primary health is backend HTTP; secondary is public HTTPS if DOMAIN + certs exist
+# Health check hits the backend directly (localhost-bound port, not via nginx).
+# /health is not proxied by nginx — internal only (#279).
 HEALTH_URL="http://localhost:${PORT:-8080}/health"
+HEALTH_URL_2=""
+SITE_URL="https://${DOMAIN}"  # external URL for CSP curl check
+NGINX_SERVICE=nginx
+ROLLBACK_BRANCH=main  # fall back to stable main branch if non-main deploy fails
 
-# Only set secondary health URL if certs exist for DOMAIN
-if [ -n "${DOMAIN:-}" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-  HEALTH_URL_2="https://${DOMAIN}/health"
-else
-  HEALTH_URL_2=""
-fi
+check_disk_space
+
+check_nginx_config nginx
 
 compose_up_with_rollback backend
 
@@ -125,32 +147,47 @@ compose_up_with_rollback backend
 
 wait_for_health backend
 
-# Basic nginx HTTP health (localhost)
-HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health || echo "000")
-if [ "$HTTP_CODE" = "200" ]; then
-  dok "HTTP nginx proxy ✓"
-else
-  dwarn "HTTP returned $HTTP_CODE for http://localhost/health"
+log_deploy_summary prod
+
+run_deploy_tests backend
+
+test_csp_reporting
+
+# ── Regression smoke tests ─────────────────────────────────────────────────────────────
+
+REGRESSION_RC=0
+if [ "$SKIP_REGRESSION" = "0" ] && [ -n "${DOMAIN:-}" ]; then
+  dsection "Regression smoke tests"
+  # Resolve the domain to localhost — the server can't route to its own public
+  # IP (no NAT hairpin); SNI/Host stays the real domain so the cert validates.
+  bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    --base-url "https://${DOMAIN}" \
+    --resolve "${DOMAIN}:443:127.0.0.1" \
+    --compose-file "$COMPOSE_FILE" \
+    --service backend \
+    2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
 fi
 
-# Secondary HTTPS health is already covered by HEALTH_URL_2 above when set.
+# Regression failure rolls back, same as health/Vitest failures.
+if [ "$REGRESSION_RC" -ne 0 ]; then
+  _do_rollback "regression smoke tests failed"
+fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────────────
-
-POST_SHA=$(git rev-parse HEAD)
-dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') deploy $PRE_SHA -> $POST_SHA" >> "$LOG_FILE"
-
-dsection "Deploy complete"
-
-dok "  Domain:  https://${DOMAIN:-<unset>}"
-dok "  Commit:  $(git rev-parse --short HEAD)"
-dok "  Log:     $LOG_FILE"
 
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
-dlog ""
-dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}║          Prod deploy complete ✓          ║${DEPLOY_RESET}"
-dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-dlog ""
+# Loud verdict banner, then the AI-friendly report — always printed.
+if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
+  print_deploy_status "ROLLED BACK" "prod"
+  print_deploy_report "prod — ROLLED BACK"
+elif [ "$REGRESSION_RC" -ne 0 ]; then
+  print_deploy_status "FAILED" "prod"
+  print_deploy_report "prod — REGRESSION FAILED"
+else
+  print_deploy_status "COMPLETE" "prod"
+  print_deploy_report "prod"
+fi
+
+[ "$REGRESSION_RC" -eq 0 ] || ddie "Regression smoke tests failed — rolled back; see report above"

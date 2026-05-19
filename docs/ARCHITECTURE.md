@@ -237,7 +237,7 @@ As an example of how the system works end-to-end:
 |-----------|------|--------|-----------|
 | `admin.html` | Large, monolithic, high-risk to modify | Changes risk breaking multiple features | Refactoring planned (#175) |
 | `auth.js` | Complex WebAuthn + JWT state machine | Auth bugs have security implications | High test coverage, careful code review |
-| PostgreSQL (single instance) | No replication, no backup | Data loss if SD card fails | Backups planned for Ubuntu migration (#164) |
+| PostgreSQL (single instance) | No replication, no backup | Data loss if the server disk fails | Backup hardening outstanding — see ROADMAP §4.5 (#164) |
 | Nginx reverse proxy | Single point of failure | If Nginx breaks, entire site is down | Keep Nginx config simple and tested |
 | PM2 (process manager) | Limited visibility into errors | Crashes not always obvious | Health endpoint planned (#163) |
 

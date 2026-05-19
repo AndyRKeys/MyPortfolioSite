@@ -20,7 +20,11 @@
 *.conf text eol=lf
 *.env  text eol=lf
 
-# Windows-only scripts — keep CRLF
+# Deployment scripts that SSH to bash must use LF (not CRLF)
+# These are read by PowerShell on Windows but executed by bash on Linux
+scripts/deploy/*.ps1 text eol=lf
+
+# Other Windows scripts — keep CRLF
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf

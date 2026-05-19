@@ -36,11 +36,11 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 
 **Impact:** Certbot validation failed repeatedly. Nginx container crashed at startup.
 
-**Resolution:** 
+**Resolution:**
 - Killed Apache processes: `sudo killall -9 httpd`
 - Removed Nextcloud: `sudo snap remove nextcloud`
 
-**Lesson Learned:** 
+**Lesson Learned:**
 - For fresh deployments, use a **clean Ubuntu Server installation** (minimal packages only)
 - If reusing an existing server, verify no conflicting services are installed
 - Pre-flight checks should detect and warn about:
@@ -70,7 +70,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 # This creates options-ssl-nginx.conf and ssl-dhparams.pem automatically
 ```
 
-**Lesson Learned:** 
+**Lesson Learned:**
 - **When certbot fails, re-run it after fixing the root cause — don't manually create files**
 - Certbot handles all file creation automatically on successful runs
 - The root causes (port forwarding, DNS resolution) matter more than file creation
@@ -116,7 +116,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 
 **Actual Resolution:** Full system reboot solved everything immediately.
 
-**Lesson Learned:** 
+**Lesson Learned:**
 - **When Docker gets into permission/state issues, do a full system reboot FIRST, not last**
 - Don't spend time on incremental Docker daemon restarts — they often don't clear kernel state
 - User group membership changes require a full login session or reboot to take effect
@@ -148,7 +148,7 @@ fi
 
 **Actual Resolution:** Full system reboot (which also fixed the Docker permission issues).
 
-**Lesson Learned:** 
+**Lesson Learned:**
 - **Don't add delays and retries hoping they'll fix database issues** — if the backend can't connect after postgres is healthy, it's usually a Docker/OS state problem, not timing
 - The symptom looked like a timing issue but wasn't
 - System reboot fixes the underlying issue immediately, no delays needed
@@ -166,6 +166,76 @@ fi
 **Resolution:** Changed from `psql -f /container-path` to piping via stdin: `psql < /host-path`.
 
 **Lesson Learned:** Avoid absolute paths in scripts when run through Git Bash. Use stdin redirection or env vars instead.
+
+---
+
+### 8. Docker CE Migration — 2026-05-11
+
+Lessons from the snap → Docker CE migration carried out on 2026-05-11.
+
+#### 8a. `docker.socket` systemd activation issue
+
+**Symptom:** Docker CE installed and `systemctl status docker` showed healthy, but `/run/docker.sock` did not exist, causing all `docker` commands to fail with "cannot connect to Docker daemon".
+
+**Root Cause:** systemd socket activation — `docker.socket` had not been started, so the socket file was never created even though the service unit appeared active.
+
+**Resolution:**
+```bash
+sudo systemctl stop docker docker.socket
+sudo systemctl start docker.socket
+sudo systemctl start docker
+```
+
+**Diagnostic clue:** The warning *"Stopping docker.service but its triggering units are still active: docker.socket"* during a `systemctl stop docker` is the key indicator that the socket unit is the root activation point.
+
+**Lesson Learned:** After installing Docker CE, verify `/run/docker.sock` exists before running any `docker` commands. If missing, restart `docker.socket` first, then `docker`.
+
+---
+
+#### 8b. Duplicate apt source file after Docker CE install
+
+**Symptom:** Every `apt update` after the migration printed warnings about a duplicate apt source for `download.docker.com`.
+
+**Root Cause:** The migration script added a new apt source list entry, but a file created by a previous manual Docker CE install attempt was still present:
+```
+/etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
+```
+
+**Resolution:**
+```bash
+sudo rm /etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
+sudo apt update
+```
+
+**Lesson Learned:** After running the migration script, check for and remove any duplicate apt source files before continuing. This is a post-migration cleanup step — add it to the migration script's post-install checklist.
+
+---
+
+#### 8c. Snap removal must come after both stacks are confirmed healthy
+
+**Symptom:** N/A — this went right tonight, but is worth making explicit.
+
+**Lesson Learned:** `sudo snap remove --purge docker` should only be run **after**:
+1. Both the dev and prod stacks are confirmed healthy under Docker CE (`docker compose ps`, `curl /health`)
+2. You are satisfied there is no rollback needed
+
+Do not include snap removal in the automated migration flow. Keep it as a manual, gated final step.
+
+---
+
+#### 8d. Health check response interpretation — 301 and empty body are healthy
+
+**Symptom:** Post-migration health checks returned responses that looked like failures:
+- **Prod** `curl https://andykeys.me/health` → `301 Moved Permanently`
+- **Dev** `curl http://192.168.68.81:3001/health` → security headers with no response body
+
+**Root Cause:** These are correct, expected responses:
+- The prod 301 is the HTTP → HTTPS redirect working as intended; `curl -L` or a direct HTTPS request shows the real health response
+- The dev empty body is nginx returning security headers for a request it can proxy correctly; the backend is reachable
+
+**Resolution:** Use `curl -L https://andykeys.me/health` for prod to follow the redirect.
+
+**Lesson Learned:** Document these expected response shapes so a future migration doesn't waste time second-guessing a healthy stack. A 301 from prod `/health` is a pass, not a fail.
 
 ---
 
@@ -263,7 +333,7 @@ Instead of attempting everything at once, deploy incrementally:
      echo "Remove with: sudo apt remove apache2 nginx httpd"
      exit 1
    fi
-   
+
    # Check for interfering snaps
    if snap list | grep -qE 'nextcloud|apache|nginx'; then
      echo "WARNING: Found snap services that may conflict"
@@ -285,10 +355,10 @@ Instead of attempting everything at once, deploy incrementally:
        exit 1
      fi
    }
-   
+
    check_port 80
    check_port 443
-   
+
    # Check systemd services
    if systemctl list-units --type=service | grep -qE 'apache|httpd|nginx|nextcloud'; then
      echo "WARNING: Found active web server services:"
@@ -303,7 +373,7 @@ Instead of attempting everything at once, deploy incrementally:
    # Verify sufficient disk space
    AVAILABLE=$(df / | awk 'NR==2 {print $4}')  # In 1K blocks
    REQUIRED=$((10 * 1024 * 1024))               # 10GB in 1K blocks
-   
+
    if [ "$AVAILABLE" -lt "$REQUIRED" ]; then
      echo "ERROR: Insufficient disk space"
      echo "Available: $(($AVAILABLE / 1024 / 1024)) GB"
@@ -319,7 +389,7 @@ Instead of attempting everything at once, deploy incrementally:
      echo "ERROR: No internet connectivity"
      exit 1
    fi
-   
+
    # Verify DNS resolution
    if ! nslookup $DOMAIN >/dev/null 2>&1; then
      echo "ERROR: Domain $DOMAIN does not resolve"
@@ -340,7 +410,7 @@ Instead of attempting everything at once, deploy incrementally:
    # Create missing files if not present
    [ -f /etc/letsencrypt/options-ssl-nginx.conf ] || \
      create_ssl_nginx_conf
-   
+
    [ -f /etc/letsencrypt/ssl-dhparams.pem ] || \
      openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
    ```
@@ -371,7 +441,7 @@ Instead of attempting everything at once, deploy incrementally:
 
 2. **README.md:** Reference pre-deployment checklist
 3. **docs/INFRASTRUCTURE.md:** Add "Deployment Sequence" with phase-by-phase steps
-4. **scripts/deploy/server-setup.sh:** 
+4. **scripts/deploy/server-setup.sh:**
    - Add `--check-only` flag for pre-flight validation
    - Add external port accessibility test
    - Add comments explaining each phase
@@ -477,6 +547,8 @@ ls -la /etc/letsencrypt/live/yourdomain.com/
 - ✅ Re-running certbot after fixing port forwarding — created missing SSL files automatically
 - ✅ `docker compose logs` — showed actual error messages (better than health check status)
 - ✅ Fresh OS install — eliminated surprise pre-installed conflicting software
+- ✅ Restarting `docker.socket` before `docker` — fixed missing `/run/docker.sock` after CE install
+- ✅ Removing duplicate apt source file — cleared noisy `apt update` warnings
 
 ---
 
@@ -512,6 +584,7 @@ Things that went right and should be preserved:
 6. **Modular Route Structure** — Easy to understand what each route does; test coverage sufficient
 7. **Static HTML/CSS/JS** — No build step means no webpack/babel issues; Nginx serves directly
 8. **WebAuthn Auth** — FIDO2 passkeys work well; better than passwords; email magic links as fallback
+9. **Guided migration script** — `migrate-from-snap-docker.sh` interactive flow worked cleanly; env backup/restore preserved all config
 
 ---
 
@@ -521,10 +594,13 @@ After deployment, verify these manually:
 
 ```bash
 # Check site accessibility
-curl https://yourdomain.com/health           # Backend health
-curl https://yourdomain.com/api/posts        # Public API
-curl https://yourdomain.com/login.html       # Admin login page
-curl https://yourdomain.com/admin.html       # Admin console (after login)
+curl -L https://yourdomain.com/health          # Backend health (follow redirect)
+curl https://yourdomain.com/api/posts          # Public API
+curl https://yourdomain.com/login.html         # Admin login page
+curl https://yourdomain.com/admin.html         # Admin console (after login)
+
+# Note: a 301 response from http://yourdomain.com/health is CORRECT —
+# it is the HTTP→HTTPS redirect. Use curl -L or request via HTTPS directly.
 
 # Check SSL certificate
 openssl s_client -connect yourdomain.com:443 </dev/null | grep -E "subject|issuer|dates"

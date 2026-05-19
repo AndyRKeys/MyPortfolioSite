@@ -26,6 +26,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   backend-dev:
     build:
@@ -46,6 +51,10 @@ services:
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-AK Portfolio (Dev)}
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN}
       FRONTEND_URL: ${FRONTEND_URL}
+      OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
+      OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
+      OUTLOOK_REFRESH_TOKEN: ${OUTLOOK_REFRESH_TOKEN:-}
+      OUTLOOK_EMAIL: ${OUTLOOK_EMAIL:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -54,6 +63,7 @@ services:
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads_dev_data:/app/uploads
+      - ./scripts:/app/scripts:ro
     depends_on:
       postgres-dev:
         condition: service_healthy
@@ -62,6 +72,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     ports:
       - "8081:8081"
 
@@ -72,17 +87,23 @@ services:
       - "3001:3001"
     volumes:
       - ./scripts/config/nginx-dev-server.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - ./scripts/config/certs:/etc/nginx/certs:ro
       - .:/usr/share/nginx/html:ro
       - uploads_dev_data:/usr/share/nginx/html/uploads:ro
     environment:
-      DOMAIN: ${LAN_IP:-localhost}
+      DOMAIN: ${WEBAUTHN_HOST:-${LAN_IP:-localhost}}
       REPO_DIR: /usr/share/nginx/html
       APP_PORT: ${PORT:-8081}
       BACKEND_HOST: backend-dev
     depends_on:
       backend-dev:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   postgres_dev_data:

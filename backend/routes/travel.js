@@ -3,6 +3,7 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -54,7 +55,7 @@ router.get('/', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -70,7 +71,7 @@ router.get('/all', authenticate, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -85,7 +86,7 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -101,7 +102,7 @@ router.get('/:id', async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -160,7 +161,7 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   } finally {
     client.release();
@@ -214,7 +215,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   } finally {
     client.release();
@@ -231,7 +232,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
     res.json({ deleted: true });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -255,7 +256,7 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     );
     res.json({ deleted: true });
   } catch (err) {
-    console.error(err);
+    logger.error({ err }, '[travel] Request failed');
     res.status(500).json({ error: 'Database error' });
   }
 });

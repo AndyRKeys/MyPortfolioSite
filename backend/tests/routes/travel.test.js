@@ -6,11 +6,9 @@ import request from 'supertest';
 import jwt      from 'jsonwebtoken';
 import { createApp } from '../../app.js';
 
-vi.mock('pg', () => {
-  const query = vi.fn().mockResolvedValue({ rows: [] });
-  const Pool  = vi.fn(() => ({ query }));
-  return { default: { Pool }, Pool };
-});
+vi.mock('../../db/pool.js', () => ({
+  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+}));
 
 const app = createApp();
 

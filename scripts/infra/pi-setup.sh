@@ -1,4 +1,18 @@
 #!/bin/bash
+# ============================================================
+# DEPRECATED — DO NOT USE FOR NEW SETUPS
+# ============================================================
+# This script provisioned the ORIGINAL Raspberry Pi 3 host
+# (Raspberry Pi OS / Debian, PM2-based). That host has been
+# retired. Production now runs on Ubuntu Server (ak-home-server)
+# via Docker Compose.
+#
+# For current server provisioning use:
+#   scripts/deploy/server-setup.sh   (Ubuntu Server, Docker)
+#
+# Kept only for historical reference. See docs/TERMINOLOGY.md
+# and docs/INFRASTRUCTURE.md for the current host layout.
+# ============================================================
 # Portfolio site setup script for Raspberry Pi 3 (Raspberry Pi OS / Debian)
 # Run as the 'pi' user: bash pi-setup.sh
 set -e

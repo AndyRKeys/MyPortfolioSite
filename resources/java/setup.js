@@ -41,13 +41,17 @@ document.getElementById('setup-form').addEventListener('submit', async event => 
       body: JSON.stringify({ email, username }),
     });
     const setupData = await setupRes.json();
-    if (!setupRes.ok) throw new Error(setupData.error || 'Account creation failed');
+    if (!setupRes.ok) {
+      console.error('Setup failed:', setupRes.status, setupData);
+      throw new Error(setupData.error || `Account creation failed (${setupRes.status})`);
+    }
 
     const token = setupData.token;
     localStorage.setItem('adminToken', token);
 
     setMessage('Account created. Follow the passkey prompt on your device…');
 
+    console.log('Requesting WebAuthn registration options from', `${API_BASE}/auth/passkey/register/start`);
     const startRes = await fetch(`${API_BASE}/auth/passkey/register/start`, {
       method: 'POST',
       headers: {
@@ -56,9 +60,15 @@ document.getElementById('setup-form').addEventListener('submit', async event => 
       },
       body: JSON.stringify({}),
     });
-    const { options, sessionKey } = await startRes.json();
+    const startData = await startRes.json();
+    if (!startRes.ok) {
+      console.error('Passkey registration start failed:', startRes.status, startData);
+      throw new Error(startData.error || `Failed to start passkey registration (${startRes.status})`);
+    }
+    const { options, sessionKey } = startData;
 
     const response = await startRegistration(options);
+    console.log('WebAuthn registration response received');
 
     const finishRes = await fetch(`${API_BASE}/auth/passkey/register/finish`, {
       method: 'POST',
@@ -73,7 +83,10 @@ document.getElementById('setup-form').addEventListener('submit', async event => 
       }),
     });
     const finishData = await finishRes.json();
-    if (!finishRes.ok) throw new Error(finishData.error || 'Passkey registration failed');
+    if (!finishRes.ok) {
+      console.error('Passkey registration finish failed:', finishRes.status, finishData);
+      throw new Error(finishData.error || `Passkey registration failed (${finishRes.status})`);
+    }
 
     setMessage('All done — redirecting to dashboard…');
     setTimeout(() => location.replace('admin.html'), 1200);

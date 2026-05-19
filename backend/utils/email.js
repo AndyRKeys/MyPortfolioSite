@@ -1,37 +1,134 @@
 import nodemailer from 'nodemailer';
+import { escapeHtml } from './html.js';
+import { logger } from './logger.js';
 
-let transporter;
+const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
+const GRAPH_SEND_URL  = 'https://graph.microsoft.com/v1.0/me/sendMail';
 
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+export function isOAuth2Configured() {
+  return !!(process.env.OUTLOOK_CLIENT_ID && process.env.OUTLOOK_CLIENT_SECRET && process.env.OUTLOOK_REFRESH_TOKEN && process.env.OUTLOOK_EMAIL);
+}
+
+function isSmtpConfigured() {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+export function isEmailConfigured() {
+  return isOAuth2Configured() || isSmtpConfigured();
+}
+
+function redactEmail(email) {
+  if (!email || !email.includes('@')) return '[invalid]';
+  const [user, domain] = email.split('@');
+  return `${user.slice(0, 2)}***@${domain}`;
+}
+
+export async function getGraphAccessToken() {
+  const res = await fetch(GRAPH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     process.env.OUTLOOK_CLIENT_ID,
+      client_secret: process.env.OUTLOOK_CLIENT_SECRET,
+      refresh_token: process.env.OUTLOOK_REFRESH_TOKEN,
+      grant_type:    'refresh_token',
+      scope:         'https://graph.microsoft.com/Mail.Send',
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(`${data.error}: ${data.error_description}`);
+  return data.access_token;
+}
+
+async function sendViaGraph({ from, to, replyTo, subject, text, html }) {
+  const accessToken = await getGraphAccessToken();
+  const body = {
+    message: {
+      subject,
+      body: { contentType: 'HTML', content: html },
+      toRecipients: [{ emailAddress: { address: to } }],
+      ...(replyTo && { replyTo: [{ emailAddress: { address: replyTo } }] }),
+    },
+    saveToSentItems: true,
+  };
+  const res = await fetch(GRAPH_SEND_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Graph API error ${res.status}`);
   }
-  return transporter;
+}
+
+function getSmtpTransporter() {
+  return nodemailer.createTransport({
+    host:   process.env.SMTP_HOST,
+    port:   parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
+
+export async function sendContactEmail({ name, email, message }) {
+  const from = isOAuth2Configured()
+    ? process.env.OUTLOOK_EMAIL
+    : (process.env.SMTP_FROM || process.env.SMTP_USER);
+
+  const html = `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p><hr><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`;
+  const text = `Name: ${name}\nEmail: ${email}\n\n${message}`;
+
+  if (isOAuth2Configured()) {
+    await sendViaGraph({ from, to: from, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
+  } else {
+    await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to: from, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
+  }
 }
 
 export async function sendMagicLink(to, token) {
-  const url = `${process.env.FRONTEND_URL}/login.html?token=${token}`;
-  await getTransporter().sendMail({
-    from: `"AK Portfolio" <${process.env.SMTP_FROM}>`,
-    to,
-    subject: 'Your login link',
-    text: `Log in here: ${url}\n\nThis link expires in 15 minutes and can only be used once.`,
-    html: `
-      <p>Click the link below to log in to your admin dashboard:</p>
-      <p>
-        <a href="${url}" style="display:inline-block;padding:12px 24px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px;">
-          Log in to AK Portfolio
-        </a>
-      </p>
-      <p style="color:#666;font-size:12px;">This link expires in 15 minutes and can only be used once.</p>
-    `,
-  });
+  logger.info(`[email] sendMagicLink called for ${redactEmail(to)}`);
+
+  if (!isEmailConfigured()) {
+    logger.warn('[email] Email not configured — set OUTLOOK_* or SMTP_* vars');
+    throw new Error('Email not configured');
+  }
+
+  const from = isOAuth2Configured()
+    ? process.env.OUTLOOK_EMAIL
+    : (process.env.SMTP_FROM || process.env.SMTP_USER);
+  const url  = `${process.env.FRONTEND_URL}/login.html?token=${token}`;
+  const html = `
+    <p>Click the link below to log in to your admin dashboard:</p>
+    <p>
+      <a href="${url}" style="display:inline-block;padding:12px 24px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px;">
+        Log in to AK Portfolio
+      </a>
+    </p>
+    <p style="color:#666;font-size:12px;">This link expires in 15 minutes and can only be used once.</p>
+  `;
+  const text = `Log in here: ${url}\n\nThis link expires in 15 minutes and can only be used once.`;
+
+  if (isOAuth2Configured()) {
+    logger.info(`[email] OAuth2 (Graph): user=${redactEmail(process.env.OUTLOOK_EMAIL)}`);
+  } else {
+    logger.info(`[email] SMTP: host=${process.env.SMTP_HOST} user=${redactEmail(process.env.SMTP_USER)}`);
+  }
+  logger.info(`[email] Sending from: ${redactEmail(from)} to: ${redactEmail(to)}`);
+
+  try {
+    if (isOAuth2Configured()) {
+      await sendViaGraph({ from, to, subject: 'Your login link', text, html });
+    } else {
+      const info = await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to, subject: 'Your login link', text, html });
+      if (info.rejected?.length) logger.warn(`[email] Rejected recipients: ${info.rejected.join(', ')}`);
+    }
+    logger.info('[email] Sent successfully');
+  } catch (err) {
+    logger.error({ err }, '[email] Send failed');
+    throw err;
+  }
 }

@@ -28,6 +28,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   backend:
     build:
@@ -48,12 +53,20 @@ services:
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-AK Portfolio}
       WEBAUTHN_ORIGIN: https://${DOMAIN}
       FRONTEND_URL: https://${DOMAIN}
+      OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
+      OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
+      OUTLOOK_REFRESH_TOKEN: ${OUTLOOK_REFRESH_TOKEN:-}
+      OUTLOOK_EMAIL: ${OUTLOOK_EMAIL:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       UPLOADS_DIR: /app/uploads
+    # Bound to localhost only — allows deploy health checks from the host
+    # without exposing the backend port to the public internet
+    ports:
+      - "127.0.0.1:${PORT:-8080}:${PORT:-8080}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -64,6 +77,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   nginx:
     image: nginx:alpine
@@ -73,6 +91,7 @@ services:
       - "443:443"
     volumes:
       - ./scripts/config/nginx-portfolio.conf.template:/etc/nginx/templates/default.conf.template
+      - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - .:/usr/share/nginx/html:ro
       - uploads_data:/usr/share/nginx/html/uploads:ro
       # SSL certs managed by host Certbot — mounted read-only
@@ -85,6 +104,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   postgres_data:

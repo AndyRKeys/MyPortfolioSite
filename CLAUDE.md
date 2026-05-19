@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Orientation (2 minutes)
 
-**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Hosted on a Raspberry Pi (moving to Ubuntu Server gaming PC).
+**What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Self-hosted on an Ubuntu Server (`ak-home-server`, a repurposed gaming PC); the original Raspberry Pi has been retired. See `docs/TERMINOLOGY.md` for canonical names.
 
 **Tech stack:**
 - Frontend: vanilla JS/HTML/CSS (no build step), jQuery for legacy compatibility
@@ -36,6 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - docs/DATABASE.md — schema reference
    - docs/SECURITY.md — auth model, JWT, threat model
    - docs/DEPENDENCIES.md — dependency rules
+   - docs/TERMINOLOGY.md — canonical names (host, environments, services, branches)
 
 2. **Project orientation:**
    - Branching: `main` (prod) ← `dev` (integration) ← `feature/issue-N-*` (your work)
@@ -85,9 +86,8 @@ npm test -- --reporter=verbose    # Verbose output
 # From Windows (runs inside container):
 . scripts\dev\dev-local.ps1 test
 
-# Smoke tests for a PR:
-.\scripts\tests\Test-Regression.ps1
-.\scripts\tests\Test-PR148.ps1     # Example for PR #148
+# Smoke tests for a PR (regression runs automatically post-deploy; run PR-specific tests from Windows):
+.\scripts\tests\Test-PR148.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
 ```
 
 ### Git Workflow
@@ -107,13 +107,45 @@ Files moved to scripts/config/ in #130 but compose file wasn't updated.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
+# One branch at a time for OPS and SECURITY work — do not run multiple
+# ops/infra or security (auth/tokens/secrets/rate-limit) branches in
+# parallel; finish + PR + merge one before starting the next. Unrelated
+# low-risk work may still parallelise.
+
 # Push and create PR
+# PR creation is the DEFAULT: once the branch is pushed and the work is
+# complete, open the PR to dev automatically — do not ask first. You still
+# never merge it (owner reviews + merges). Skip only if explicitly told to,
+# or the work is incomplete/experimental (and say so).
 git push -u origin fix/issue-N-short-description
 gh pr create --base dev --title "Title" --body "Description. Closes #N"
+
+# After opening the PR, also recommend a ready-to-copy squash commit
+# message (fenced code block: imperative ≤50-char summary, blank line,
+# short why/what body, Co-Authored-By footer). Repo squash-merges, so
+# this becomes the permanent history entry — owner pastes it on merge.
 
 # After review, merge to dev (user does this, not you)
 # User will then create a release PR: dev → main for deploy
 ```
+
+**Every PR must use and fully fill in the template at `.github/pull_request_template.md`** — summary, changes, detailed test plan, smoke test section, and documentation checklist (including ops docs). Treat any unchecked or "N/A" box as a deliberate decision that needs to be correct.
+
+**Issue labelling (AI-managed):**
+- **State labels**
+  - When starting work on an issue: apply the `in progress` label.
+  - When opening a PR to `dev` for that issue: switch the label to `awaiting review`.
+  - After the PR is merged to `dev` but before it is released to `main`: switch the label to `awaiting release`.
+  - After the change is deployed to production (release PR merged to `main`): switch the label to `released`.
+- **Type labels** (add all that apply)
+  - `bug` / `feature` — based on the issue template or description.
+  - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
+  - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
+  - `workflow`, `meta` — process, templates, automation, AI instructions.
+  - `high priority` — issues explicitly called out as urgent or blocking.
+  - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
+  - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
 
 ### Deployment (From Windows)
 
@@ -231,6 +263,27 @@ const result = await pool.query('SELECT * FROM posts WHERE id = $1', [postId]);
 const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
+**DRY principle (Don't Repeat Yourself):**
+- **Frontend:** Reuse utility functions from `resources/java/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
+- **Backend:** Extract common logic into middleware or route helpers. Don't repeat validation, error handling, or CORS logic.
+- **Deployment scripts:** Extract reusable functions into `scripts/deploy/deploy-lib.sh` (shared helpers like `ensure_repo_cloned()`, `update_to_branch()`, `validate_env()`, `ensure_dev_certs()`). Each `*-deploy.sh` focuses on environment-specific logic only. PowerShell wrappers (`.ps1`) are thin — mostly SSH + arg passing.
+- **Configuration:** Use single source of truth for CSP headers (nginx-security-headers.conf), environment templates (.env.*.example), and docker-compose settings.
+- **When you find the same code in two places, extract it into a shared location.** Examples:
+  - Same validation logic → create a validator utility
+  - Same nginx headers → consolidate into a snippet
+  - Same deploy step → move to deploy-lib.sh function
+  - Same HTML structure → extract to a shared template or builder function
+
+### Debugging & Logging
+
+**Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `ROADMAP.md` §3.5).
+
+- Add structured log lines at meaningful decision points (entry, external-call outcomes, branch taken, failure reasons) — not just the happy path. Use a unique, greppable `[area] message — context` prefix.
+- Log the *why* of a failure (error + relevant inputs + expectation), never secrets (`.env`, tokens, JWTs, hashes).
+- A change isn't done until you can answer: "if this breaks in prod, how would we diagnose it from logs alone?" If you can't, add the logging before the PR.
+- Deploy/infra changes: fail loud, not silent — surface orphan/port/env warnings as hard failures.
+- Full rule: see **[docs/AI.md](docs/AI.md) → Debugging & Logging**.
+
 ### Testing
 
 **Vitest suite:**
@@ -240,22 +293,44 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - Coverage tracked; aim for routes and middleware, not 100% everywhere
 
 **Smoke tests (per-PR):**
-- `scripts/tests/Test-Regression.ps1` — baseline (all basic flows)
-- `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed)
-- Run on your machine to verify no regressions before merging
+- `scripts/tests/test-regression.sh` — baseline (all basic flows); runs automatically post-deploy on the server
+- `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed); run from Windows against dev server
+
+**PR test plan rules (every PR that touches backend code):**
+- Every step must include the **exact copy-paste command** — no assumed knowledge, no "run the usual command"
+- Add a `# comment` above every command explaining what it verifies and why it matters for this PR
+- State the **expected output** after each command so the tester knows pass vs fail at a glance
+- Use correct compose file + service for the target env: dev server → `docker-compose.dev-server.yml`, services `backend-dev` / `postgres-dev`, DB `portfolio_dev`; local Docker → `docker-compose.yml`, services `backend` / `postgres`
+- Where a step requires waiting (e.g. token expiry), provide a DB command to simulate it instead
+- HTTP requests from Windows: use `curl.exe` PowerShell syntax; from inside a container or the server: plain `curl`
+- Full rule: see **[docs/AI.md](docs/AI.md) → PR test plans must include**
 
 ### Documentation
 
-**When to write docs:**
-- Adding a new database table → update `docs/DATABASE.md`
-- Changing auth → update `docs/SECURITY.md`
-- Adding a dependency → update `docs/DEPENDENCIES.md`
-- New feature in deployment → update README or `docs/INFRASTRUCTURE.md` (coming)
+**Docs must move in lockstep with code.** Keeping them accurate is part of the change, not a later clean-up.
 
-**When NOT to add docs:**
-- Generic "what this function does" — good naming is better than comments
-- Obvious code patterns
-- Implementation details that don't affect future work
+**When to update docs (same PR):**
+- Scripts are added, removed, or renamed
+- Deploy / testing / operational workflows change (e.g. adding deploy-time Vitest or regression steps)
+- Routes, APIs, or env vars are added or changed
+- Any behaviour change that affects how someone develops, deploys, tests, or debugs the system
+
+**What to update:**
+- `README.md` — top-level workflow, script tables, command examples, directory trees
+- `docs/AI.md` — working rules for AI helpers (scope, branching, testing expectations, documentation hygiene)
+- `docs/TESTING.md` — test commands, deploy-time checks, regression scripts, PR smoke tests
+- Ops docs — `docs/RUNBOOK.md`, `docs/BACKUP.md`, `docs/INCIDENTS.md`, `docs/INFRASTRUCTURE.md`, `docs/DEV_ENVIRONMENT.md`, `docs/PROD_ENVIRONMENT.md`
+
+**How to avoid drift:**
+- Treat the documentation checklist in the PR template as mandatory. If no docs change is needed, explicitly state why (`N/A: behaviour and operator docs already match`).
+- When code and docs disagree, fix both in the same PR so history stays coherent.
+- Prefer small, incremental doc edits tied to each behavioural change over broad "docs tidy-up" PRs.
+- For detailed rules, follow **[docs/AI.md](docs/AI.md) → Documentation Hygiene**; this section is a summary, not a replacement.
+
+**When NOT to add extra docs:**
+- Generic "what this function does" explanations — prefer clear naming
+- Obvious patterns that match the existing style
+- Implementation details that don't affect future work or operator behaviour
 
 **Commit messages:**
 - Imperative present tense: "fix", "add", "refactor", not "fixed", "added", "refactored"
@@ -279,10 +354,10 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ## Fragile / Incomplete Areas (from PROJECT_ASSESSMENT.md)
 
 - **No backups:** Database and uploads have no automated backup. (#164)
-- **No structured logging:** `console.log` used throughout; no severity levels or request context. (#152)
+- **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
-- **PM2 in prod, Docker in dev:** Structural difference; moving prod to Docker is next big task. (#165)
+- **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; ROADMAP §3.5)
 
 ---
 
@@ -292,6 +367,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - **Database schema** → `docs/DATABASE.md`
 - **Auth deep-dive** → `docs/SECURITY.md`
 - **Naming & code patterns** → `docs/STYLE_GUIDE.md`
+- **Canonical names (host, environments, services)** → `docs/TERMINOLOGY.md`
 - **Branching rules** → README.md
 - **Dependency rules** → `docs/DEPENDENCIES.md`
 - **AI working instructions** → `docs/AI.md` (scope discipline, commit hygiene, workflow)

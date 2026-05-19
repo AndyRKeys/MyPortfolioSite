@@ -23,11 +23,23 @@
 #   HEALTH_TIMEOUT — seconds to wait for health
 #   HEALTH_INTERVAL— seconds between health checks
 #   HEALTH_URL_2   — optional secondary health URL (e.g. HTTPS)
+#   NGINX_SERVICE    — compose service name for nginx (enables nginx log capture + startup check)
+#   HEALTH_INSECURE  — set to 1 to skip TLS cert verification (dev self-signed certs)
+#   ROLLBACK_BRANCH  — branch to roll back to on failure (e.g. dev, main).
+#                      If set and different from BRANCH, fetches and checks out this branch
+#                      instead of reverting to PRE_SHA, giving a known-stable baseline.
+#                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
+#   LAST_GOOD_STATE_FILE — (optional) path to save/restore last successful deployment state
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
 
 set -euo pipefail
+
+# ── Deployment state tracking ─────────────────────────────────────────────────
+
+DEPLOY_ROLLED_BACK=0  # Set to 1 if we rolled back instead of deploying the intended branch
+DEPLOY_STEP=0         # Auto-incrementing checkpoint counter (see dstatus)
 
 # ── Colours and logging ───────────────────────────────────────────────────────
 
@@ -39,14 +51,61 @@ else
 fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
-_deploy_log_raw()   { echo -e "[$(_deploy_timestamp)] $*" | tee -a "$LOG_FILE"; }
 
-dlog()     { _deploy_log_raw "$*"; }
-dinfo()    { _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}[INFO]${DEPLOY_RESET}  $*"; }
-dok()      { _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}[OK]${DEPLOY_RESET}    $*"; }
-dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}[WARN]${DEPLOY_RESET}  $*"; }
-dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}[ERROR]${DEPLOY_RESET} $*"; }
-dsection() { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_BOLD}── $* ──────────────────────────────────────────────${DEPLOY_RESET}"; }
+# Redact sensitive info from logs (IP addresses, usernames, service names, hostnames)
+# See docs/LOGGING.md for what should be redacted and why
+_redact_sensitive() {
+  local text="$1"
+  # Redact IP addresses (keep format readable but obscure actual IPs)
+  text=$(echo "$text" | sed -E 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[REDACTED_IP]/g')
+  # Redact home directory usernames
+  text=$(echo "$text" | sed -E "s|/home/[a-z_][a-z0-9_-]*|/home/[USER]|g")
+  # Redact root home
+  text=$(echo "$text" | sed -E 's|/root|/home/[USER]|g')
+  # Redact URLs with IPs
+  text=$(echo "$text" | sed -E 's|https?://\[REDACTED_IP\]:[0-9]+|[REDACTED_URL]|g')
+  # Redact container/service names (myportfoliosite-dev-*, backend-dev, etc.)
+  text=$(echo "$text" | sed -E 's/myportfoliosite(-dev)?-[a-z0-9_-]+/[REDACTED_CONTAINER]/g')
+  # Redact service names in docker compose output (backend-dev, nginx-dev, postgres-dev)
+  text=$(echo "$text" | sed -E 's/(backend|nginx|postgres)-(dev|prod|local)(-[0-9])?/[REDACTED_SERVICE]/g')
+  # Redact hostnames (modnar3, user machines, etc.) — but keep localhost
+  text=$(echo "$text" | sed -E 's|/home/[a-z_][a-z0-9_-]*@[a-z0-9.-]+|/home/[USER]@[REDACTED_HOST]|g')
+  # Redact project directory names (MyPortfolioSite-dev)
+  text=$(echo "$text" | sed -E 's|/[a-z_][a-z0-9_-]*/MyPortfolioSite(-dev)?|/home/[USER]/[REDACTED_PROJECT]|g')
+  echo "$text"
+}
+
+_deploy_log_raw()   {
+  local msg="$(_redact_sensitive "$*")"
+  echo -e "[$(_deploy_timestamp)] $msg" | tee -a "$LOG_FILE";
+}
+
+dlog()     { _verbose && _deploy_log_raw "$*" || true; }
+dinfo()    { _verbose && _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}ℹ  [INFO]${DEPLOY_RESET}  $*" || true; }
+dok()      { _verbose && _deploy_log_raw "${DEPLOY_GREEN}${DEPLOY_BOLD}✅ [OK]${DEPLOY_RESET}    $*" || true; }
+dwarn()    { _deploy_log_raw "${DEPLOY_YELLOW}${DEPLOY_BOLD}⚠️  [WARN]${DEPLOY_RESET}  $*"; }
+dfail()    { _deploy_log_raw "${DEPLOY_RED}${DEPLOY_BOLD}❌ [ERROR]${DEPLOY_RESET} $*"; }
+dsection() { _verbose && { _deploy_log_raw ""; _deploy_log_raw "${DEPLOY_CYAN}${DEPLOY_BOLD}🔷 ── $* ───────────────────────────────────────────${DEPLOY_RESET}"; } || true; }
+
+# Machine-readable checkpoint line — grep-friendly, no colour codes.
+# Always printed regardless of DEPLOY_QUIET. Omits ts= to keep lines short in
+# the report. Each line carries an auto-incrementing step= number so the
+# phase order is visible even in quiet mode (where section headers are hidden).
+# Usage: dstatus <phase> key=value [key=value ...]
+# Output: [deploy:<phase>] step=<n> key=value key=value
+dstatus() {
+  local phase="$1"; shift
+  DEPLOY_STEP=$((DEPLOY_STEP + 1))
+  local msg="[deploy:${phase}] step=${DEPLOY_STEP} $*"
+  # No colour codes — these lines are parsed by print_deploy_report
+  echo "$msg" | tee -a "$LOG_FILE"
+  # Also print a coloured human-friendly echo in verbose mode
+  _verbose && echo -e "${DEPLOY_BOLD}${DEPLOY_CYAN}📋 checkpoint:${DEPLOY_RESET} ${msg}" || true
+}
+
+# Suppress verbose output when DEPLOY_QUIET=1. Only dstatus, dwarn, dfail, and ddie
+# produce output in quiet mode — dinfo, dok, dlog, dsection are silenced.
+_verbose() { [ "${DEPLOY_QUIET:-0}" != "1" ]; }
 
 ddie() {
   dfail "$*"
@@ -54,13 +113,86 @@ ddie() {
   exit 1
 }
 
+# Run a command with root privileges WITHOUT ever blocking on a password
+# prompt — deploys run non-interactively over SSH, so a plain `sudo` would
+# hang or silently fail. Resolution order: already root → run directly;
+# passwordless sudo available → `sudo -n`; otherwise return 126 (root
+# required but unavailable) so callers can skip gracefully rather than
+# emit a misleading failure/warning.
+# Usage:
+#   out=$(try_root ufw status) && echo "$out" | grep ...
+#   if try_root systemctl is-active docker; then ...; fi
+#   try_root returns 126 → caller should dinfo-skip, not dwarn
+try_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif sudo -n true 2>/dev/null; then
+    sudo -n "$@"
+  else
+    return 126
+  fi
+}
+
+# ── Last-good state tracking ──────────────────────────────────────────────────
+
+_save_last_good_state() {
+  local branch="$1"
+  local sha="$2"
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ]; then
+    return  # State tracking disabled if file path not set
+  fi
+
+  if echo "BRANCH=$branch" > "$state_file"; then
+    echo "SHA=$sha" >> "$state_file"
+    dinfo "Saved last-good state: $branch@${sha:0:7}"
+  else
+    dwarn "Could not save last-good state to $state_file"
+  fi
+}
+
+_restore_last_good_state() {
+  local state_file="${LAST_GOOD_STATE_FILE:-${HOME}/.last-good-deploy}"
+
+  if [ -z "$state_file" ] || [ ! -f "$state_file" ]; then
+    return 1  # No saved state
+  fi
+
+  # Source the state file to get BRANCH and SHA variables
+  set +u
+  source "$state_file" 2>/dev/null || return 1
+  set -u
+
+  if [ -n "${BRANCH:-}" ] && [ -n "${SHA:-}" ]; then
+    echo "$BRANCH" "$SHA"
+    return 0
+  fi
+
+  return 1
+}
+
 init_log_banner() {
   local title="$1"
-  dlog ""
-  dlog "${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}║  ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}"
-  dlog "${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}"
-  dlog ""
+  # Record where this run starts in the (append-only) log so the final report
+  # only includes checkpoints from THIS deploy, not every prior run.
+  DEPLOY_LOG_START=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
+  # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
+  echo "" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}║  🚀 ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+}
+
+# Pipe command output to the log. In verbose mode also echoes to terminal.
+# Usage: some_command 2>&1 | _log_cmd
+_log_cmd() {
+  if _verbose; then
+    tee -a "$LOG_FILE"
+  else
+    cat >> "$LOG_FILE"
+  fi
 }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
@@ -88,6 +220,7 @@ require_tools() {
   done
 
   if [ "${#missing[@]}" -gt 0 ]; then
+    dstatus preflight status=failed missing="${missing[*]}"
     dfail "Missing required tools:"
     for t in "${missing[@]}"; do
       dfail "  • $t"
@@ -96,9 +229,11 @@ require_tools() {
   fi
 
   if ! docker info >/dev/null 2>&1; then
+    dstatus preflight status=failed reason=docker-daemon-not-running
     ddie "Docker daemon is not running. Start it with: sudo systemctl start docker"
   fi
 
+  dstatus preflight status=ok tools="$*"
   dok "All prerequisites satisfied (${*})"
 }
 
@@ -109,11 +244,13 @@ ensure_repo_cloned() {
 
   if [ ! -d "$REPO_DIR" ]; then
     dinfo "Repo not found at $REPO_DIR — cloning..."
-    git clone "$REPO_URL" "$REPO_DIR" || ddie "git clone failed. Check your internet connection."
+    git clone "$REPO_URL" "$REPO_DIR" 2>&1 | _log_cmd || ddie "git clone failed. Check your internet connection."
     cd "$REPO_DIR"
-    git checkout "$BRANCH" || ddie "Could not switch to $BRANCH branch."
+    git checkout "$BRANCH" 2>&1 | _log_cmd || ddie "Could not switch to $BRANCH branch."
+    dstatus repo status=cloned branch="$BRANCH"
     dok "Repo cloned and set to $BRANCH branch."
   else
+    dstatus repo status=exists
     dok "Repo found at $REPO_DIR"
   fi
 }
@@ -126,15 +263,35 @@ update_to_branch() {
   PRE_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
   dinfo "Current commit: $PRE_SHA"
 
-  git fetch origin "$BRANCH" 2>&1 | tee -a "$LOG_FILE" || ddie "git fetch failed. Check your internet connection."
-  git reset --hard "origin/$BRANCH" 2>&1 | tee -a "$LOG_FILE"
+  git fetch origin "$BRANCH" 2>&1 | _log_cmd || ddie "git fetch failed. Check your internet connection."
+  git reset --hard "origin/$BRANCH" 2>&1 | _log_cmd
 
   NEW_SHA=$(git rev-parse HEAD)
   if [ "$NEW_SHA" = "$PRE_SHA" ]; then
     dinfo "Already at latest commit — no code changes."
+    dstatus git status=up-to-date branch="$BRANCH" sha="${NEW_SHA:0:7}"
   else
     dok "Updated: ${PRE_SHA:0:7} → ${NEW_SHA:0:7}"
+    dstatus git status=updated branch="$BRANCH" pre="${PRE_SHA:0:7}" sha="${NEW_SHA:0:7}"
   fi
+}
+
+show_deployment_info() {
+  dsection "Deployment details"
+
+  cd "$REPO_DIR"
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  dinfo "Branch: $current_branch"
+
+  local commit_sha
+  commit_sha=$(git rev-parse --short HEAD)
+  dinfo "Commit: $commit_sha"
+
+  local commit_msg
+  commit_msg=$(git log -1 --pretty=%B HEAD)
+  dinfo "Message: $commit_msg"
 }
 
 # ── Env helpers ────────────────────────────────────────────────────────────────
@@ -143,11 +300,13 @@ ensure_env_file() {
   dsection "Phase 3: checking .env"
 
   if [ -f "$ENV_FILE" ]; then
+    dstatus envfile status=ok
     dok ".env present at $ENV_FILE"
     return
   fi
 
   if [ -n "${ENV_TEMPLATE:-}" ] && [ -f "$ENV_TEMPLATE" ]; then
+    dstatus envfile status=created reason=copied-from-template
     dinfo ".env not found — copying from template: $ENV_TEMPLATE"
     cp "$ENV_TEMPLATE" "$ENV_FILE"
     dwarn ""
@@ -155,6 +314,7 @@ ensure_env_file() {
     dwarn "  Edit $ENV_FILE and set all required values before re-running."
     ddie "Configure .env then re-run this script."
   else
+    dstatus envfile status=missing reason=no-template
     ddie ".env not found and ENV_TEMPLATE not available. Check your checkout or set ENV_FILE explicitly."
   fi
 }
@@ -165,6 +325,127 @@ load_env() {
   # shellcheck disable=SC1090
   source <(grep -E '^[A-Z_]+=.' "$ENV_FILE" | grep -v '^#') 2>/dev/null || true
   set +a
+}
+
+# Print the current .env with secret values masked.
+# Keys matching *SECRET*|*TOKEN*|*PASS*|*KEY*|*REFRESH*|*CREDENTIAL*|*EMAIL*|*_ID have their
+# value replaced with [redacted]. Safe to include in deploy logs.
+redact_env() {
+  local file="${1:-$ENV_FILE}"
+  local sensitive_pattern='SECRET|TOKEN|PASS|KEY|REFRESH|CREDENTIAL|EMAIL|_ID'
+
+  while IFS= read -r line; do
+    # Pass through blank lines and comments unchanged
+    if [[ "$line" =~ ^[[:space:]]*$ ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+      echo "$line"
+      continue
+    fi
+    # For KEY=VALUE lines, redact the value if the key is sensitive
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local val="${BASH_REMATCH[2]}"
+      if echo "$key" | grep -qE "$sensitive_pattern"; then
+        # Show that a value exists but not what it is
+        if [ -n "$val" ]; then
+          echo "${key}=[redacted]"
+        else
+          echo "${key}=(empty)"
+        fi
+      else
+        echo "$line"
+      fi
+    else
+      echo "$line"
+    fi
+  done < "$file"
+}
+
+# Compare .env against the template and append any keys that are present in the
+# template but missing from the live .env. The appended block carries its
+# original template comments so the operator knows what each var does.
+# Returns 0 if .env was already complete, 1 if keys were added (operator must
+# fill in values before the next deploy succeeds).
+sync_env_from_template() {
+  dsection "Phase 3b: syncing .env against template"
+
+  if [ -z "${ENV_TEMPLATE:-}" ]; then
+    dstatus envsync status=skipped reason=no-template-var
+    dwarn "ENV_TEMPLATE not set — .env drift detection disabled (set ENV_TEMPLATE to enable)"
+    return 0
+  fi
+  if [ ! -f "$ENV_TEMPLATE" ]; then
+    dstatus envsync status=skipped reason=template-not-found
+    dwarn "ENV_TEMPLATE '$ENV_TEMPLATE' not found — .env drift detection skipped"
+    return 0
+  fi
+
+  # Keys already present in .env (only KEY lines, not comments)
+  local existing_keys
+  existing_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" | cut -d= -f1 | sort)
+
+  # Keys defined in the template
+  local template_keys
+  template_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_TEMPLATE" | cut -d= -f1 | sort)
+
+  # Keys in template but not in .env
+  local missing_keys
+  missing_keys=$(comm -23 <(echo "$template_keys") <(echo "$existing_keys"))
+
+  if [ -z "$missing_keys" ]; then
+    dstatus envsync status=ok
+    dok ".env is up to date with template — no missing keys"
+    return 0
+  fi
+
+  dwarn "New keys in template not yet in .env — appending with placeholder values:"
+  local appended_any=0
+
+  # Append a section header
+  printf '\n# ── Added by deploy sync %s ────────────────────────────────────────────────────\n' \
+    "$(date '+%Y-%m-%d')" >> "$ENV_FILE"
+
+  # Walk the template line-by-line, output comment+key blocks for missing keys only
+  local pending_comments=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+      pending_comments=""
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      pending_comments+="${line}"$'\n'
+      continue
+    fi
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+      local key="${BASH_REMATCH[1]}"
+      if echo "$missing_keys" | grep -qx "$key"; then
+        # Write buffered comments then the key line from the template
+        [ -n "$pending_comments" ] && printf '%s' "$pending_comments" >> "$ENV_FILE"
+        echo "$line" >> "$ENV_FILE"
+        dwarn "  + $key (added from template — fill in a real value)"
+        appended_any=1
+      fi
+      pending_comments=""
+    fi
+  done < "$ENV_TEMPLATE"
+
+  if [ "$appended_any" -eq 1 ]; then
+    dstatus envsync status=keys-added reason=action-required
+    dwarn ""
+    dwarn "  Action required: edit $ENV_FILE and set the new vars above before re-running."
+    # Treat missing-but-appended keys as a deploy blocker only if they are in REQUIRED_VARS.
+    # validate_env will catch them; we warn here so the operator sees the specific list first.
+    return 1
+  fi
+
+  return 0
+}
+
+# Log a redacted snapshot of the current .env to the deploy log.
+log_env_snapshot() {
+  dsection "Active .env (secrets redacted)"
+  redact_env "$ENV_FILE" | while IFS= read -r line; do
+    dlog "  $line"
+  done
 }
 
 validate_env() {
@@ -192,6 +473,7 @@ validate_env() {
   fi
 
   if [ "${#errors[@]}" -gt 0 ]; then
+    dstatus env status=failed
     dfail ".env validation failed:"
     for err in "${errors[@]}"; do
       dfail "  • $err"
@@ -199,7 +481,270 @@ validate_env() {
     ddie "Fix the above .env issues then re-run."
   fi
 
+  dstatus env status=ok
   dok "All required env vars set and valid."
+}
+
+# Interactively prompt the operator for any REQUIRED_VARS that are still empty or
+# contain placeholder values. Only runs when stdin is a TTY (not in CI or piped
+# deploys). Writes updated values directly to ENV_FILE so validate_env sees them.
+prompt_missing_vars() {
+  # Skip entirely if not interactive — piped/CI runs get a clear error from validate_env
+  if [ ! -t 0 ]; then
+    return 0
+  fi
+
+  local needs_reload=0
+
+  for var in "${REQUIRED_VARS[@]}"; do
+    local value="${!var:-}"
+    local is_placeholder=0
+
+    if [ -z "$value" ]; then
+      is_placeholder=1
+    else
+      for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+        if [[ "$value" == *"$pattern"* ]]; then
+          is_placeholder=1
+          break
+        fi
+      done
+    fi
+
+    if [ "$is_placeholder" = "1" ]; then
+      dwarn "$var is not set or still contains a placeholder value."
+      printf "  Enter value for %s: " "$var"
+      local new_val
+      read -r new_val
+      if [ -n "$new_val" ]; then
+        # Update or append KEY=VALUE in ENV_FILE
+        if grep -qE "^${var}=" "$ENV_FILE" 2>/dev/null; then
+          sed -i "s|^${var}=.*|${var}=${new_val}|" "$ENV_FILE"
+        else
+          echo "${var}=${new_val}" >> "$ENV_FILE"
+        fi
+        export "${var}=${new_val}"
+        needs_reload=1
+        dok "$var updated."
+      else
+        dwarn "$var left unchanged — validate_env may fail."
+      fi
+    fi
+  done
+
+  if [ "$needs_reload" = "1" ]; then
+    dinfo "Reloading .env after interactive updates..."
+    load_env
+  fi
+}
+
+# ── Dev certificates (HTTPS with self-signed) ──────────────────────────────────
+
+ensure_dev_certs() {
+  local lan_ip="$1"
+  local webauthn_host="${2:-}"
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local cert_script="${script_dir}/../setup/generate-dev-certs.sh"
+  local cert_dir="${script_dir}/../config/certs"
+  local cert_file="${cert_dir}/dev-server.crt"
+  local key_file="${cert_dir}/dev-server.key"
+
+  # WebAuthn needs the cert to cover the hostname (the RP ID), not the IP.
+  local cert_match="${webauthn_host:-$lan_ip}"
+
+  dsection "Checking SSL certificates for HTTPS on port 3001"
+
+  if ! [ -f "$cert_script" ]; then
+    ddie "Certificate generation script not found at $cert_script"
+  fi
+
+  # Idempotency check: only regenerate if certs are missing or the hostname
+  # (or IP, when no hostname) isn't present in the cert SAN.
+  local should_regenerate=false
+  if [ -f "$cert_file" ] && [ -f "$key_file" ]; then
+    if openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+      dok "SSL certificates present and cover $cert_match — skipping regeneration"
+    else
+      dwarn "Certificate does not cover $cert_match, regenerating..."
+      should_regenerate=true
+    fi
+  else
+    dwarn "Dev certificates missing, generating fresh dev certificates..."
+    should_regenerate=true
+  fi
+
+  # Generate certificates if needed
+  if [ "$should_regenerate" = true ]; then
+    if bash "$cert_script" "$lan_ip" "$webauthn_host" 2>&1 | _log_cmd; then
+      dinfo "Certificate generation passed"
+    else
+      dstatus certs status=failed reason=generation-failed
+      ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
+    fi
+  fi
+
+  # Verify certificate files exist
+  if ! [ -f "$cert_file" ]; then
+    dstatus certs status=failed reason=cert-file-missing
+    ddie "Certificate file not found at $cert_file after generation"
+  fi
+  if ! [ -f "$key_file" ]; then
+    dstatus certs status=failed reason=key-file-missing
+    ddie "Certificate key file not found at $key_file after generation"
+  fi
+
+  # Verify certificate validity
+  if ! openssl x509 -in "$cert_file" -noout >/dev/null 2>&1; then
+    dstatus certs status=failed reason=invalid-cert
+    ddie "Certificate at $cert_file is invalid or corrupted"
+  fi
+
+  # Verify certificate hasn't expired
+  local expiry_date
+  expiry_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+  if [ -z "$expiry_date" ]; then
+    dwarn "Could not verify certificate expiry date"
+  else
+    dinfo "Certificate expires: $expiry_date"
+  fi
+
+  # Verify certificate covers the WebAuthn host (or IP when no host configured)
+  if ! openssl x509 -noout -text -in "$cert_file" 2>/dev/null | grep -E "DNS:|IP Address:" | grep -q "$cert_match"; then
+    dwarn "Certificate may not cover $cert_match"
+  fi
+
+  # Verify file permissions (nginx needs read access)
+  if ! [ -r "$cert_file" ] || ! [ -r "$key_file" ]; then
+    dstatus certs status=failed reason=permissions
+    ddie "Certificate files exist but are not readable (permissions issue)"
+  fi
+
+  dstatus certs status=ok host="$cert_match"
+  dok "SSL certificates verified and ready for $cert_match"
+}
+
+# ── Nginx config pre-flight ────────────────────────────────────────────────────
+
+check_nginx_config() {
+  local nginx_service="${1:-nginx}"
+
+  dsection "Pre-flight: nginx configuration test"
+
+  # Runs nginx -t inside a throw-away container using the same compose env and
+  # volume mounts, so template substitution and cert paths are tested for real.
+  if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
+      2>&1 | _log_cmd; then
+    dstatus nginx status=failed reason=config-test-failed
+    dfail ""
+    dfail "Nginx config test failed. Common causes:"
+    dfail "  • SSL cert or key file missing at the path mounted into the container"
+    dfail "  • Syntax error in nginx config template"
+    dfail "  • Environment variable not set (check .env and COMPOSE_FILE)"
+    ddie "Fix the nginx config then re-run."
+  fi
+
+  dstatus nginx status=ok
+  dok "Nginx config test passed"
+
+  # Compare what the template renders NOW against what is live in the running
+  # container. Only remove the container if they differ — or if no container is
+  # running. This avoids unnecessary recreation on deploys where nginx config
+  # hasn't changed, while still guaranteeing a fresh start when it has.
+  local new_config current_config
+  new_config=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+  current_config=$(docker compose -f "$COMPOSE_FILE" exec -T "$nginx_service" \
+    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
+
+  if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
+    dok "Nginx config unchanged — container will be reused"
+  else
+    if [ -z "$current_config" ]; then
+      dinfo "No running nginx container — will be created fresh by compose up"
+    else
+      dinfo "Nginx config changed — removing container for clean start"
+    fi
+    dinfo "Rendered nginx config:"
+    echo "$new_config" | _log_cmd
+    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | _log_cmd || true
+  fi
+}
+
+# ── Rollback helper ───────────────────────────────────────────────────────────
+
+_do_rollback() {
+  local reason="$1"
+
+  cd "$REPO_DIR"
+
+  # Try to restore last-good state first
+  if _restore_last_good_state > /dev/null 2>&1; then
+    read -r rollback_branch rollback_sha < <(_restore_last_good_state)
+    dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
+    dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
+    git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
+    # Roll back to a known-stable branch (e.g. dev or main) rather than a
+    # previous commit on the same potentially-broken feature branch.
+    dstatus rollback reason="$reason" target="$ROLLBACK_BRANCH" method=stable-branch
+    dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
+    git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
+    # Same branch deploy: revert to the previous commit.
+    dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
+    dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
+    git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
+    DEPLOY_ROLLED_BACK=1
+
+  else
+    dstatus rollback reason="$reason" method=none status=no-rollback-available
+    dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
+    dwarn "Manual intervention required — check container logs above."
+  fi
+}
+
+# ── Disk space preflight ──────────────────────────────────────────────────────
+
+# Warn if less than 1 GB free on the filesystem hosting REPO_DIR.
+# Docker image builds can fail silently when space runs out, so surface this early.
+check_disk_space() {
+  local min_gb="${1:-1}"
+  local min_kb=$(( min_gb * 1024 * 1024 ))
+  local target_dir="${REPO_DIR:-$HOME}"
+  local free_kb
+
+  dsection "Pre-build disk space check"
+
+  free_kb=$(df -k "$target_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [ -z "$free_kb" ]; then
+    dstatus disk status=unknown reason=df-failed
+    dwarn "Could not determine free disk space — continuing anyway."
+    return 0
+  fi
+
+  local free_gb=$(( free_kb / 1024 / 1024 ))
+  local free_mb=$(( free_kb / 1024 ))
+
+  if [ "$free_kb" -lt "$min_kb" ]; then
+    dstatus disk status=low free="${free_mb}MB" min="${min_gb}GB"
+    dwarn "Low disk space: ${free_mb}MB free (recommended ≥ ${min_gb}GB for Docker builds)."
+    dwarn "Docker image builds may fail. Free space on $(df -k "$target_dir" | awk 'NR==2{print $6}') before retrying."
+    dwarn "Continuing — this is a warning, not a hard stop."
+  else
+    dstatus disk status=ok free="${free_gb}GB"
+    dok "Disk space OK: ${free_gb}GB free on $(df -k "$target_dir" | awk 'NR==2{print $6}')"
+  fi
 }
 
 # ── Compose and rollback ───────────────────────────────────────────────────────
@@ -208,20 +753,55 @@ compose_up_with_rollback() {
   local service_name="$1"   # e.g. backend-dev or backend
 
   dsection "Phase 5: building and starting services"
-  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
+  # Warn about any containers from this compose project that are no longer
+  # defined in the current compose file — these are orphans from a service
+  # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
+  # but surfacing them first gives a clear record of what was cleaned up.
+  local running_services defined_services
+  running_services=$(docker compose -f "$COMPOSE_FILE" ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
+  defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | sort -u || true)
+  if [ -n "$running_services" ] && [ -n "$defined_services" ]; then
+    while IFS= read -r svc; do
+      [ -z "$svc" ] && continue
+      if ! echo "$defined_services" | grep -qxF "$svc"; then
+        dwarn "Orphan container detected: service '$svc' (not in current compose file — will be removed)"
+      fi
+    done <<< "$running_services"
+  fi
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE"; then
+  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
+
+  if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | _log_cmd; then
+    dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
-
-    if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-      dwarn "Rolling back to previous commit ($PRE_SHA)..."
-      git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-      docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    fi
-
+    _do_rollback "docker compose up failed"
     ddie "Deploy failed — see above for details."
   fi
+
+  # If NGINX_SERVICE is set, verify it actually started — nginx exits immediately
+  # on config errors, so catching it here avoids a silent 60s health check timeout.
+  if [ -n "${NGINX_SERVICE:-}" ]; then
+    sleep 2  # allow nginx to finish initialising or fail-fast
+    local nginx_state
+    nginx_state=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$NGINX_SERVICE" 2>/dev/null \
+      || docker compose -f "$COMPOSE_FILE" ps "$NGINX_SERVICE" 2>/dev/null | awk 'NR==2{print $4}' \
+      || echo "unknown")
+
+    if [[ "$nginx_state" != "running" ]]; then
+      dstatus compose status=failed service="$NGINX_SERVICE" reason="nginx-not-running state=${nginx_state}"
+      dfail "Nginx container is not running (state: $nginx_state)"
+      dfail ""
+      dfail "Nginx logs:"
+      docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      _do_rollback "nginx failed to start"
+      ddie "Nginx failed to start — check the nginx config and cert paths above."
+    fi
+
+    dok "Nginx container is running"
+  fi
+
+  dstatus compose status=ok service="$service_name"
 }
 
 # ── Health checks ─────────────────────────────────────────────────────────────
@@ -232,6 +812,9 @@ wait_for_health() {
   local url2="${HEALTH_URL_2:-}"
   local timeout="${HEALTH_TIMEOUT:-60}"
   local interval="${HEALTH_INTERVAL:-5}"
+  # Set HEALTH_INSECURE=1 in caller to skip SSL cert verification (e.g. dev self-signed certs)
+  local curl_opts=""
+  [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_opts="--insecure"
 
   dsection "Phase 6: HTTP/HTTPS health checks"
 
@@ -240,36 +823,66 @@ wait_for_health() {
     return
   fi
 
+  [ -n "$curl_opts" ] && dwarn "SSL verification disabled for health check (self-signed cert)"
+
   local attempts=$(( timeout / interval ))
   dinfo "Polling $url (${timeout}s timeout)..."
 
   for i in $(seq 1 "$attempts"); do
-    if curl -sf --max-time 4 "$url" > /dev/null 2>&1; then
+    if curl -sf --max-time 4 $curl_opts "$url" > /dev/null 2>&1; then
       dok "Primary health check OK: $url"
       if [ -n "$url2" ]; then
         local code
-        code=$(curl -sf -o /dev/null -w "%{http_code}" "$url2" 2>/dev/null || echo "000")
+        code=$(curl -sf -o /dev/null -w "%{http_code}" $curl_opts "$url2" 2>/dev/null || echo "000")
         if [ "$code" = "200" ]; then
           dok "Secondary health check OK: $url2"
         else
           dwarn "Secondary health check returned $code for $url2"
         fi
       fi
+
+      # Save this as the last-good deployment
+      cd "$REPO_DIR"
+      local current_branch current_sha
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+      current_sha=$(git rev-parse HEAD)
+      _save_last_good_state "$current_branch" "$current_sha"
+
+      dstatus health status=ok url="$url" attempts="$i"
       return
     fi
 
     if [ "$i" -eq "$attempts" ]; then
+      dstatus health status=failed url="$url" attempts="$i" timeout="${timeout}s"
       dfail "Health check failed after ${timeout}s"
       dfail ""
-      dfail "Logs for $backend_service (last 50 lines):"
+
+      # Diagnostic curl — show HTTP code and connection error without full verbose noise
+      local diag_http diag_err diag_tmp
+      diag_tmp=$(mktemp)
+      diag_http=$(curl -s --max-time 4 $curl_opts \
+        -o /dev/null -w "%{http_code}" \
+        --stderr "$diag_tmp" \
+        "$url" 2>/dev/null || echo "000")
+      diag_err=$(cat "$diag_tmp" 2>/dev/null || true)
+      rm -f "$diag_tmp"
+      dfail "Last curl attempt: HTTP $diag_http"
+      if [ -n "$diag_err" ]; then
+        dfail "curl error: $diag_err"
+      fi
+      dfail ""
+
+      dfail "Backend logs — $backend_service (last 50 lines):"
       docker compose -f "$COMPOSE_FILE" logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
 
-      if [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
-        dwarn "Rolling back to previous commit (${PRE_SHA:0:7})..."
-        git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-        docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-        dwarn "Rolled back — verify the service is healthy before investigating the failed update."
+      # Nginx logs are critical for diagnosing SSL/config failures
+      if [ -n "${NGINX_SERVICE:-}" ]; then
+        dfail ""
+        dfail "Nginx logs — $NGINX_SERVICE (last 30 lines):"
+        docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
       fi
+
+      _do_rollback "health check timed out"
 
       ddie "Deploy failed — see log at $LOG_FILE"
     fi
@@ -277,4 +890,209 @@ wait_for_health() {
     dinfo "  attempt $i/$attempts — not ready yet, retrying in ${interval}s..."
     sleep "$interval"
   done
+}
+
+# ── In-deployment test suite ──────────────────────────────────────────────────
+
+# Run the backend Vitest suite inside the already-running container.
+# Runs after health check so tests execute against the live deployed service.
+# Non-zero exit triggers rollback — same path as a failed health check.
+run_deploy_tests() {
+  local service_name="$1"   # e.g. backend-dev or backend
+
+  dsection "Phase 7: running backend test suite"
+  dinfo "Executing npm test inside $service_name container..."
+
+  if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | _log_cmd; then
+    dstatus vitest status=ok service="$service_name"
+    dok "All tests passed ✓"
+  else
+    dstatus vitest status=failed service="$service_name"
+    dfail "Test suite failed — initiating rollback"
+    _do_rollback "test suite failed post-deploy"
+    ddie "Deploy failed: tests did not pass. See log at $LOG_FILE"
+  fi
+}
+
+# ── Error Logger Test ──────────────────────────────────────────────────────────
+
+test_error_logger_all_pages() {
+  dsection "Testing error logger across all site pages"
+
+  # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx-dev:3001)
+  # so that puppeteer, running inside the backend container, can reach nginx.
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping error logger test"
+    dstatus error-logger status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Running comprehensive page coverage test..."
+  dinfo "  Testing all pages for error-logger deployment"
+
+  # Run comprehensive test inside the backend container
+  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
+    dstatus error-logger status=ok
+    dok "Error logger site-wide test passed ✓"
+  else
+    dstatus error-logger status=failed
+    dwarn "Error logger site-wide test failed or had warnings — see log above"
+  fi
+}
+
+# ── CSP Violation Test ────────────────────────────────────────────────────────
+
+test_csp_reporting() {
+  dsection "Testing CSP violation reporting"
+
+  # SITE_URL must be the external nginx URL (e.g. https://dev.andykeys.me:3001)
+  # so curl reaches nginx and checks the real CSP headers.
+  local test_url="${SITE_URL:-}"
+  if [ -z "$test_url" ]; then
+    dwarn "SITE_URL not set — skipping CSP test"
+    dstatus csp status=skipped reason=no-site-url
+    return
+  fi
+
+  dinfo "CSP report-uri configured at /api/debug/csp-violations"
+  dinfo "CSP violations will be logged when resources violate policy"
+
+  # Check if CSP header includes report-uri
+  local curl_opts=""
+  if [ "$HEALTH_INSECURE" = "1" ]; then
+    curl_opts="-sk"
+  else
+    curl_opts="-s"
+  fi
+
+  local csp_header=$(curl $curl_opts -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
+
+  if [ -n "$csp_header" ]; then
+    if echo "$csp_header" | grep -q "report-uri"; then
+      dstatus csp status=ok report-uri=present
+      dok "CSP report-uri is configured ✓"
+    else
+      dstatus csp status=warn report-uri=missing
+      dwarn "CSP header present but report-uri not found"
+      dinfo "  Full CSP header:"
+      echo "$csp_header" | _log_cmd | sed 's/^/    /'
+    fi
+  else
+    dstatus csp status=warn header=missing
+    dwarn "CSP header not found (not being sent by server)"
+  fi
+}
+
+# ── DDNS sync check ───────────────────────────────────────────────────────────
+
+# Warn if the public DNS A record for DOMAIN doesn't match the server's current
+# public IP. Runs as a warning-only preflight — a mismatch means traffic is
+# going to the wrong server but it shouldn't block the deploy itself.
+# Requires: DOMAIN env var set, dig available (dnsutils), curl available.
+check_ddns_sync() {
+  local domain="${DOMAIN:-}"
+
+  if [ -z "$domain" ]; then
+    dwarn "DDNS check skipped — DOMAIN not set"
+    return 0
+  fi
+
+  dsection "DDNS sync check"
+
+  if ! command -v dig >/dev/null 2>&1; then
+    dwarn "dig not found — install dnsutils to enable DDNS check: sudo apt install dnsutils"
+    return 0
+  fi
+
+  local public_ip dns_ip
+  public_ip=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo "")
+  dns_ip=$(dig +short "$domain" @8.8.8.8 2>/dev/null | tail -1 || echo "")
+
+  if [ -z "$public_ip" ]; then
+    dwarn "Could not determine server public IP — skipping DDNS check"
+    return 0
+  fi
+
+  if [ -z "$dns_ip" ]; then
+    dwarn "Could not resolve DNS for $domain — skipping DDNS check"
+    return 0
+  fi
+
+  dinfo "Server public IP : $public_ip"
+  dinfo "DNS A record     : $dns_ip (for $domain)"
+
+  if [ "$public_ip" = "$dns_ip" ]; then
+    dstatus ddns status=ok domain="$domain"
+    dok "DDNS in sync: $domain → $public_ip ✓"
+  else
+    dstatus ddns status=mismatch domain="$domain"
+    dwarn "DDNS out of sync: $domain resolves to $dns_ip but server IP is $public_ip"
+    dwarn "Traffic may be going to the wrong server."
+    dwarn "Run: sudo ddclient -daemon=0 -verbose -noquiet"
+    dwarn "Or update manually in Namecheap Advanced DNS."
+    dwarn "Continuing deploy — site may be unreachable externally until DNS is fixed."
+  fi
+}
+
+# ── Structured deploy summary ─────────────────────────────────────────────────
+
+log_deploy_summary() {
+  local env_name="${1:-unknown}"
+  local branch sha ts
+
+  ts=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+  branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  sha=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+  dstatus summary status=ok env="${env_name}" branch="${branch}" sha="${sha}"
+}
+
+# Loud final verdict banner printed immediately before the report box so the
+# overall outcome is unmissable. Always printed (not gated by DEPLOY_QUIET).
+# Usage: print_deploy_status <COMPLETE|ROLLED BACK|FAILED> <env-label>
+print_deploy_status() {
+  local status="$1" label="${2:-unknown}"
+  local colour icon
+  case "$status" in
+    COMPLETE)      colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="✅" ;;
+    "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
+    *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
+  esac
+  echo "" | tee -a "$LOG_FILE"
+  echo -e "${colour}╔══════════════════════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}║  ${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}╚══════════════════════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+}
+
+# Print a human-readable final deploy report by extracting all [deploy:*] and
+# [regression] checkpoint lines written to LOG_FILE during this run.
+# Always printed — not suppressed by DEPLOY_QUIET.
+# Call as the very last step of a deploy script (after regression tests).
+print_deploy_report() {
+  local label="${1:-unknown}"
+  local width=72  # inner content width (between ║  and  ║)
+  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+
+  echo ""
+  echo "╔${border}╗"
+  printf "║  %-${width}s  ║\n" "Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "╠${border}╣"
+  # Only this run's lines (log is append-only across deploys), and only
+  # checkpoint lines anchored at column 0 — so prose / commit-message text
+  # that happens to contain "[deploy:" is never matched.
+  tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
+    | grep -E '^\[deploy:|^\[regression\]' \
+    | sed 's/\x1b\[[0-9;]*m//g' \
+    | sed 's/ ts=[^ ]*$//' \
+    | while IFS= read -r line; do
+        # Truncate lines that are still too long to fit
+        if [ "${#line}" -gt "$width" ]; then
+          line="${line:0:$((width - 1))}…"
+        fi
+        printf "║  %-${width}s  ║\n" "$line"
+      done
+  echo "╚${border}╝"
+  echo ""
 }

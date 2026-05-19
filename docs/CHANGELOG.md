@@ -6,6 +6,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
+## Unreleased (dev)
+
+---
+
+## Release 2026-05-18
+
+### Added
+- Deployment hardening (#263 A+B+C, #270): `check_disk_space`, `prompt_missing_vars`, `auto_detect_lan_ip`, `log_deploy_summary`, and `run_deploy_tests` (Vitest in the live container post-health-check; failure triggers rollback). Non-blocking backend startup preflight (DB + Outlook OAuth2) in `server.js` — warns, never crashes
+- `scripts/tests/test-regression.sh` — server-side bash regression smoke suite, run as the final step of every deploy; JWT generated from the running container so it matches the server's `JWT_SECRET`. Covers public baseline, auth gating (deploy/upload/posts/travel must 401 without a token), and (dev only) rate-limit enforcement
+- Machine-readable deploy output (#276): `[deploy:<phase>]` checkpoint lines at every decision point plus a final AI-readable deploy-report box aggregating the current run's checkpoints; `-Quiet` mode suppresses verbose noise while keeping checkpoints, warnings, errors, and the report
+- Dev-only rate-limit reset before/after the regression run (via the backend container's own pool), so repeated deploys within the rate-limit window don't false-fail contact checks; prod deliberately excluded
+- Outlook OAuth2 email via Microsoft Graph API (`/v1.0/me/sendMail`); `scripts/generate-outlook-refresh-token.js` captures a long-lived refresh token (delegated `Mail.Send`, personal-account `/consumers/` endpoint) (#241)
+- Rate limiting on auth endpoints: `/auth/email/send` (5/hr/IP), passkey register/login (10/hr/IP) (#237)
+- Magic-link recipient gate: tokens only sent to `ADMIN_EMAIL`; other addresses get the same success response with no email (anti-enumeration) (#241)
+- `OUTLOOK_*` env vars wired through all three compose files and documented in every `.env*.example`
+- `docs/TERMINOLOGY.md` — canonical names for host, hostnames, environments, services, and branches; wired into the onboarding doc lists
+- Structured backend logging via `pino` + `pino-http` (#153): severity levels, per-request HTTP log line (method/path/status/latency), `LOG_LEVEL` env var (default `info`), and centralised secret redaction (auth headers, tokens, passwords, refresh tokens). Shared logger at `backend/utils/logger.js`
+- Docker `json-file` log rotation on all services in all three compose files: `10m / 3 files` (local dev), `20m / 5 files` (prod + dev-server) — prevents unbounded disk growth from structured log output
+- Server-side admin guard on `POST /auth/setup` (#274): registration now requires `ADMIN_EMAIL` to be configured and the submitted email to match; wrong-email and not-configured both fail with a generic 403 to avoid enumeration. Registration remains a one-time operation and still refuses if any user already exists; covered by unit tests in `backend/tests/routes/auth.test.js`
+- `/health` endpoint made internal-only (#279): nginx no longer proxies the path; reachable only on the backend's direct port (localhost-bound in all compose files). Deploy health checks updated to use the direct port; `/api/health` alias removed
+
+### Security
+- `POST /auth/setup` now enforces `ADMIN_EMAIL` server-side — wrong email and unconfigured server both return a generic 403; guard runs before any DB access (#274)
+- `/health` removed from public nginx routing — version, uptime, and DB status no longer exposed to the internet (#279)
+
+### Changed
+- Regression tests moved server-side: `scripts/tests/Test-Regression.ps1` replaced by `test-regression.sh`; `dev-deploy.ps1` / `prod-deploy.ps1` stripped to thin SSH wrappers. Deploy scripts reach the running site via curl `--resolve` (server can't route to its own public DNS name); regression failure now always prints the report and exits non-zero rather than aborting silently
+- GitHub Actions CI disabled (`workflow_dispatch` only) — tests run in the deployed container instead (#270)
+- `docs/TESTING.md`, `docs/AI.md`, `CLAUDE.md` — updated for deploy-time Vitest + regression, `-SkipRegression`/`-Quiet`, the report box, and `test-regression.sh` replacing `Test-Regression.ps1`
+- Email transport: SMTP basic auth → Outlook OAuth2 (Graph API). Microsoft disabled SMTP basic auth; `nodemailer` SMTP retained only as a fallback for non-Outlook providers
+- Documentation: replaced stale "Raspberry Pi" / `portfolio-server` host references with the canonical "Ubuntu Server (`ak-home-server`)" across README, CLAUDE.md, ROADMAP, PROJECT_ASSESSMENT, AI.md, and deploy/monitor script comments (#171)
+- `.env*.example`: OAuth2 promoted to the primary email method, SMTP demoted to documented fallback
+- `PROJECT_ASSESSMENT.md`: post-migration reassessment — corrected stale PM2/performance statements and removed the resolved SSH-from-Windows pain point
+- Working instructions (`docs/AI.md`, `CLAUDE.md`): after opening a PR, recommend a ready-to-copy squash commit message for the owner to apply on merge
+- Backend: all runtime `console.*` calls replaced with the structured logger (routes, middleware, utils, server/app entry); test/CLI scripts left as-is (#153)
+
+### Removed
+- `docker/.env.example` — duplicate of root `.env.example`; README updated to reference the canonical file
+
+---
+
 ## Release 2026-05-07
 
 ### Added
@@ -38,7 +79,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
-## Hotfix 2026-05-06
+## Release 2026-05-06
 
 ### Fixed
 - Admin page completely non-functional — `initDeploySection()` declared twice in `admin.js` causing a `SyntaxError` that prevented the entire file from parsing (#144)
