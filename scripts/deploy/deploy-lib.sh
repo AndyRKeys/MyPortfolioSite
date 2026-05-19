@@ -1069,10 +1069,13 @@ print_deploy_report() {
   local label="${1:-unknown}"
   local width=72  # inner content width (between ║  and  ║)
   local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+  local _title _title_pad
+  _title="Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  _title_pad=$(( width + 2 - ${#_title} ))  # fill to same total width as content rows
 
   echo ""
   echo "╔${border}╗"
-  printf "║  %-${width}s  ║\n" "Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
   echo "╠${border}╣"
   # Only this run's lines (log is append-only across deploys), and only
   # checkpoint lines anchored at column 0 — so prose / commit-message text
