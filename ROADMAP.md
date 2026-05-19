@@ -76,7 +76,9 @@ The goals for the project are:
 
 ### 3.4 ✅ Automated test gate — SHIPPED (Release 2026-05-18)
 
-A GitHub Actions CI workflow runs the Vitest suite on every PR to `dev` (#260). In parallel, a server-side regression suite (`test-regression.sh`) runs automatically post-deploy with rollback on failure (#270). Both are live. The merge-time safety net and post-deploy gate are in place.
+Vitest runs as part of the deploy pipeline rather than on GitHub Actions (GitHub Actions setup was too slow to be practical). The deploy script runs the suite inside the backend container and rolls back on failure. A server-side regression suite (`test-regression.sh`) also runs post-deploy. Both gates are live.
+
+GitHub Actions CI (`.github/workflows/ci.yml`) exists but is disabled — it's kept as a placeholder for if/when a faster setup is viable.
 
 **Remaining:** The full CD half (versioned image build, GHCR, self-hosted runner) is still in §4.4 and sequences after dual-environment hosting (3.1).
 
