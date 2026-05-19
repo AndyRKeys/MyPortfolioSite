@@ -123,6 +123,7 @@ router.get('/me', authenticate, async (req, res) => {
 
 // ── Passkey registration ───────────────────────────────────────────────────────
 
+// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -168,6 +169,7 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
   }
 });
 
+// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey, passkeyName } = req.body;
@@ -220,6 +222,7 @@ router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate
 
 // ── Passkey authentication ────────────────────────────────────────────────────
 
+// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
   try {
     const { email } = req.body;
@@ -262,6 +265,7 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
   }
 });
 
+// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res) => {
   try {
     const { response, sessionKey } = req.body;
@@ -321,6 +325,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
 
 // ── Email magic link ──────────────────────────────────────────────────────────
 
+// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
 router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req, res) => {
   try {
     const { email } = req.body;
@@ -378,6 +383,7 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
   }
 });
 
+// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
 router.get('/email/verify', emailRateLimit, async (req, res) => {
   try {
     const { token } = req.query;
