@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-16_
+_Last updated: 2026-05-19_
 
 ## 1. Vision and goals
 
@@ -31,10 +31,10 @@ The goals for the project are:
 
 **Pain points**
 
-- Deployments are still somewhat manual and script-centric.
-- SSH key authentication from Windows is not yet frictionless.
+- Deployments are script-driven and improving but not yet fully automated — unified deploy script and compose base are the next step (#300/#301).
 - Single-server resource ceiling limits what can run concurrently (especially with future AI experiments).
-- Limited observability (minimal metrics/logs surfaced in UI).
+- No database backups or external alerting — the biggest remaining operational risk.
+- Log aggregation requires SSH; no admin-surfaced view yet.
 
 ## 3. Near-term priorities
 
@@ -74,33 +74,28 @@ The goals for the project are:
 
 **Outcome:** Less friction around making and deploying changes, more confidence when experimenting.
 
-### 3.4 Automated test gate (CI-only — precursor to §4.4)
+### 3.4 ✅ Automated test gate — SHIPPED (Release 2026-05-18)
 
-Promoted ahead of the full CI/CD pipeline (§4.4): the test-gate half needs no self-hosted runner, GHCR, or beefier host, so it can land now and start catching regressions immediately. Today the Vitest suite and `Test-Regression.ps1` only run when invoked manually on the dev server; nothing blocks a red change from reaching `dev`. Security-sensitive PRs (e.g. the `email_tokens` bcrypt work, #134) are exactly where an automated gate pays off.
+A GitHub Actions CI workflow runs the Vitest suite on every PR to `dev` (#260). In parallel, a server-side regression suite (`test-regression.sh`) runs automatically post-deploy with rollback on failure (#270). Both are live. The merge-time safety net and post-deploy gate are in place.
 
-- GitHub Actions workflow on every PR to `dev`: run the existing Vitest suite in the backend container (Postgres as a service container), plus lint/format checks.
-- Block merge on red CI; surface results on the PR.
-- No deployment, registry, or runner work in scope here — this is purely the merge-time safety net. The build/publish/deploy automation stays in §4.4 and still sequences after dual-environment hosting (3.1).
+**Remaining:** The full CD half (versioned image build, GHCR, self-hosted runner) is still in §4.4 and sequences after dual-environment hosting (3.1).
 
-**Outcome:** Regressions caught at PR time instead of by hand, with zero new infrastructure — a cheap, reversible first step that de-risks everything in §4.4.
+### 3.5 ✅ Deployment reliability & structured logging — SHIPPED (Release 2026-05-18)
 
-### 3.5 Deployment reliability & structured logging
+The critical blockers from this section are resolved:
 
-The highest-priority near-term item (see the sequencing principle above). Deployment bugs and blind debugging have been the single biggest drain on recent work — orphan containers serving stale code (#253), env-var gaps that only surfaced at runtime, and `console.log`-only output that made diagnosis slow. This pulls the deploy-hardening and structured-logging work forward from §4.2/§4.5.
+- **Orphan container prevention:** `--remove-orphans` baked into all deploy scripts; orphan/port warnings surface as hard failures (#253).
+- **Post-deploy verification:** `deploy-lib.sh` hits `/health`, confirms image/commit matches the intended ref, and emits a structured pass/fail report (#263/#276).
+- **Structured logging:** Backend uses `pino` + `pino-http` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. Log rotation via Docker's `json-file` driver (#153).
 
-**Deployment reliability:**
+**What remains (promoted to §4.2 / new issues):**
 
-- Bake orphan-container prevention into the deploy scripts: `docker compose up` always runs with `--remove-orphans`, and the deploy fails loudly on orphan/port-conflict warnings (#253).
-- Add a post-deploy verification step to `deploy-lib.sh`: hit `/api/health`, confirm the running image/commit matches the intended ref, and surface a clear pass/fail in the deploy output (catches the stale-code class of bug).
-- Document the single canonical deploy path and reduce script branching so there are fewer ways to get it subtly wrong.
-
-**Structured logging:**
-
-- Replace ad-hoc `console.log` with structured logging (Pino) carrying severity levels and request context (#152).
-- Ensure deploy scripts and the admin deploy console surface the relevant log lines on failure, so a bad deploy is diagnosable without SSH archaeology.
-- Never log secrets (`.env`, tokens, refresh tokens) — structured logging makes redaction a deliberate, reviewable choice.
-
-**Outcome:** Deploys become boringly reliable and self-verifying; failures are diagnosable from logs in minutes instead of hours. This unblocks everything else by stopping deployment bugs from eating feature/testing time.
+- Unify dev/prod deploy scripts with environment-aware feature flags to prevent config drift (#300).
+- Unify docker-compose files with a shared base (#301).
+- Pre-flight port check and nginx config validation in the deploy pipeline (#302/#303).
+- Outlook OAuth2 token validity pre-flight at startup (#304).
+- Self-healing deploy with escalating recovery steps (#232).
+- Log aggregation/centralised viewer (#259 closed — Pino in place; aggregation is the outstanding piece).
 
 ## 4. Medium-term directions
 
@@ -167,13 +162,13 @@ Beyond the CI/CD pipeline (§4.4), several existing pain points and open issues 
 - **Dependabot** or **Renovate** (free) — automated dependency PRs; reduces manual `npm audit` toil.
 - **gitleaks** in CI — block commits/PRs that leak secrets (`.env`, tokens) — complements the existing "never commit secrets" rule.
 - **Trivy / Grype** — container image CVE scanning (also listed in §4.4 CI).
-- Hardens the open `/debug` route and rate-limit work already in flight (#236, #237).
+- ✅ `/debug` routes are guarded by `IS_DEV` flag (#236, shipped). Rate limiting on all auth endpoints (#237, shipped). Remaining: scoped service-account JWTs (#275).
 
 **Code quality gates (supports untested-route risk in #238):**
 
 - **ESLint + Prettier** with a CI check — consistent style enforced automatically, less review nitpicking.
 - **markdownlint-cli2** in CI — resolves #199 and keeps docs clean going forward.
-- **axe-core / pa11y** accessibility check in CI — turns the manual a11y fixes (#229) into a regression gate.
+- **axe-core / pa11y** accessibility check in CI — turns the manual a11y fixes into a regression gate. (✅ aria-label fixes shipped, #229.)
 - Vitest coverage thresholds enforced in CI — directly targets the auth.js/deploy.js coverage gap (#238).
 
 **Observability (addresses the "limited observability" pain point and §4.2):**
@@ -266,6 +261,7 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 
 ## 7. Change log
 
+- **2026-05-19** – Post Release 2026-05-18 update. §3.4 and §3.5 marked as shipped. §2 pain points revised. §4.5 cross-refs updated to reflect shipped items (#236/#237/#229). New outstanding items from deploy session added to §3.5 remainder (#300/#301/#302/#303/#304).
 - **2026-05-07** – Initial roadmap drafting, based on issues #15, #151, #159 and current architecture.
 - **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
 - **2026-05-15** – Added §4.5 Open-source tooling adoption (Dependabot/Renovate, gitleaks, ESLint/Prettier, Uptime Kuma, Grafana/Loki, migration tooling) and §5.5 Future development suggestions, cross-referencing existing open issues.
