@@ -39,10 +39,13 @@ server {
     # The /api prefix is stripped before forwarding (trailing slash on proxy_pass).
     # resolver + set $backend defers DNS lookup to request time so nginx -t passes
     # in a standalone container (no Docker network) during the deploy config check.
+    # rewrite strips /api/ prefix explicitly — needed because proxy_pass with a
+    # variable host does not apply automatic location-prefix replacement.
     location /api/ {
         resolver 127.0.0.11 valid=30s;
         set $backend ${BACKEND_HOST};
-        proxy_pass http://$backend:${APP_PORT}/;
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://$backend:${APP_PORT};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
