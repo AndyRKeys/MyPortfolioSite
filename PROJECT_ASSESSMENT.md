@@ -1,6 +1,6 @@
 # Project Assessment
 
-_Last updated: 2026-05-16_
+_Last updated: 2026-05-19_
 
 This document is a frank self-assessment of the current state of MyPortfolioSite — what is working well, what is fragile, where technical debt lives, and what would benefit most from attention. It is written to be honest rather than flattering.
 
@@ -67,8 +67,8 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Pain points
 
-- **Production deploy has no visible outcome.** After running `prod-deploy.ps1`, you have to separately SSH to the server to check container and Nginx logs to confirm the deploy worked. There is no success/failure signal back to the developer's terminal in a clear, structured way. (Tracked in ROADMAP §3.5.)
-- **There is no health check URL.** There is no `/api/health` endpoint that returns a structured response (app status, DB connectivity, version). This means the only way to confirm a deploy succeeded is to manually test the site. A health check would take 10 minutes to add and dramatically improve deploy confidence.
+- **Production deploy now has a visible outcome.** The deploy script emits a structured final report (pass/fail, health-check result, git ref) back to the terminal. Post-deploy verification hits `/health` internally and confirms the running image matches the intended ref. (Shipped Release 2026-05-18.)
+- **Health check endpoint exists and is internal-only.** `/health` returns `{ status, db, version, uptime }` and is bound to `127.0.0.1` — reachable by Docker health checks and the deploy script but not from the public internet. (`/api/health` alias removed.) (Shipped Release 2026-05-18.)
 - **The admin panel has grown without a clear UX model.** It handles blog posts, travel posts, CV upload, deploy triggers, and stats in one page. Functionally fine for one user; but navigating it is increasingly "just knowing where things are" rather than following an obvious structure.
 - **Agent context resets every session.** Each new Claude session must re-read all the docs from scratch. The onboarding prompt handles this well, but long sessions where the context fills up risk agents losing track of earlier decisions. Devlogs (Issues linked in earlier sessions) help mitigate this but require discipline to maintain.
 
@@ -87,7 +87,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Observability
 
-- **Structured logging in place; rotation/centralisation still open.** The backend now logs through `pino` + `pino-http` (#153): severity levels, per-request context, `LOG_LEVEL`, and secret redaction. What remains is operational — no log rotation policy and no centralised/aggregated view, so production diagnosis still means SSHing to the server and tailing container logs. (Remaining work tracked in ROADMAP §3.5.)
+- **Structured logging in place; rotation/centralisation still open.** The backend logs through `pino` + `pino-http` (#153): severity levels, per-request context, `LOG_LEVEL`, and secret redaction. Log rotation is configured via Docker's `json-file` driver. What remains is centralisation — production diagnosis still requires SSH + tailing container logs; no aggregated view yet. (Remaining work: ROADMAP §4.2.)
 - **No metrics.** There is no tracking of request counts, error rates, response times, or API usage. The `stats.js` route exists but its scope is limited.
 - **The admin deploy console is the nearest thing to an ops dashboard.** This is a good foundation but it currently only shows deploy output, not runtime health.
 
@@ -97,7 +97,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **No image optimisation.** Uploaded images are stored and served at their original size. With ample server headroom this is no longer a performance risk, but it still wastes bandwidth and slows page loads for visitors as content grows — a UX concern rather than a capacity one.
 - **No caching headers on static assets.** Nginx likely serves static files without long-lived cache headers, meaning repeat visitors re-download assets on every visit.
 
-**Overall reliability/observability rating: Red-Amber.** The site works but is flying blind in production. No backups, no health checks, no alerting, no log strategy. For a personal site this is acceptable risk; for anything more important it would not be.
+**Overall reliability/observability rating: Amber.** Structured logging and internal health checks are now in place. What remains: no automated database backups, no external alerting, no log aggregation/viewer. For a personal site this is acceptable; for anything more important it would not be.
 
 ---
 
@@ -114,14 +114,14 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Gaps
 
-- **Rate limiting is minimal.** The `backend/middleware/` directory has some rate limiting, but it has not been audited thoroughly. The contact form, magic link endpoint, and any future AI Lab endpoints are potential abuse surfaces.
+- **Rate limiting is in place on all sensitive endpoints.** Auth routes (magic-link send/verify, WebAuthn registration/auth start) and the contact form all have per-IP rate limiting via `backend/middleware/rateLimit.js` (#237, shipped Release 2026-05-18). Future AI Lab endpoints will need their own limits when added.
 - **The deploy endpoint (`/api/deploy`) is high-value and must remain tightly protected.** A compromise of the JWT that gates this route would give an attacker the ability to trigger deploys. This endpoint should be audited specifically as part of any security review.
-- **No Content Security Policy (CSP) headers.** Nginx does not appear to set CSP headers. This is a meaningful XSS mitigation that is missing.
+- **CSP and security headers are in place.** `nginx-security-headers.conf` sets Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and HSTS. The CSP `connect-src` was extended to include `nominatim.openstreetmap.org` for geocoding (#234). Continued hardening may be needed as new endpoints are added.
 - **Uploaded files are served from the same origin.** If a malicious file were uploaded (e.g., an SVG with embedded script), it could be served directly. Input validation on uploads should be reviewed.
 - **The server itself is the weakest link.** It is a home-hosted machine (`ak-home-server`) with a dynamic IP. Physical access, disk health, and home network security are all outside the application's control but affect the overall security posture.
 - **AI Lab will add new attack surface.** Once implemented, the AI Lab introduces API keys for Perplexity and Anthropic, prompt injection risk, and potential for resource abuse. The auth-token gating planned in Issue #15 is necessary but not sufficient — the Lab endpoints will need their own threat model.
 
-**Overall security rating: Amber.** Auth is solid; infrastructure and headers need attention; AI Lab will require a dedicated security review before launch.
+**Overall security rating: Amber-Green.** Auth is solid, CSP/security headers are in place, rate limiting covers all auth endpoints. Remaining gaps: no scoped service-account JWTs for internal services (#275), passkey re-registration UX (#283), uploaded file serving from the same origin. AI Lab will require a dedicated security review before launch.
 
 ---
 
@@ -155,10 +155,10 @@ These are ordered by impact-to-effort ratio, considering both operational risk a
 **High priority (operational + agent enablement):**
 1. ✅ **Done — `docs/INFRASTRUCTURE.md` written** (Compose service names, Nginx config paths, cert locations, ddclient config and other server-specific facts). Now complemented by `docs/TERMINOLOGY.md`. Keep both current.
 2. ✅ **Done — production containerised** (migrated off the Raspberry Pi to Ubuntu Server, Docker Compose; #165/#171/#179). Dev and prod environments are now aligned. Residual risk is operational (script-driven deploys — ROADMAP §3.5).
-3. **Add a `/api/health` endpoint** — 30 minutes of work, dramatically improves deploy confidence and sets the foundation for future monitoring. Should return `{ status: "ok", db: "ok", version: "..." }`.
+3. ✅ **Done — `/health` endpoint** (internal-only, `/api/health` public alias removed; health check used by Docker and deploy verification script; #279, Release 2026-05-18).
 
 **High priority (security + agent friction):**
-4. **Add CSP and security headers to Nginx config** — one Nginx config block; meaningfully improves XSS and clickjacking protection with minimal risk.
+4. ✅ **Done — CSP and security headers** (`nginx-security-headers.conf`; CSP, HSTS, X-Frame-Options, Referrer-Policy all set; #210/#211, Release 2026-05-18).
 
 **Note on backups:** Database backups are critically important. The Ubuntu Server migration (#171) is complete, but a hardened backup + offsite strategy is still outstanding — tracked in ROADMAP §4.5 (pgBackRest / `pg_dump` + restic/rclone).
 
@@ -178,6 +178,7 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-19** — Post Release 2026-05-18 audit. Marked as resolved: health endpoint (#279), structured logging (#153), rate limiting on auth endpoints (#237), CSP/security headers (#210/#211), deploy output/verification (#276/#263), WebAuthn registration guard (#274), Outlook OAuth2 email (#241). Updated §4 (reliability/observability) rating from Red-Amber to Amber. Updated §5 (security) rating from Amber to Amber-Green. §3 pain points revised to reflect deploy improvements. §7 improvement opportunities #3 and #4 marked complete.
 - **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern. Removed the "SSH from Windows is not frictionless" DX pain point — key auth has stabilised and is now reliable.
 - **2026-05-07 (updated)** — Refined AI-readiness rating from Green-Amber to Amber based on real-world friction observed in agent sessions. Elevated priority of infrastructure docs and clarified frontend testing constraints. Updated improvement opportunities ordering to reflect agent friction alongside operational risk.
 - **2026-05-07** — Initial assessment written based on `dev` branch state, covering architecture, codebase health, DX, reliability, security, and AI readiness.
