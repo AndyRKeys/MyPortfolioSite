@@ -52,6 +52,33 @@ fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
+# Return the visual (terminal column) width of a plain-text string.
+# ${#s} counts Unicode code points; wide emoji render as 2 columns, so add 1 per occurrence.
+_visual_width() {
+  local s="$1" width
+  width=${#s}
+  local e
+  for e in 🚀 ✅ ❌ 🧪 🔷 ↩️; do
+    local stripped="${s//$e/}"
+    local count=$(( ${#s} - ${#stripped} ))
+    width=$(( width + count ))
+  done
+  echo "$width"
+}
+
+# Print a single-line banner box sized dynamically to fit content.
+# Usage: _print_box <colour> <plain_text_content>
+_print_box() {
+  local colour="$1" content="$2"
+  local inner_width; inner_width=$(_visual_width "$content")
+  local border; border=$(printf '═%.0s' $(seq 1 $(( inner_width + 4 ))))
+  echo "" | tee -a "$LOG_FILE"
+  echo -e "${colour}╔${border}╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}║  ${content}  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo -e "${colour}╚${border}╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+}
+
 # Redact sensitive info from logs (IP addresses, usernames, service names, hostnames)
 # See docs/LOGGING.md for what should be redacted and why
 _redact_sensitive() {
@@ -178,11 +205,7 @@ init_log_banner() {
   # only includes checkpoints from THIS deploy, not every prior run.
   DEPLOY_LOG_START=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
   # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
-  echo "" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}║  🚀 ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo "" | tee -a "$LOG_FILE"
+  _print_box "${DEPLOY_CYAN}${DEPLOY_BOLD}" "🚀 ${title} — $(_deploy_timestamp)"
 }
 
 # Pipe command output to the log. In verbose mode also echoes to terminal.
@@ -1059,11 +1082,7 @@ print_deploy_status() {
     "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
     *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
   esac
-  echo "" | tee -a "$LOG_FILE"
-  echo -e "${colour}╔══════════════════════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${colour}║  ${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${colour}╚══════════════════════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo "" | tee -a "$LOG_FILE"
+  _print_box "$colour" "${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)"
 }
 
 # Print a human-readable final deploy report by extracting all [deploy:*] and

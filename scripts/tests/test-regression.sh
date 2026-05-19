@@ -24,6 +24,20 @@ else
   C_RED=''; C_YELLOW=''; C_GREEN=''; C_CYAN=''; C_BOLD=''; C_DIM=''; C_RESET=''
 fi
 
+# Return the visual (terminal column) width of a plain-text string.
+# Wide emoji render as 2 columns but ${#s} counts them as 1 — add 1 per occurrence.
+_visual_width() {
+  local s="$1" width
+  width=${#s}
+  local e
+  for e in 🚀 ✅ ❌ 🧪 🔷; do
+    local stripped="${s//$e/}"
+    local count=$(( ${#s} - ${#stripped} ))
+    width=$(( width + count ))
+  done
+  echo "$width"
+}
+
 # Honour the deploy's quiet mode (exported by dev/prod-deploy.sh). In quiet
 # mode, suppress the header box, section headers, INFO lines and per-test
 # PASS/SKIP rows — but ALWAYS keep FAIL rows, the final results box and the
@@ -165,12 +179,19 @@ check_auth() {
 # ── Header ───────────────────────────────────────────────────────────────────────
 
 if [ "$QUIET" != "1" ]; then
+  local _ts; _ts=$(date '+%Y-%m-%d %H:%M:%S')
+  local _title="🧪 Regression Test Run — ${_ts}"
+  local _content_w=60  # printf %-60s content width for detail lines
+  local _inner_w=$(( _content_w + 2 ))  # 2 leading spaces
+  local _title_w; _title_w=$(_visual_width "$_title")
+  local _title_pad=$(( _inner_w - _title_w ))
+  local _border; _border=$(printf '═%.0s' $(seq 1 $_inner_w))
   echo ""
-  echo -e "${C_CYAN}${C_BOLD}╔════════════════════════════════════════════════════════════╗${C_RESET}"
-  echo -e "${C_CYAN}${C_BOLD}║  🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')  ║${C_RESET}"
-  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Base URL : $BASE_URL"
-  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
-  echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
+  echo -e "${C_CYAN}${C_BOLD}╔${_border}╗${C_RESET}"
+  printf "${C_CYAN}${C_BOLD}║  %s%*s║${C_RESET}\n" "$_title" "$_title_pad" ""
+  printf "${C_CYAN}${C_BOLD}║  %-${_content_w}s║${C_RESET}\n" "Base URL : $BASE_URL"
+  printf "${C_CYAN}${C_BOLD}║  %-${_content_w}s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
+  echo -e "${C_CYAN}${C_BOLD}╚${_border}╝${C_RESET}"
   echo ""
 fi
 
@@ -294,14 +315,20 @@ else
   RESULT_ICON="❌"
 fi
 
+_res_content_w=60
+_res_inner_w=$(( _res_content_w + 2 ))
+_res_title="${RESULT_ICON} Regression Results — ${STATUS}"
+_res_title_w=$(_visual_width "$_res_title")
+_res_title_pad=$(( _res_inner_w - _res_title_w ))
+_res_border=$(printf '═%.0s' $(seq 1 $_res_inner_w))
 echo ""
-echo -e "${RESULT_COLOUR}╔════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${RESULT_COLOUR}║  ${RESULT_ICON} Regression Results — ${STATUS}$(printf '%*s' $((36 - ${#STATUS})) '')║${C_RESET}"
-echo -e "${RESULT_COLOUR}╠════════════════════════════════════════════════════════════╣${C_RESET}"
-printf "${RESULT_COLOUR}║  %-60s║${C_RESET}\n" "Passed : $PASS / $TOTAL"
-[ "$SKIP" -gt 0 ] && printf "${C_YELLOW}${C_BOLD}║  %-60s║${C_RESET}\n" "Skipped: $SKIP"
-[ "$FAIL" -gt 0 ] && printf "${C_RED}${C_BOLD}║  %-60s║${C_RESET}\n" "Failed : $FAIL"
-echo -e "${RESULT_COLOUR}╚════════════════════════════════════════════════════════════╝${C_RESET}"
+echo -e "${RESULT_COLOUR}╔${_res_border}╗${C_RESET}"
+printf "${RESULT_COLOUR}║  %s%*s║${C_RESET}\n" "$_res_title" "$_res_title_pad" ""
+echo -e "${RESULT_COLOUR}╠${_res_border}╣${C_RESET}"
+printf "${RESULT_COLOUR}║  %-${_res_content_w}s║${C_RESET}\n" "Passed : $PASS / $TOTAL"
+[ "$SKIP" -gt 0 ] && printf "${C_YELLOW}${C_BOLD}║  %-${_res_content_w}s║${C_RESET}\n" "Skipped: $SKIP"
+[ "$FAIL" -gt 0 ] && printf "${C_RED}${C_BOLD}║  %-${_res_content_w}s║${C_RESET}\n" "Failed : $FAIL"
+echo -e "${RESULT_COLOUR}╚${_res_border}╝${C_RESET}"
 echo ""
 
 # Machine-readable summary line — parsed by print_deploy_report, no colour codes
