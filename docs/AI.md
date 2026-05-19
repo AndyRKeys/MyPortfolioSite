@@ -13,6 +13,7 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
   - **If significant** (e.g. a larger refactor, architectural change, new abstraction): raise a new GitHub issue instead and continue with the original scope only. Ask the owner before proceeding with the improvement
   - **If unclear whether it's within scope**: ask before acting
 - Never convert literal Unicode characters to escape sequences — `—`, `…`, `©`, `✏`, `✈`, `☾`, `−` etc. must stay as-is in source files
+- **Preserve existing comments when editing files.** Only remove a comment if it is factually wrong or entirely redundant with the new code. Do not strip comments just because you are rewriting nearby lines — if the comment explained a non-obvious WHY before your edit, it still explains it after.
 - If a change requires touching more than the requested lines, flag it and ask first — do not proceed
 - Ask before acting if anything is unclear or the scope is ambiguous
 - **One PR per issue**, unless issues are explicitly related:
