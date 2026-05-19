@@ -12,6 +12,7 @@ const contactRateLimit = createRateLimiter({
   message: 'Too many requests. Please try again later.',
 });
 
+// lgtm[js/missing-rate-limiting] -- contactRateLimit middleware applied
 router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
