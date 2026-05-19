@@ -52,6 +52,9 @@ fi
 
 _deploy_timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
+# shellcheck source=output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output-lib.sh"
+
 # Redact sensitive info from logs (IP addresses, usernames, service names, hostnames)
 # See docs/LOGGING.md for what should be redacted and why
 _redact_sensitive() {
@@ -178,11 +181,7 @@ init_log_banner() {
   # only includes checkpoints from THIS deploy, not every prior run.
   DEPLOY_LOG_START=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
   # Always printed regardless of DEPLOY_QUIET — provides run context in all modes
-  echo "" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╔══════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}║  🚀 ${title} — $(_deploy_timestamp)  ║${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${DEPLOY_CYAN}${DEPLOY_BOLD}╚══════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo "" | tee -a "$LOG_FILE"
+  _print_box "${DEPLOY_CYAN}${DEPLOY_BOLD}" "🚀 ${title} — $(_deploy_timestamp)"
 }
 
 # Pipe command output to the log. In verbose mode also echoes to terminal.
@@ -1059,11 +1058,7 @@ print_deploy_status() {
     "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
     *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
   esac
-  echo "" | tee -a "$LOG_FILE"
-  echo -e "${colour}╔══════════════════════════════════════════════════════════╗${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${colour}║  ${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo -e "${colour}╚══════════════════════════════════════════════════════════╝${DEPLOY_RESET}" | tee -a "$LOG_FILE"
-  echo "" | tee -a "$LOG_FILE"
+  _print_box "$colour" "${icon}  DEPLOY ${status} — ${label} — $(_deploy_timestamp)"
 }
 
 # Print a human-readable final deploy report by extracting all [deploy:*] and
@@ -1074,10 +1069,13 @@ print_deploy_report() {
   local label="${1:-unknown}"
   local width=72  # inner content width (between ║  and  ║)
   local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+  local _title _title_pad
+  _title="Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  _title_pad=$(( width + 2 - ${#_title} ))  # fill to same total width as content rows
 
   echo ""
   echo "╔${border}╗"
-  printf "║  %-${width}s  ║\n" "Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
+  printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
   echo "╠${border}╣"
   # Only this run's lines (log is append-only across deploys), and only
   # checkpoint lines anchored at column 0 — so prose / commit-message text
