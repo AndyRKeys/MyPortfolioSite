@@ -28,10 +28,11 @@ for arg in "$@"; do
     esac
 done
 
-echo ""
-echo "╔══════════════════════════════════════════════════════╗"
-echo "║         NUCLEAR REBUILD — DEV STACK                  ║"
-echo "╚══════════════════════════════════════════════════════╝"
+
+# shellcheck source=../deploy/output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../deploy/output-lib.sh"
+
+_print_box "" "NUCLEAR REBUILD — DEV STACK"
 echo ""
 echo "This will (DEV STACK ONLY — does not affect production):"
 echo "  ✓ Stop all dev containers"

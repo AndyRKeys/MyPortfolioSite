@@ -6,10 +6,11 @@
 
 set +e  # Don't exit on errors — collect what we can
 
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  INFRASTRUCTURE INFO GATHERING                                 ║"
-echo "║  Run this on the Ubuntu Server, pipe output to a file or copy ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
+# shellcheck source=../deploy/output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../deploy/output-lib.sh"
+
+_print_multi_box "" 60 "INFRASTRUCTURE INFO GATHERING" \
+  "Run this on the Ubuntu Server, pipe output to a file or copy"
 echo ""
 
 # ── System Info ────────────────────────────────────────────────────────────

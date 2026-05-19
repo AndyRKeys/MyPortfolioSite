@@ -72,6 +72,9 @@ else
     RED=''; YELLOW=''; GREEN=''; CYAN=''; BOLD=''; RESET=''
 fi
 
+# shellcheck source=output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output-lib.sh"
+
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 log()     { echo -e "[$(timestamp)] $*" | tee -a "$LOG_FILE"; }
 info()    { log "${CYAN}${BOLD}[INFO]${RESET}  $*"; }
@@ -164,9 +167,7 @@ _check_or_generate_dev_certs() {
 # ── Entry point ─────────────────────────────────────────────────────────────────────────
 
 log ""
-log "${BOLD}╔══════════════════════════════════════════╗${RESET}"
-log "${BOLD}║     Dev Server Deploy — $(timestamp)   ║${RESET}"
-log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
+_print_box "${BOLD}" "Dev Server Deploy — $(timestamp)"
 log ""
 # log "[DEBUG] Script header: DEPLOY_BRANCH='$DEPLOY_BRANCH' DEV_REPO='$DEV_REPO' COMPOSE_FILE='$COMPOSE_FILE'" | tee -a "$LOG_FILE"
 
@@ -590,9 +591,7 @@ info "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
 log ""
-log "${BOLD}╔══════════════════════════════════════════╗${RESET}"
-log "${BOLD}║           Dev deploy complete ✓          ║${RESET}"
-log "${BOLD}╚══════════════════════════════════════════╝${RESET}"
+_print_box "${BOLD}" "Dev deploy complete ✓"
 log ""
 
 # ── Section 9: Post-deploy configuration setup ──────────────────────────────────────────────
