@@ -6,9 +6,9 @@ Authentication and security reference for andykeys.me. Read this before touching
 
 ## Single-User Assumption
 
-The site has **one admin user**. There is no registration flow for the public — `setup.html` creates the account and is a one-time operation. All protected routes check for a valid JWT and assume the bearer is the admin.
+The site has **one admin user**. There is no registration flow for the public — `/setup/` creates the account and is a one-time operation. All protected routes check for a valid JWT and assume the bearer is the admin.
 
-**Server-side registration guard (#274):** `POST /auth/setup` is not protected by the `setup.html` redirect alone (trivially bypassed by POSTing directly). The route enforces two server-side checks before creating the account: (1) the submitted email must equal `ADMIN_EMAIL`, and (2) no user may already exist. It **fails closed** — if `ADMIN_EMAIL` is unset the route refuses all registration. Both the not-configured and wrong-email cases return the same generic `403` so a caller cannot probe whether setup has completed.
+**Server-side registration guard (#274):** `POST /auth/setup` is not protected by the `/setup/` redirect alone (trivially bypassed by POSTing directly). The route enforces two server-side checks before creating the account: (1) the submitted email must equal `ADMIN_EMAIL`, and (2) no user may already exist. It **fails closed** — if `ADMIN_EMAIL` is unset the route refuses all registration. Both the not-configured and wrong-email cases return the same generic `403` so a caller cannot probe whether setup has completed.
 
 ---
 
@@ -90,7 +90,7 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 ## Input Validation & Sanitization
 
 - **SQL injection:** All database queries use parameterized queries (`$1, $2, …`). String concatenation into SQL is never used.
-- **XSS — frontend:** User-supplied strings are escaped with `escapeHtml()` (`resources/java/utils/html.js`) before being set as `innerHTML`. Markdown is parsed with `marked` then sanitized with a custom `sanitizeHtml()` function that strips `<script>`, `<iframe>`, `<object>`, `<embed>`, and `on*` event handler attributes.
+- **XSS — frontend:** User-supplied strings are escaped with `escapeHtml()` (`resources/js/utils/html.js`) before being set as `innerHTML`. Markdown is parsed with `marked` then sanitized with a custom `sanitizeHtml()` function that strips `<script>`, `<iframe>`, `<object>`, `<embed>`, and `on*` event handler attributes.
 - **XSS — backend:** The API returns JSON; the frontend is responsible for safe rendering.
 - **Input validation middleware:** `backend/middleware/validate.js` provides reusable validators for common fields (title, notes, lat/lng, dates). Used on POST/PUT routes.
 

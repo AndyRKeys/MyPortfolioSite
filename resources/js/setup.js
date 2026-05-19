@@ -1,5 +1,5 @@
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
-import { API_BASE } from './config.js'; // note the relative path from resources/java/
+import { API_BASE } from './config.js'; // relative path from resources/js/
 
 function setMessage(msg, isError = false) {
   const el = document.getElementById('setup-message');
@@ -13,7 +13,7 @@ fetch(`${API_BASE}/auth/setup/status`)
   .then(({ hasUsers }) => {
     if (hasUsers) {
       setMessage('Setup already complete — redirecting to login…');
-      setTimeout(() => location.replace('login.html'), 2000);
+      setTimeout(() => location.replace('/login/'), 2000);
     }
   })
   .catch(() => {
@@ -89,14 +89,14 @@ document.getElementById('setup-form').addEventListener('submit', async event => 
     }
 
     setMessage('All done — redirecting to dashboard…');
-    setTimeout(() => location.replace('admin.html'), 1200);
+    setTimeout(() => location.replace('/admin/'), 1200);
   } catch (err) {
     if (err.name === 'NotAllowedError') {
       setMessage(
         'Passkey prompt was cancelled. You are logged in but have no passkey yet — add one from the admin dashboard.',
         true
       );
-      setTimeout(() => location.replace('admin.html'), 3500);
+      setTimeout(() => location.replace('/admin/'), 3500);
     } else {
       setMessage(err.message || 'Setup failed.', true);
       btn.disabled = false;

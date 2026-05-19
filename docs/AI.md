@@ -329,7 +329,7 @@ var name = user.name; // Get the user's name
 
 **ES Modules & Code Organization**
 - Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
-- Create shared utilities in `resources/java/utils/*` instead of duplicating functions
+- Create shared utilities in `resources/js/utils/*` instead of duplicating functions
 - Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
 - Import utilities as: `import { escapeHtml, formatVisitDate } from './utils/html.js'`
 - Avoid copy-pasting logic across multiple files — extract to utils first
@@ -377,7 +377,7 @@ Recent work has lost significant time to deployment bugs and blind debugging. Ob
 
 ## Architecture Notes
 
-- **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
+- **Frontend:** ES modules for JavaScript, shared utilities in `resources/js/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
 - **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
 - **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
 - **Auth:** JWT + WebAuthn/FIDO2 passkeys

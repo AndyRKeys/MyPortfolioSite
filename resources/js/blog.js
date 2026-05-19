@@ -69,7 +69,7 @@ function loadPosts() {
                     dateStr: formatPostDate(post),
                     title: post.title,
                     notes: post.excerpt ? truncate(post.excerpt, 200) : null,
-                    linkHref: 'blog-post.html?slug=' + encodeURIComponent(post.slug),
+                    linkHref: '/blog/post/?slug=' + encodeURIComponent(post.slug),
                 }));
             });
 

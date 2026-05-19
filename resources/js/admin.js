@@ -20,7 +20,7 @@ function isAuthenticated() {
 }
 
 function requireAuth() {
-    if (!isAuthenticated()) location.replace('login.html');
+    if (!isAuthenticated()) location.replace('/login/');
 }
 
 function authFetch(path, opts = {}) {
@@ -935,7 +935,7 @@ function setLogout() {
     $('#logout-link').on('click', function (event) {
         event.preventDefault();
         localStorage.removeItem('adminToken');
-        location.replace('login.html');
+        location.replace('/login/');
     });
 }
 
