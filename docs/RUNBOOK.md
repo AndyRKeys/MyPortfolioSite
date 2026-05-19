@@ -145,6 +145,58 @@ For a specific PR, run its PowerShell smoke test from Windows against dev (see *
 
 ---
 
+### 6. Renew the Outlook OAuth2 refresh token
+
+**When:** Magic link emails stop arriving. Backend logs show `invalid_grant` or `AADSTS70000`. This happens because:
+- Microsoft invalidates refresh tokens after **90 days of inactivity**
+- Refresh tokens are also invalidated immediately if the **client secret is rotated** in Azure
+
+**Symptom in logs:**
+
+```bash
+ssh ak-home-server
+docker compose -f ~/MyPortfolioSite-prod/docker-compose.prod.yml logs backend --tail=50 | grep -i "auth/email\|invalid_grant\|oauth"
+# Look for: invalid_grant or AADSTS700082
+```
+
+**Fix — must run on your Windows machine (needs a browser for the OAuth flow):**
+
+```powershell
+# On Windows, in the MyPortfolioSite repo root
+node scripts/generate-outlook-refresh-token.js
+```
+
+You'll be prompted for your Azure app's CLIENT_ID, CLIENT_SECRET (the _value_, not the ID), and your Outlook email. The script opens a browser, you authorise, and it prints the new values:
+
+```
+OUTLOOK_CLIENT_ID=...
+OUTLOOK_CLIENT_SECRET=...
+OUTLOOK_REFRESH_TOKEN=...
+OUTLOOK_EMAIL=...
+```
+
+**Update prod and restart:**
+
+```bash
+ssh ak-home-server
+micro ~/MyPortfolioSite-prod/.env
+# Update OUTLOOK_REFRESH_TOKEN (and OUTLOOK_CLIENT_SECRET if you rotated it)
+
+# Full restart required — `restart` alone doesn't reload .env
+cd ~/MyPortfolioSite-prod
+docker compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml up -d
+
+# Verify — send a test magic link and check logs
+docker compose -f docker-compose.prod.yml logs -f backend | grep -i "auth/email"
+```
+
+**If the script fails with `invalid_client`:** You used the Client ID instead of the Client Secret Value. Go to Azure Portal → App registrations → your app → Certificates & secrets → copy the **Value** column (not the ID column). If the secret has expired, create a new one there first.
+
+**Token lifetime:** Microsoft's refresh tokens for personal accounts last 90 days from last use. Using magic links regularly resets the clock. If the site goes unused for 90 days, a new token will be needed.
+
+---
+
 ## When Something Is Broken
 
 ### 1. Narrow it down
