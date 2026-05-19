@@ -68,8 +68,9 @@ async function main() {
       await exchangeCodeForToken(CLIENT_ID, CLIENT_SECRET);
       server.close();
     } else if (query.error) {
+      const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       res.writeHead(400, { 'Content-Type': 'text/html' });
-      res.end(`<h1>✗ Authorization failed</h1><p>Error: ${query.error}</p>`);
+      res.end(`<h1>✗ Authorization failed</h1><p>Error: ${esc(query.error)}</p>`);
       console.error('\n✗ Authorization failed:', query.error);
       if (query.error_description) {
         console.error('Description:', query.error_description);
