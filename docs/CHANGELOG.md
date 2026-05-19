@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Changed
+- Project structure reorg (#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) giving clean URLs (`/blog/`, `/travel/` etc.); `resources/java/` renamed to `resources/js/`; `PROJECT_ASSESSMENT.md` and `ROADMAP.md` moved into `docs/`. No Nginx changes required — `try_files` + `index.html` handles directory routing. All internal links, JS redirects, and the magic link email URL updated to new paths.
+
 ---
 
 ## Release 2026-05-18
