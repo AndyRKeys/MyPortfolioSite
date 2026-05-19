@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <!-- Global error logger (load first to catch all errors) -->
-    <script type="module" src="./resources/java/error-logger.js"></script>
+    <script type="module" src="/resources/js/error-logger.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Post | AK Portfolio</title>
-    <link rel="shortcut icon" href="./resources/img/AK.jpg" type="image/x-icon">
-    <link rel="stylesheet" href="./resources/css/reset.css" />
-    <link rel="stylesheet" href="./resources/css/styles.css" />
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,24 +25,24 @@
             <span class="nav-toggle-icon">☰</span>
         </button>
         <ul class="nav">
-            <li><a href="index.html">🏠 Home</a></li>
-            <li><a href="index.html#about">👤 About</a></li>
-            <li><a href="index.html#portfolio">💼 Projects</a></li>
-            <li><a href="index.html#ai-dev">🤖 AI Dev</a></li>
-            <li><a href="index.html#timeline">📅 Timeline</a></li>
-            <li><a href="index.html#skills">🛠 Skills</a></li>
-            <li><a href="index.html#github-activity">🐙 GitHub</a></li>
-            <li><a href="index.html#contact">✉ Contact</a></li>
-            <li><a href="blog.html">✏ Blog</a></li>
-            <li><a href="travel.html">✈ Travel</a></li>
-            <li><a href="login.html">🔒 Admin</a></li>
+            <li><a href="/">🏠 Home</a></li>
+            <li><a href="/#about">👤 About</a></li>
+            <li><a href="/#portfolio">💼 Projects</a></li>
+            <li><a href="/#ai-dev">🤖 AI Dev</a></li>
+            <li><a href="/#timeline">📅 Timeline</a></li>
+            <li><a href="/#skills">🛠 Skills</a></li>
+            <li><a href="/#github-activity">🐙 GitHub</a></li>
+            <li><a href="/#contact">✉ Contact</a></li>
+            <li><a href="/blog/">✏ Blog</a></li>
+            <li><a href="/travel/">✈ Travel</a></li>
+            <li><a href="/login/">🔒 Admin</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
     <main>
         <div class="post-back-bar sec-cont">
-            <a href="blog.html" class="post-back-link">← All posts</a>
+            <a href="/blog/" class="post-back-link">← All posts</a>
         </div>
         <article class="sec-cont post-article" id="post-content">
             <div id="post-loading" class="hint" style="text-align:center;padding:3rem;">Loading post…</div>
@@ -55,7 +55,7 @@
                 <div id="post-markdown" class="post-markdown"></div>
             </div>
             <div id="post-error" class="hidden" style="text-align:center;padding:3rem;color:var(--color-error);">
-                Post not found. <a href="blog.html">Back to posts</a>.
+                Post not found. <a href="/blog/">Back to posts</a>.
             </div>
         </article>
     </main>
@@ -68,11 +68,11 @@
         </section>
     </footer>
 
-    <script src="./resources/java/dev-env.js"></script>
-    <script src="./resources/java/darkmode.js"></script>
-    <script src="./resources/java/nav.js"></script>
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
     <!-- Pinned to v9 for stable synchronous marked.parse() API -->
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
-    <script type="module" src="./resources/java/blog-post.js"></script>
+    <script type="module" src="/resources/js/blog-post.js"></script>
 </body>
 </html>

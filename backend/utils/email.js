@@ -100,7 +100,7 @@ export async function sendMagicLink(to, token) {
   const from = isOAuth2Configured()
     ? process.env.OUTLOOK_EMAIL
     : (process.env.SMTP_FROM || process.env.SMTP_USER);
-  const url  = `${process.env.FRONTEND_URL}/login.html?token=${token}`;
+  const url  = `${process.env.FRONTEND_URL}/login/?token=${token}`;
   const html = `
     <p>Click the link below to log in to your admin dashboard:</p>
     <p>

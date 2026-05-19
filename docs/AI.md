@@ -20,6 +20,20 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
   - Unrelated issues must go in separate PRs
   - If unsure whether issues are related, ask before bundling
 
+## Workarounds and Proper Fixes
+
+**The owner's strong preference is always a proper fix.** Workarounds — commenting out checks, skipping pipeline steps, adding bypass flags, or patching over symptoms — are a last resort reserved for genuine site-down emergencies where there is no time for a correct fix.
+
+If a workaround is unavoidable:
+1. Apply the minimum workaround needed to restore service
+2. Raise a GitHub issue immediately documenting what was bypassed and why
+3. Treat the proper fix as the next highest-priority task — do not move on to other work first
+4. Never commit a workaround without a linked issue and a clear `# TODO #N` comment pointing to it
+
+When given a choice between a workaround and a proper fix, always attempt the proper fix first. Only fall back to a workaround if the proper fix would take significantly longer than the urgency of the situation allows.
+
+---
+
 ## File Safety
 
 - **Always read the current file from `dev`** immediately before editing — never rely on a version read earlier in the session
@@ -130,6 +144,7 @@ Before writing code:
 2. Commit regularly with clear messages
 3. Keep changes focused — one issue per branch
 4. Push commits as you go (don't wait until done)
+5. **Prefer proper fixes over workarounds.** Workarounds (commenting out code, skipping steps, adding flags to bypass checks) are a last resort — only acceptable when a site-down incident makes them unavoidable. If a workaround is ever applied in an emergency: raise a GitHub issue immediately, note the workaround explicitly in the issue body, and treat remediation as the next highest-priority task. Never leave a workaround in place and move on.
 
 ### 4. PR to Dev
 
@@ -329,7 +344,7 @@ var name = user.name; // Get the user's name
 
 **ES Modules & Code Organization**
 - Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
-- Create shared utilities in `resources/java/utils/*` instead of duplicating functions
+- Create shared utilities in `resources/js/utils/*` instead of duplicating functions
 - Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
 - Import utilities as: `import { escapeHtml, formatVisitDate } from './utils/html.js'`
 - Avoid copy-pasting logic across multiple files — extract to utils first
@@ -377,7 +392,7 @@ Recent work has lost significant time to deployment bugs and blind debugging. Ob
 
 ## Architecture Notes
 
-- **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
+- **Frontend:** ES modules for JavaScript, shared utilities in `resources/js/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
 - **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
 - **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
 - **Auth:** JWT + WebAuthn/FIDO2 passkeys

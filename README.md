@@ -34,7 +34,7 @@ Browser → andykeys.me
 
 In production `config.js` exports `API = ''` so `/auth/*` calls are same-origin and Nginx proxies them to the backend. In local dev `API` auto-detects `localhost` and points directly to the backend port.
 
-For a high-level view of where the project is heading and current priorities, see **[ROADMAP.md](./ROADMAP.md)**.
+For a high-level view of where the project is heading and current priorities, see **[ROADMAP.md](./docs/ROADMAP.md)**.
 
 ---
 
@@ -75,7 +75,7 @@ cp .env.example .env
 
 Services start in ~30s. PostgreSQL schema auto-initializes on first run. Backend source is volume-mounted so file changes are reflected without rebuilding.
 
-Visit `http://localhost/setup.html` to create the admin account and register your first passkey.
+Visit `http://localhost/setup/` to create the admin account and register your first passkey.
 
 ### dev-local.ps1 Reference (fall-back only)
 
@@ -306,7 +306,7 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 | **[docs/INFRASTRUCTURE.md](./docs/INFRASTRUCTURE.md)** | Host-level infra, both environments, backups, Dropbear unlock |
 | **[docs/DEV_ENVIRONMENT.md](./docs/DEV_ENVIRONMENT.md)** | Dev server Docker stack, dev `.env`, dev deploy scripts |
 | **[docs/PROD_ENVIRONMENT.md](./docs/PROD_ENVIRONMENT.md)** | Prod Docker stack, prod `.env`, prod deploy scripts |
-| **[ROADMAP.md](./ROADMAP.md)** | Current priorities, known issues, future work |
+| **[ROADMAP.md](./docs/ROADMAP.md)** | Current priorities, known issues, future work |
 
 ---
 

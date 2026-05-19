@@ -201,11 +201,11 @@ function loadPublicTravelPosts() {
                     mediaUrl: mediaUrl,
                     mediaType: mediaType,
                     mediaCount: allMedia ? allMedia.length : 0,
-                    linkHref: 'travel-post.html?id=' + encodeURIComponent(travel.id),
+                    linkHref: '/travel/post/?id=' + encodeURIComponent(travel.id),
                 });
 
                 item.find('.media-thumb-wrap').css('cursor', 'pointer').on('click', function () {
-                    window.location.href = 'travel-post.html?id=' + encodeURIComponent(travel.id);
+                    window.location.href = '/travel/post/?id=' + encodeURIComponent(travel.id);
                 });
 
                 timelineEl.append(item);

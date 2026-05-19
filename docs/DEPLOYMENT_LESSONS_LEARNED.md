@@ -314,8 +314,8 @@ Instead of attempting everything at once, deploy incrementally:
 1. Test all endpoints:
    - `/health` (system health)
    - `/api/posts` (public content)
-   - `/login.html` (authentication)
-   - `/admin.html` (admin panel, via magic link)
+   - `/login/` (authentication)
+   - `/admin/` (admin panel, via magic link)
 2. Test backup scripts
 3. Verify cron jobs: `sudo crontab -l`
 
@@ -596,8 +596,8 @@ After deployment, verify these manually:
 # Check site accessibility
 curl -L https://yourdomain.com/health          # Backend health (follow redirect)
 curl https://yourdomain.com/api/posts          # Public API
-curl https://yourdomain.com/login.html         # Admin login page
-curl https://yourdomain.com/admin.html         # Admin console (after login)
+curl https://yourdomain.com/login/         # Admin login page
+curl https://yourdomain.com/admin/         # Admin console (after login)
 
 # Note: a 301 response from http://yourdomain.com/health is CORRECT —
 # it is the HTTP→HTTPS redirect. Use curl -L or request via HTTPS directly.

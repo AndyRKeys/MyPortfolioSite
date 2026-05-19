@@ -56,12 +56,12 @@ This document describes the system architecture at a high level — how the piec
 
 ## Request Flow
 
-### Public page load (e.g., user visits `/blog.html`)
+### Public page load (e.g., user visits `/blog/index.html`)
 
-1. Browser requests `https://andykeys.me/blog.html`
+1. Browser requests `https://andykeys.me/blog/index.html`
 2. Nginx receives request on :443 (HTTPS)
-3. Nginx returns static file `blog.html` (+ CSS, JS)
-4. Browser parses HTML, finds `<script type="module" src="resources/java/blog.js">`
+3. Nginx returns static file `blog/index.html` (+ CSS, JS)
+4. Browser parses HTML, finds `<script type="module" src="resources/js/blog.js">`
 5. Browser loads and executes `blog.js` (ES module)
 6. `blog.js` calls `fetch('/api/posts')` to load blog posts
 7. Request goes back to Nginx → proxy to Node backend
@@ -161,13 +161,13 @@ resources/
 ```
 Root level (served as static files by Nginx):
 ├── index.html              ← Homepage (23KB, sections for projects, timeline, contact)
-├── blog.html               ← Blog listing page
-├── blog-post.html          ← Individual blog post detail
-├── travel.html             ← Travel listing page (map + cards + timeline)
-├── travel-post.html        ← Individual travel post detail
-├── admin.html              ← Admin console (18KB, handles blog/travel/CV/deploy/stats)
-├── login.html              ← Login page (passkey + magic link)
-├── setup.html              ← First-time account setup
+├── blog/index.html               ← Blog listing page
+├── blog/post/index.html          ← Individual blog post detail
+├── travel/index.html             ← Travel listing page (map + cards + timeline)
+├── travel/post/index.html        ← Individual travel post detail
+├── admin/index.html              ← Admin console (18KB, handles blog/travel/CV/deploy/stats)
+├── login/index.html              ← Login page (passkey + magic link)
+├── setup/index.html              ← First-time account setup
 └── 404.html                ← 404 error page (served by Nginx)
 ```
 
@@ -177,7 +177,7 @@ Root level (served as static files by Nginx):
 
 As an example of how the system works end-to-end:
 
-1. **User (admin) visits `/admin.html`** in browser
+1. **User (admin) visits `/admin/index.html`** in browser
 2. Browser loads `admin.js` (ES module)
 3. User fills out blog post form, clicks "Publish"
 4. `admin.js` calls `fetch('/api/posts', { method: 'POST', body: { title, date, content, ... } })`
@@ -189,7 +189,7 @@ As an example of how the system works end-to-end:
 10. Database returns the new post ID
 11. Backend returns `{ id, title, ... }` as JSON response
 12. Frontend receives response, shows success message
-13. User visits `/blog.html` to verify post appears
+13. User visits `/blog/index.html` to verify post appears
 14. `blog.js` calls `fetch('/api/posts')`
 15. Backend queries database, returns all published posts
 16. Frontend renders posts on the page
@@ -212,7 +212,7 @@ As an example of how the system works end-to-end:
 - New code uses vanilla ES modules
 - Trade-off: inconsistency creates friction; full migration (#176) is planned
 
-### Why single `admin.html` instead of separate pages?
+### Why single `admin/index.html` instead of separate pages?
 
 - All admin functions in one place: easier to access as a single-user dashboard
 - Trade-off: file is monolithic and hard to modify safely; refactoring planned (#175)
@@ -235,7 +235,7 @@ As an example of how the system works end-to-end:
 
 | Component | Risk | Impact | Mitigation |
 |-----------|------|--------|-----------|
-| `admin.html` | Large, monolithic, high-risk to modify | Changes risk breaking multiple features | Refactoring planned (#175) |
+| `admin/index.html` | Large, monolithic, high-risk to modify | Changes risk breaking multiple features | Refactoring planned (#175) |
 | `auth.js` | Complex WebAuthn + JWT state machine | Auth bugs have security implications | High test coverage, careful code review |
 | PostgreSQL (single instance) | No replication, no backup | Data loss if the server disk fails | Backup hardening outstanding — see ROADMAP §4.5 (#164) |
 | Nginx reverse proxy | Single point of failure | If Nginx breaks, entire site is down | Keep Nginx config simple and tested |
