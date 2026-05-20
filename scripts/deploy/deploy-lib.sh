@@ -36,6 +36,8 @@
 #   WEBAUTHN_HOST  — dev hostname used by run_regression_tests + auto_detect_lan_ip checks
 #   DOMAIN         — prod public domain used by run_regression_tests
 #   BACKEND_SERVICE — compose service name for the backend container
+#   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx-dev:3001)
+#   NGINX_PORT     — nginx-facing port; derived from WEBAUTHN_ORIGIN (dev) or fixed 443 (prod)
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
@@ -952,7 +954,7 @@ test_error_logger_all_pages() {
   dinfo "  Testing all pages for error-logger deployment"
 
   # Run comprehensive test inside the backend container
-  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
+  if docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
     dstatus error-logger status=ok
     dok "Error logger site-wide test passed ✓"
   else
@@ -1245,5 +1247,69 @@ run_regression_tests() {
 
   if [ "$REGRESSION_RC" -ne 0 ]; then
     _do_rollback "regression smoke tests failed"
+  fi
+}
+
+# ── Backup Health Check ───────────────────────────────────────────────────────
+# Non-fatal: warns if scheduled backups are not configured or recent backup
+# files are missing. Runs post-deploy so it surfaces in every deploy log.
+# Checks:
+#   1. A cron job or systemd timer referencing a backup script exists.
+#   2. Recent backup files exist under ~/backups (within 2 days).
+# Both checks are warn-only — missing backups don't block a deploy, but the
+# warning is logged loudly so it cannot be silently ignored. (#164)
+
+check_backup_health() {
+  dsection "Backup health check"
+  local ok=1
+  local backup_dir="${HOME}/backups"
+  local max_age_days=2
+
+  # ── Check 1: cron/systemd timer configured ───────────────────────────────
+  local cron_found=0
+  if crontab -l 2>/dev/null | grep -qi "backup"; then
+    cron_found=1
+  elif systemctl list-timers --all 2>/dev/null | grep -qi "backup"; then
+    cron_found=1
+  fi
+
+  if [ "$cron_found" = "1" ]; then
+    dstatus backup-schedule status=ok
+    dok "Backup schedule: cron/timer found ✓"
+  else
+    dstatus backup-schedule status=warn
+    dwarn "No backup cron job or systemd timer found — automated backups may not be configured (#164)"
+    ok=0
+  fi
+
+  # ── Check 2: recent backup files exist ──────────────────────────────────
+  if [ -d "$backup_dir" ]; then
+    local recent
+    recent=$(find "$backup_dir" -maxdepth 2 -name "*.sql*" -o -name "*.dump" -o -name "*.tar*" \
+      2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
+    if [ -n "$recent" ]; then
+      local age_days
+      age_days=$(( ( $(date +%s) - $(stat -c %Y "$recent" 2>/dev/null || echo 0) ) / 86400 ))
+      if [ "$age_days" -le "$max_age_days" ]; then
+        dstatus backup-files status=ok age_days="$age_days"
+        dok "Most recent backup: $(basename "$recent") (${age_days}d ago) ✓"
+      else
+        dstatus backup-files status=warn age_days="$age_days"
+        dwarn "Most recent backup is ${age_days} days old (threshold: ${max_age_days}d) — check backup job (#164)"
+        ok=0
+      fi
+    else
+      dstatus backup-files status=warn dir="$backup_dir"
+      dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
+      ok=0
+    fi
+  else
+    dstatus backup-files status=warn dir="$backup_dir"
+    dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
+    ok=0
+  fi
+
+  if [ "$ok" = "0" ]; then
+    dwarn "Backup health: one or more checks failed — see RUNBOOK.md §Backups to set up automated backups"
   fi
 }

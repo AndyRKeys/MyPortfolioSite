@@ -84,12 +84,12 @@ case "$DEPLOY_ENV" in
     ROLLBACK_BRANCH=dev
     # Feature flags
     RUN_LAN_IP_DETECT=1  # dev .env uses LAN_IP for nginx/cert config; auto-detect saves manual setup
-    RUN_UFW_CHECK=1      # dev is LAN-only on port 3001; UFW must allow it or the site is unreachable
+    RUN_UFW_CHECK=1      # both envs on same server; UFW must allow the nginx port or the site is unreachable
     RUN_DEV_CERTS=1      # dev uses self-signed certs (no certbot); must be generated before nginx starts
-    RUN_VITEST=1         # dev image includes devDependencies; run tests against the live container post-deploy
-    RUN_ERROR_LOGGER=1   # puppeteer-based; only available in dev image
+    RUN_VITEST=1         # unified image includes devDependencies; run tests against the live container post-deploy
+    RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger checks post-deploy
     RUN_DDNS_CHECK=0     # no public DNS in dev; site is LAN-only
-    RUN_UPLOADS_DIR=0    # uploads volume is managed by docker-compose on dev; no host dir needed
+    RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
     ;;
   prod)
     REPO_DIR="${HOME}/MyPortfolioSite"
@@ -108,12 +108,12 @@ case "$DEPLOY_ENV" in
     ROLLBACK_BRANCH=main
     # Feature flags
     RUN_LAN_IP_DETECT=0  # prod uses a public domain (DOMAIN), not a LAN IP
-    RUN_UFW_CHECK=0      # prod is public on 443; UFW is managed separately, not per-deploy
+    RUN_UFW_CHECK=1      # both envs on same server; UFW must allow port 443 or the site is unreachable
     RUN_DEV_CERTS=0      # prod uses Let's Encrypt certs managed by certbot, not self-signed
     RUN_VITEST=1         # unified image includes devDependencies; run tests post-deploy on prod too
     RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger on prod too
     RUN_DDNS_CHECK=1     # prod is public; verify DNS points to this server before deploying
-    RUN_UPLOADS_DIR=1    # prod bind-mounts ~/MyPortfolioSite/uploads; must exist on the host
+    RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
     ;;
   *)
     echo "[ERROR] Unknown environment '${DEPLOY_ENV}' — must be 'dev' or 'prod'" >&2
@@ -183,11 +183,17 @@ load_env
 # ── Post-env config (vars that depend on loaded .env values) ──────────────────
 
 if [ "$DEPLOY_ENV" = "dev" ]; then
+  # Derive the nginx-facing port from WEBAUTHN_ORIGIN (e.g. https://dev.host:3001 → 3001)
+  # so that NGINX_URL, SITE_URL, and the UFW check stay in sync with the .env value
+  # rather than hardcoding 3001 in multiple places.
+  NGINX_PORT="${WEBAUTHN_ORIGIN##*:}"
   HEALTH_URL="http://localhost:${PORT:-8081}/health"
-  NGINX_URL="https://nginx-dev:3001"
-  SITE_URL="https://${WEBAUTHN_HOST:-localhost}:3001"
+  NGINX_URL="https://${NGINX_SERVICE}:${NGINX_PORT}"
+  SITE_URL="https://${WEBAUTHN_HOST:-localhost}:${NGINX_PORT}"
 else
+  NGINX_PORT=443
   HEALTH_URL="http://localhost:${PORT:-8080}/health"
+  NGINX_URL="https://${NGINX_SERVICE}"
   SITE_URL="https://${DOMAIN:-}"
 fi
 
@@ -223,9 +229,9 @@ if [ -n "$ROLLBACK_SHA" ]; then
   exit 0
 fi
 
-# ── UFW check (dev only) ──────────────────────────────────────────────────────
+# ── UFW check ────────────────────────────────────────────────────────────────
 
-[ "$RUN_UFW_CHECK" = "1" ] && check_ufw_port 3001
+[ "$RUN_UFW_CHECK" = "1" ] && check_ufw_port "$NGINX_PORT"
 
 # ── Record deploy SHA ────────────────────────────────────────────────────────
 # Branch update is always handled by switch-branch.sh before this script runs.
@@ -233,10 +239,6 @@ fi
 record_deploy_sha
 
 show_deployment_info
-
-# ── Uploads directory (prod only) ─────────────────────────────────────────────
-
-[ "$RUN_UPLOADS_DIR" = "1" ] && mkdir -p "$REPO_DIR/uploads"
 
 # ── Certificates and nginx pre-flight ─────────────────────────────────────────
 # Cert check runs after the working tree is confirmed so we use the latest
@@ -264,9 +266,10 @@ if [ "$DRY_RUN" = "1" ]; then
   dinfo "  compose file: $COMPOSE_FILE"
   dinfo "  service:      $BACKEND_SERVICE"
   dinfo "  health URL:   $HEALTH_URL"
-  [ "$RUN_VITEST"       = "1" ] && dinfo "  vitest:       would run after health check"
-  [ "$RUN_ERROR_LOGGER" = "1" ] && dinfo "  error-logger: would run after vitest"
-  [ "$SKIP_REGRESSION"  = "0" ] && dinfo "  regression:   would run smoke tests"
+  [ "$RUN_VITEST"        = "1" ] && dinfo "  vitest:        would run after health check"
+  [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest"
+  [ "$SKIP_REGRESSION"   = "0" ] && dinfo "  regression:    would run smoke tests"
+  [ "$RUN_BACKUP_CHECK"  = "1" ] && dinfo "  backup check:  would warn if backups absent/stale"
   dinfo ""
   dinfo "Re-run without --dry-run to perform the actual deploy."
   print_deploy_status "DRY RUN" "$DEPLOY_ENV"
@@ -281,7 +284,7 @@ wait_for_health "$BACKEND_SERVICE"
 
 log_deploy_summary "$DEPLOY_ENV"
 
-# ── In-container test suite (dev only — prod image built without devDependencies) ──
+# ── In-container test suite ───────────────────────────────────────────────────
 
 [ "$RUN_VITEST" = "1" ] && run_deploy_tests "$BACKEND_SERVICE"
 
@@ -294,6 +297,10 @@ test_csp_reporting
 # ── Regression smoke tests ────────────────────────────────────────────────────
 
 run_regression_tests
+
+# ── Backup health check ───────────────────────────────────────────────────────
+
+[ "$RUN_BACKUP_CHECK" = "1" ] && check_backup_health
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
