@@ -18,7 +18,7 @@ echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting backup..."
 
 # ── DB dump ───────────────────────────────────────────────────────────────────
 DB_BACKUP="$BACKUP_DIR/portfolio-$TIMESTAMP.sql.gz"
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose -f docker-compose.yml exec -T postgres \
     pg_dump -U "${DB_USER:-postgres}" "${DB_NAME:-portfolio_prod}" \
     | gzip > "$DB_BACKUP"
 echo "  DB:      $DB_BACKUP ($(du -sh "$DB_BACKUP" | cut -f1))"

@@ -116,7 +116,7 @@ fi
 echo ""
 echo "--- Starting production containers ---"
 cd "$REPO_DIR"
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml up -d --build
 echo "  Containers started."
 
 # ── Cron jobs ─────────────────────────────────────────────────────────────────
@@ -135,11 +135,11 @@ echo ""
 echo "--- Waiting for services to be healthy ---"
 MAX_WAIT=60; ELAPSED=0
 cd "$REPO_DIR"
-until docker compose -f docker-compose.prod.yml exec -T backend \
+until docker compose -f docker-compose.yml exec -T backend \
     wget -q --spider http://localhost:8080/health 2>/dev/null; do
     if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
         echo "ERROR: Backend not healthy after ${MAX_WAIT}s"
-        docker compose -f docker-compose.prod.yml logs --tail=30 backend
+        docker compose -f docker-compose.yml logs --tail=30 backend
         exit 1
     fi
     sleep 3; ELAPSED=$((ELAPSED + 3))

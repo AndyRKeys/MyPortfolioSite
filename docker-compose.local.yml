@@ -1,25 +1,12 @@
-# Production Docker Compose — standalone file for server deployment.
-# Usage: docker compose -f docker-compose.prod.yml up -d --build
-#
-# Differences from docker-compose.yml (dev):
-#   - Backend uses the same unified image as dev (includes devDependencies, Chromium)
-#   - No source code bind mounts — image contains built code
-#   - Named volume for uploads (persists across deployments)
-#   - Nginx listens on 443 with SSL certs from host Certbot
-#   - DB port not exposed externally
-#   - All services restart automatically
-#
-# Requires a .env file in the repo root with production values.
-# Copy .env.example and fill in all variables before first run.
-
 services:
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-portfolio_prod}
+      POSTGRES_DB: ${DB_NAME:-portfolio_dev}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -31,27 +18,26 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "20m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    restart: unless-stopped
     environment:
       PORT: ${PORT:-8080}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-portfolio_prod}
+      DB_NAME: ${DB_NAME:-portfolio_dev}
       DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
       JWT_EXPIRY: ${JWT_EXPIRY:-7d}
-      WEBAUTHN_RP_ID: ${DOMAIN}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-AK Portfolio}
-      WEBAUTHN_ORIGIN: https://${DOMAIN}
-      FRONTEND_URL: https://${DOMAIN}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
       OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
       OUTLOOK_REFRESH_TOKEN: ${OUTLOOK_REFRESH_TOKEN:-}
@@ -62,12 +48,13 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       UPLOADS_DIR: /app/uploads
-    # Bound to localhost only — allows deploy health checks from the host
-    # without exposing the backend port to the public internet
     ports:
-      - "127.0.0.1:${PORT:-8080}:${PORT:-8080}"
+      - "${PORT:-8080}:${PORT:-8080}"
     volumes:
-      - uploads_data:/app/uploads
+      - ./backend:/app
+      - ./uploads:/app/uploads
+      - ./scripts:/app/scripts:ro
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,24 +66,21 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "20m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
 
   nginx:
     image: nginx:alpine
-    restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./scripts/config/nginx-portfolio.conf.template:/etc/nginx/templates/default.conf.template
+      # Local dev template — plain HTTP only, no SSL (prod SSL lives in nginx-portfolio.conf.template)
+      - ./scripts/config/nginx-local.conf.template:/etc/nginx/templates/default.conf.template
       - ./scripts/config/nginx-security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - .:/usr/share/nginx/html:ro
-      - uploads_data:/usr/share/nginx/html/uploads:ro
-      # SSL certs managed by host Certbot — mounted read-only
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./uploads:/usr/share/nginx/html/uploads:ro
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: localhost
       REPO_DIR: /usr/share/nginx/html
       APP_PORT: ${PORT:-8080}
       BACKEND_HOST: backend
@@ -106,9 +90,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "20m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
-  uploads_data:

@@ -59,6 +59,9 @@ if [ "$DRY_RUN" = "1" ] && [ -n "$ROLLBACK_SHA" ]; then
 fi
 
 # ── Environment config ────────────────────────────────────────────────────────
+# The case block sets ONLY what's needed before .env is loaded — repo path,
+# env-file path, log path, branch default, validation lists. Everything else
+# (service names, ports, cert mode, rollback branch, etc.) comes from .env.
 
 HEALTH_TIMEOUT=60
 HEALTH_INTERVAL=5
@@ -66,17 +69,30 @@ HEALTH_URL_2=""
 NGINX_URL=""
 SITE_URL=""  # set after load_env (depends on .env vars)
 
+REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
+
+# Keys required in .env regardless of environment. Per-env extras append below.
+REQUIRED_VARS_COMMON=(
+  SITE_HOST
+  COMPOSE_PROJECT_NAME NGINX_SERVICE BACKEND_SERVICE
+  PORT NGINX_PORT NGINX_HTTP_HOST_PORT NGINX_CONF_TEMPLATE
+  CERT_MOUNT_SRC CERT_MOUNT_DST CERT_MODE
+  ROLLBACK_BRANCH BACKUP_DIR
+  DB_NAME DB_USER DB_PASSWORD
+  JWT_SECRET
+  WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRONTEND_URL
+  ADMIN_EMAIL
+)
+
 case "$DEPLOY_ENV" in
   dev)
     REPO_DIR="${HOME}/MyPortfolioSite-dev"
-    REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
     BRANCH="${BRANCH:-dev}"
-    COMPOSE_FILE="${REPO_DIR}/docker-compose.dev-server.yml"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
     LOG_FILE="${HOME}/dev-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-dev"
-    REQUIRED_VARS=(LAN_IP WEBAUTHN_HOST DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRONTEND_URL NGINX_SERVICE BACKEND_SERVICE NGINX_PORT CERT_MODE ROLLBACK_BRANCH)
+    REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" LAN_IP)
     PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
     # Feature flags
     RUN_LAN_IP_DETECT=1  # dev .env uses LAN_IP for nginx/cert config; auto-detect saves manual setup
@@ -89,15 +105,13 @@ case "$DEPLOY_ENV" in
     ;;
   prod)
     REPO_DIR="${HOME}/MyPortfolioSite"
-    REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"
     BRANCH="${BRANCH:-main}"
-    COMPOSE_FILE="${REPO_DIR}/docker-compose.prod.yml"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.example"
     LOG_FILE="${HOME}/prod-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-prod"
-    REQUIRED_VARS=(JWT_SECRET DB_PASSWORD DOMAIN NGINX_SERVICE BACKEND_SERVICE NGINX_PORT CERT_MODE ROLLBACK_BRANCH)
-    PLACEHOLDER_PATTERNS=("change-me" "your-" "example.com" "xxx")
+    REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" DOMAIN)
+    PLACEHOLDER_PATTERNS=("change-me" "your-" "example.com" "xxx" "replace_")
     # Feature flags
     RUN_LAN_IP_DETECT=0  # prod uses a public domain (DOMAIN), not a LAN IP
     RUN_UFW_CHECK=1      # both envs on same server; UFW must allow port 443 or the site is unreachable
@@ -112,6 +126,10 @@ case "$DEPLOY_ENV" in
     exit 1
     ;;
 esac
+
+# Single unified compose file — env-specific behaviour comes from .env, not
+# from selecting a different compose file.
+COMPOSE_FILE="${REPO_DIR}/docker-compose.yml"
 
 # ── Environment-specific validation ──────────────────────────────────────────
 # extra_env_checks is called by validate_env in deploy-lib.sh
@@ -171,6 +189,12 @@ ensure_env_file
 sync_env_from_template
 
 load_env
+
+# Make COMPOSE_PROJECT_NAME visible to every `docker compose` call below.
+# load_env exports anything declared in .env, but it's worth being explicit:
+# this single env var is what namespaces dev vs prod containers and volumes
+# (along with the optional POSTGRES_VOLUME_NAME / UPLOADS_VOLUME_NAME overrides).
+export COMPOSE_PROJECT_NAME
 
 # ── Post-env config (derived from loaded .env values) ────────────────────────
 # All values below are derived from .env — no env-specific branching here.

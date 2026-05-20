@@ -2,14 +2,14 @@
 # seed-dev-data.sh — Populate the dev-server database with realistic dummy data.
 #
 # Bash counterpart to Seed-DevData.ps1, targeting the Ubuntu dev-server stack
-# (docker-compose.dev-server.yml — service backend-dev on port 8081).
+# (docker-compose.yml — service backend-dev on port 8081).
 #
 # Inserts:
 #   - 5 published blog posts, 3 drafts
 #   - 6 published travel memories (with coordinates), 2 drafts
 #
 # Safe to run multiple times. To wipe and re-seed cleanly:
-#   docker compose -f docker-compose.dev-server.yml down -v
+#   docker compose -f docker-compose.yml down -v
 #   bash scripts/deploy/dev-deploy.sh <branch>
 # then re-run this script.
 #
@@ -17,14 +17,14 @@
 #   bash scripts/dev/seed-dev-data.sh
 #
 # Overridable via environment:
-#   COMPOSE_FILE  (default: docker-compose.dev-server.yml)
+#   COMPOSE_FILE  (default: docker-compose.yml)
 #   BACKEND_SVC   (default: backend-dev)
 #   BASE_URL      (default: http://localhost:8081)  — backend direct, no /api prefix
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.dev-server.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 BACKEND_SVC="${BACKEND_SVC:-backend-dev}"
 BASE_URL="${BASE_URL:-http://localhost:8081}"
 TOKEN="${TOKEN:-}"
@@ -248,7 +248,7 @@ JSON
 seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
 {
   "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
-  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
+  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
   "post_date": "2026-05-09",
   "publish": true
 }

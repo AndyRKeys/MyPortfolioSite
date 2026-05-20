@@ -6,7 +6,7 @@
 #   bash scripts/tests/test-regression.sh \
 #     --base-url https://dev.andykeys.me:3001 \
 #     --compose-file /path/to/docker-compose.yml \
-#     --service backend-dev \
+#     --service backend \
 #     [--insecure]
 #
 # --insecure   Pass -k to curl (required for self-signed dev certs).

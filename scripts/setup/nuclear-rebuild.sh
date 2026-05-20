@@ -17,7 +17,7 @@ set -euo pipefail
 
 WIPE_DB=false
 SKIP_CONFIRM=false
-COMPOSE_FILE="${HOME}/MyPortfolioSite-dev/docker-compose.dev-server.yml"
+COMPOSE_FILE="${HOME}/MyPortfolioSite-dev/docker-compose.yml"
 LOG_FILE="${HOME}/dev-deploy.log"
 FAILURE_COUNTER_FILE="${HOME}/.dev-deploy-failures"
 
