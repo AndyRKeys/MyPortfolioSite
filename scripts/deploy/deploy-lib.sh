@@ -719,14 +719,24 @@ check_nginx_config() {
 
   # Runs nginx -t inside a throw-away container using the same compose env and
   # volume mounts, so template substitution and cert paths are tested for real.
-  if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
-      2>&1 | _log_cmd; then
+  # Capture output so we can surface it inline on failure (in non-verbose mode
+  # _log_cmd only writes to the log file, hiding the real error from the operator).
+  local nginx_output nginx_status
+  nginx_output=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t 2>&1)
+  nginx_status=$?
+  echo "$nginx_output" | _log_cmd
+  if [ "$nginx_status" -ne 0 ]; then
     dstatus nginx status=failed reason=config-test-failed
     dfail ""
     dfail "Nginx config test failed. Common causes:"
     dfail "  • SSL cert or key file missing at the path mounted into the container"
     dfail "  • Syntax error in nginx config template"
     dfail "  • Environment variable not set (check .env and COMPOSE_FILE)"
+    dfail ""
+    dfail "nginx -t output:"
+    while IFS= read -r line; do
+      dfail "  $line"
+    done <<< "$nginx_output"
     ddie "Fix the nginx config then re-run."
   fi
 
