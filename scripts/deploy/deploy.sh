@@ -72,7 +72,6 @@ case "$DEPLOY_ENV" in
     BACKEND_SERVICE=backend-dev
     ROLLBACK_BRANCH=dev
     # Feature flags
-    RUN_GIT_UPDATE=0     # branch already switched by switch-branch.sh wrapper
     RUN_LAN_IP_DETECT=1
     RUN_UFW_CHECK=1
     RUN_DEV_CERTS=1
@@ -97,7 +96,6 @@ case "$DEPLOY_ENV" in
     BACKEND_SERVICE=backend
     ROLLBACK_BRANCH=main
     # Feature flags
-    RUN_GIT_UPDATE=0     # branch already switched by switch-branch.sh wrapper
     RUN_LAN_IP_DETECT=0
     RUN_UFW_CHECK=0
     RUN_DEV_CERTS=0
@@ -295,7 +293,8 @@ if [ "$RUN_UFW_CHECK" = "1" ]; then
   fi
 fi
 
-# ── Record deploy SHA (wrapper has already updated the working tree) ───────────
+# ── Record deploy SHA ────────────────────────────────────────────────────────
+# Branch update is always handled by switch-branch.sh before this script runs.
 
 record_deploy_sha
 
