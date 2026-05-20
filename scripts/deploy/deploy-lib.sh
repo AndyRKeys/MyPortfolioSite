@@ -435,7 +435,11 @@ sync_env_from_template() {
       local key="${BASH_REMATCH[1]}"
       local template_value="${BASH_REMATCH[2]}"
       template_keys_list+="${key}"$'\n'
-      if [ -n "${existing_values[$key]+x}" ]; then
+      # Carry over only if the existing value is non-empty. An empty
+      # ADMIN_EMAIL= in the old file is effectively unset, so fall back
+      # to the template default so validate_env / prompt_missing_vars can
+      # flag it as a placeholder rather than silently dropping the key.
+      if [ -n "${existing_values[$key]:-}" ]; then
         printf '%s=%s\n' "$key" "${existing_values[$key]}" >> "$tmp_env"
         carried_count=$((carried_count + 1))
       else
