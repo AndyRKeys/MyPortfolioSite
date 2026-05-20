@@ -585,51 +585,75 @@ validate_env() {
 migrate_env_values() {
   dsection "Phase 3c: checking for outdated .env values"
 
-  # KEY | new_value | deprecated_regex (extended) | human reason
-  local migrations=(
-    "NGINX_SERVICE|nginx|^(nginx-dev|nginx-prod|nginx-local)$|Service names were unified across dev/prod when the compose files merged; the unified docker-compose.yml only defines 'nginx'."
-    "BACKEND_SERVICE|backend|^(backend-dev|backend-prod|backend-local)$|Service names were unified across dev/prod when the compose files merged; the unified docker-compose.yml only defines 'backend'."
+  # Vars whose value must reference a real docker-compose service. If the
+  # current value isn't in the compose file's actual service list, the
+  # deploy will fail later with a confusing "no such service" — catch it
+  # here and offer to update .env to a service that does exist.
+  local service_vars=(NGINX_SERVICE BACKEND_SERVICE)
+  # Preferred replacement when the current value is wrong. Falls back to
+  # whatever service does exist if the preferred name isn't there either.
+  declare -A preferred=(
+    [NGINX_SERVICE]=nginx
+    [BACKEND_SERVICE]=backend
   )
+
+  # Pull the list of services the unified compose file actually defines.
+  # docker compose config --services is the authoritative answer; if it
+  # fails (e.g. compose can't parse the file) we skip this check rather
+  # than block the deploy on a secondary signal.
+  local available_services
+  if ! available_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null); then
+    dstatus envmigrate status=skipped reason=compose-config-failed
+    dwarn "Could not list compose services — skipping .env migration check"
+    return 0
+  fi
 
   local interactive=0
   [ -t 0 ] && interactive=1
 
   local migrated=0 flagged=0
-  local entry
-  for entry in "${migrations[@]}"; do
-    local key new_value deprecated_re reason
-    IFS='|' read -r key new_value deprecated_re reason <<< "$entry"
+  local key
+  for key in "${service_vars[@]}"; do
     local current="${!key:-}"
     [ -z "$current" ] && continue
-    [ "$current" = "$new_value" ] && continue
-    [[ "$current" =~ $deprecated_re ]] || continue
+    # If the current value is a real service, nothing to do.
+    if grep -qx "$current" <<< "$available_services"; then
+      continue
+    fi
 
     flagged=$((flagged + 1))
-    dwarn "$key='$current' looks outdated — expected '$new_value'."
-    dwarn "  reason: $reason"
+    local target="${preferred[$key]}"
+    # If the preferred replacement isn't a real service either, pick the
+    # first available service as a last-resort suggestion.
+    if ! grep -qx "$target" <<< "$available_services"; then
+      target=$(head -n1 <<< "$available_services")
+    fi
+
+    dwarn "$key='$current' is not a service in $COMPOSE_FILE"
+    dwarn "  available services: $(tr '\n' ' ' <<< "$available_services")"
+    dwarn "  suggested value: '$target'"
 
     local do_update=0
     if [ "$interactive" = "1" ]; then
-      printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$new_value" "$ENV_FILE"
+      printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$target" "$ENV_FILE"
       local reply
       read -r reply
       case "$reply" in
         ''|y|Y|yes|YES) do_update=1 ;;
-        *)              do_update=0 ;;
       esac
     else
-      dwarn "  non-interactive run — leaving in place; set $key=$new_value in $ENV_FILE before re-running"
+      dwarn "  non-interactive run — set $key=$target in $ENV_FILE before re-running"
     fi
 
     if [ "$do_update" = "1" ]; then
       if grep -qE "^${key}=" "$ENV_FILE"; then
-        sed -i "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+        sed -i "s|^${key}=.*|${key}=${target}|" "$ENV_FILE"
       else
-        printf '%s=%s\n' "$key" "$new_value" >> "$ENV_FILE"
+        printf '%s=%s\n' "$key" "$target" >> "$ENV_FILE"
       fi
-      export "$key=$new_value"
+      export "$key=$target"
       migrated=$((migrated + 1))
-      dok "  $key updated to '$new_value'"
+      dok "  $key updated to '$target'"
     fi
   done
 
@@ -638,6 +662,9 @@ migrate_env_values() {
     dok "No outdated .env values detected"
   else
     dstatus envmigrate status=migrated flagged="$flagged" migrated="$migrated"
+    if [ "$migrated" -lt "$flagged" ]; then
+      dwarn "$((flagged - migrated)) outdated value(s) left in place — deploy will likely fail downstream."
+    fi
   fi
 }
 
