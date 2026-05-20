@@ -1156,6 +1156,7 @@ print_deploy_status() {
   local colour icon
   case "$status" in
     COMPLETE)      colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="✅" ;;
+    "DRY RUN")     colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="🧪" ;;
     "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
     *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
   esac
