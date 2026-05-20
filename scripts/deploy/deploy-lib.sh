@@ -559,6 +559,12 @@ validate_env() {
     for err in "${errors[@]}"; do
       dfail "  • $err"
     done
+    dfail ""
+    dfail "Current .env contents (secrets redacted) — for debugging:"
+    dfail "  file: $ENV_FILE"
+    redact_env "$ENV_FILE" | while IFS= read -r line; do
+      dfail "    $line"
+    done
     ddie "Fix the above .env issues then re-run."
   fi
 
