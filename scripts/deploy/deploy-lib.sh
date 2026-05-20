@@ -275,6 +275,21 @@ update_to_branch() {
   fi
 }
 
+# Record current HEAD as the deploy SHA without performing any git update.
+# Use when branch switching is handled by an external wrapper (e.g. switch-branch.sh).
+# Sets PRE_SHA and NEW_SHA so rollback logic has a valid reference.
+record_deploy_sha() {
+  dsection "Phase 2: recording deploy SHA (branch managed by wrapper)"
+
+  cd "$REPO_DIR"
+
+  PRE_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
+  NEW_SHA="$PRE_SHA"
+
+  dstatus git status=wrapper-managed branch="$BRANCH" sha="${NEW_SHA:0:7}"
+  dinfo "Branch update handled by wrapper — current HEAD: ${NEW_SHA:0:7}"
+}
+
 show_deployment_info() {
   dsection "Deployment details"
 

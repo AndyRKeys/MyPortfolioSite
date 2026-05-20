@@ -188,14 +188,16 @@ if [ "$ufw_readable" -eq 1 ]; then
   fi
 fi
 
-# ── Git update ─────────────────────────────────────────────────────────────────────────
+# ── Deployment SHA ─────────────────────────────────────────────────────────────────────
+# Branch switching and git update are handled by the wrapper (switch-branch.sh)
+# before this script is invoked. Record the current HEAD for rollback tracking.
 
-update_to_branch
+record_deploy_sha
 
 show_deployment_info
 
 # ── Certificates and nginx pre-flight ─────────────────────────────────────────────────
-# Done after git update so we always use the latest cert generation script and
+# Done after the wrapper has updated the working tree so we always use the latest
 # so that cert files are verified against the working tree that will be deployed.
 
 ensure_dev_certs "$LAN_IP" "$WEBAUTHN_HOST"
