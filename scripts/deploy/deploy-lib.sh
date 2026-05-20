@@ -572,6 +572,75 @@ validate_env() {
   dok "All required env vars set and valid."
 }
 
+# Detect .env values whose meaning has changed across template versions and
+# offer to update them. sync_env_from_template carries existing values
+# verbatim, so a variable like NGINX_SERVICE=nginx-dev (valid in the old
+# split compose files) survives into a world where the unified compose file
+# only knows a service called `nginx`. Each migration entry is the form
+#   KEY|expected_new_value|deprecated_regex|reason
+# If the live value matches the deprecated regex and differs from the
+# expected new value, prompt the operator (interactive) or warn loudly
+# (non-interactive) and update ENV_FILE in place. Call after load_env so
+# the exported vars and ENV_FILE both end up consistent.
+migrate_env_values() {
+  dsection "Phase 3c: checking for outdated .env values"
+
+  # KEY | new_value | deprecated_regex (extended) | human reason
+  local migrations=(
+    "NGINX_SERVICE|nginx|^(nginx-dev|nginx-prod|nginx-local)$|Service names were unified across dev/prod when the compose files merged; the unified docker-compose.yml only defines 'nginx'."
+    "BACKEND_SERVICE|backend|^(backend-dev|backend-prod|backend-local)$|Service names were unified across dev/prod when the compose files merged; the unified docker-compose.yml only defines 'backend'."
+  )
+
+  local interactive=0
+  [ -t 0 ] && interactive=1
+
+  local migrated=0 flagged=0
+  local entry
+  for entry in "${migrations[@]}"; do
+    local key new_value deprecated_re reason
+    IFS='|' read -r key new_value deprecated_re reason <<< "$entry"
+    local current="${!key:-}"
+    [ -z "$current" ] && continue
+    [ "$current" = "$new_value" ] && continue
+    [[ "$current" =~ $deprecated_re ]] || continue
+
+    flagged=$((flagged + 1))
+    dwarn "$key='$current' looks outdated — expected '$new_value'."
+    dwarn "  reason: $reason"
+
+    local do_update=0
+    if [ "$interactive" = "1" ]; then
+      printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$new_value" "$ENV_FILE"
+      local reply
+      read -r reply
+      case "$reply" in
+        ''|y|Y|yes|YES) do_update=1 ;;
+        *)              do_update=0 ;;
+      esac
+    else
+      dwarn "  non-interactive run — leaving in place; set $key=$new_value in $ENV_FILE before re-running"
+    fi
+
+    if [ "$do_update" = "1" ]; then
+      if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+      else
+        printf '%s=%s\n' "$key" "$new_value" >> "$ENV_FILE"
+      fi
+      export "$key=$new_value"
+      migrated=$((migrated + 1))
+      dok "  $key updated to '$new_value'"
+    fi
+  done
+
+  if [ "$flagged" -eq 0 ]; then
+    dstatus envmigrate status=ok flagged=0
+    dok "No outdated .env values detected"
+  else
+    dstatus envmigrate status=migrated flagged="$flagged" migrated="$migrated"
+  fi
+}
+
 # Interactively prompt the operator for any REQUIRED_VARS that are still empty or
 # contain placeholder values. Only runs when stdin is a TTY (not in CI or piped
 # deploys). Writes updated values directly to ENV_FILE so validate_env sees them.

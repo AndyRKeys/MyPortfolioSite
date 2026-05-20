@@ -190,6 +190,8 @@ sync_env_from_template
 
 load_env
 
+migrate_env_values
+
 # Make COMPOSE_PROJECT_NAME visible to every `docker compose` call below.
 # load_env exports anything declared in .env, but it's worth being explicit:
 # this single env var is what namespaces dev vs prod containers and volumes
