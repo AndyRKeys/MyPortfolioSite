@@ -83,13 +83,13 @@ case "$DEPLOY_ENV" in
     BACKEND_SERVICE=backend-dev
     ROLLBACK_BRANCH=dev
     # Feature flags
-    RUN_LAN_IP_DETECT=1
-    RUN_UFW_CHECK=1
-    RUN_DEV_CERTS=1
-    RUN_VITEST=1
-    RUN_ERROR_LOGGER=1
-    RUN_DDNS_CHECK=0
-    RUN_UPLOADS_DIR=0
+    RUN_LAN_IP_DETECT=1  # dev .env uses LAN_IP for nginx/cert config; auto-detect saves manual setup
+    RUN_UFW_CHECK=1      # dev is LAN-only on port 3001; UFW must allow it or the site is unreachable
+    RUN_DEV_CERTS=1      # dev uses self-signed certs (no certbot); must be generated before nginx starts
+    RUN_VITEST=1         # dev image includes devDependencies; run tests against the live container post-deploy
+    RUN_ERROR_LOGGER=1   # puppeteer-based; only available in dev image
+    RUN_DDNS_CHECK=0     # no public DNS in dev; site is LAN-only
+    RUN_UPLOADS_DIR=0    # uploads volume is managed by docker-compose on dev; no host dir needed
     ;;
   prod)
     REPO_DIR="${HOME}/MyPortfolioSite"
@@ -107,13 +107,13 @@ case "$DEPLOY_ENV" in
     BACKEND_SERVICE=backend
     ROLLBACK_BRANCH=main
     # Feature flags
-    RUN_LAN_IP_DETECT=0
-    RUN_UFW_CHECK=0
-    RUN_DEV_CERTS=0
-    RUN_VITEST=0         # prod image built with --omit=dev; vitest not available
-    RUN_ERROR_LOGGER=0
-    RUN_DDNS_CHECK=1
-    RUN_UPLOADS_DIR=1
+    RUN_LAN_IP_DETECT=0  # prod uses a public domain (DOMAIN), not a LAN IP
+    RUN_UFW_CHECK=0      # prod is public on 443; UFW is managed separately, not per-deploy
+    RUN_DEV_CERTS=0      # prod uses Let's Encrypt certs managed by certbot, not self-signed
+    RUN_VITEST=0         # prod image built with --omit=dev; vitest is not installed
+    RUN_ERROR_LOGGER=0   # puppeteer devDependency; not present in prod image
+    RUN_DDNS_CHECK=1     # prod is public; verify DNS points to this server before deploying
+    RUN_UPLOADS_DIR=1    # prod bind-mounts ~/MyPortfolioSite/uploads; must exist on the host
     ;;
   *)
     echo "[ERROR] Unknown environment '${DEPLOY_ENV}' — must be 'dev' or 'prod'" >&2
