@@ -146,19 +146,17 @@ extra_env_checks() {
 
   if [ "$DEPLOY_ENV" = "dev" ]; then
     local ipv4_re='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
-    if [[ "${WEBAUTHN_RP_ID:-}" =~ $ipv4_re ]]; then
-      _errors+=("WEBAUTHN_RP_ID ('$WEBAUTHN_RP_ID') is an IP address. WebAuthn requires a domain name (e.g. dev.andykeys.me).")
+    if [[ "${SITE_HOST:-}" =~ $ipv4_re ]]; then
+      _errors+=("SITE_HOST ('$SITE_HOST') is an IP address. WebAuthn requires a domain name (e.g. dev.andykeys.me).")
     fi
-    if [[ "${WEBAUTHN_HOST:-}" =~ $ipv4_re ]]; then
-      _errors+=("WEBAUTHN_HOST ('$WEBAUTHN_HOST') is an IP address. It must be a domain name (e.g. dev.andykeys.me).")
+    if [ -n "${WEBAUTHN_RP_ID:-}" ] && [ -n "${SITE_HOST:-}" ] \
+       && [ "$WEBAUTHN_RP_ID" != "$SITE_HOST" ]; then
+      _errors+=("WEBAUTHN_RP_ID ('$WEBAUTHN_RP_ID') must equal SITE_HOST ('$SITE_HOST')")
     fi
-    if [ -n "${WEBAUTHN_RP_ID:-}" ] && [ -n "${WEBAUTHN_HOST:-}" ] \
-       && [ "$WEBAUTHN_RP_ID" != "$WEBAUTHN_HOST" ]; then
-      _errors+=("WEBAUTHN_RP_ID ('$WEBAUTHN_RP_ID') must equal WEBAUTHN_HOST ('$WEBAUTHN_HOST')")
-    fi
-    if [ -n "${WEBAUTHN_ORIGIN:-}" ] && [ -n "${WEBAUTHN_HOST:-}" ] \
-       && [ "$WEBAUTHN_ORIGIN" != "https://${WEBAUTHN_HOST}:3001" ]; then
-      _errors+=("WEBAUTHN_ORIGIN ('$WEBAUTHN_ORIGIN') must be exactly 'https://${WEBAUTHN_HOST}:3001'")
+    local expected_origin="https://${SITE_HOST}:${NGINX_PORT}"
+    if [ -n "${WEBAUTHN_ORIGIN:-}" ] && [ -n "${SITE_HOST:-}" ] \
+       && [ "$WEBAUTHN_ORIGIN" != "$expected_origin" ]; then
+      _errors+=("WEBAUTHN_ORIGIN ('$WEBAUTHN_ORIGIN') must be exactly '$expected_origin'")
     fi
   fi
 
@@ -226,9 +224,9 @@ else
   NGINX_URL="https://${NGINX_SERVICE}:${NGINX_PORT}"
 fi
 
-# External site URL used by smoke tests. WEBAUTHN_HOST is the dev hostname;
-# DOMAIN is the prod public domain. One or the other will be set.
-SITE_HOST="${WEBAUTHN_HOST:-${DOMAIN:-localhost}}"
+# External site URL used by smoke tests. SITE_HOST comes from .env in both
+# environments now; fall back to DOMAIN or localhost only if .env is malformed.
+SITE_HOST="${SITE_HOST:-${DOMAIN:-localhost}}"
 if [ "${NGINX_PORT}" = "443" ]; then
   SITE_URL="https://${SITE_HOST}"
 else
@@ -283,7 +281,7 @@ show_deployment_info
 # cert generation script from the deployed branch.
 
 if [ "$RUN_DEV_CERTS" = "1" ]; then
-  ensure_dev_certs "$LAN_IP" "${WEBAUTHN_HOST:-}"
+  ensure_dev_certs "$LAN_IP" "${SITE_HOST:-}"
 fi
 
 check_nginx_config "$NGINX_SERVICE"

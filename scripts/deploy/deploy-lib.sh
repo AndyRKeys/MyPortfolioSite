@@ -33,7 +33,7 @@
 #
 #   DEPLOY_ENV     — environment name (dev|prod); used by run_regression_tests
 #   SKIP_REGRESSION — set to 1 to skip regression smoke tests
-#   WEBAUTHN_HOST  — dev hostname used by run_regression_tests + auto_detect_lan_ip checks
+#   SITE_HOST      — canonical hostname (dev/prod) used by run_regression_tests + cert generation
 #   DOMAIN         — prod public domain used by run_regression_tests
 #   BACKEND_SERVICE — compose service name for the backend container
 #   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx-dev:3001)
@@ -865,7 +865,7 @@ ensure_dev_certs() {
       dinfo "Certificate generation passed"
     else
       dstatus certs status=failed reason=generation-failed
-      ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
+      ddie "Failed to generate SSL certificates. Check LAN_IP / SITE_HOST in .env."
     fi
   fi
 
@@ -1492,7 +1492,7 @@ check_ufw_port() {
 
 # Run the regression smoke suite against the live site.
 # Reads globals: DEPLOY_ENV, SKIP_REGRESSION, REPO_DIR, COMPOSE_FILE,
-#                BACKEND_SERVICE, LOG_FILE, WEBAUTHN_HOST, LAN_IP, DOMAIN.
+#                BACKEND_SERVICE, LOG_FILE, SITE_HOST, NGINX_PORT, LAN_IP, DOMAIN.
 # Sets REGRESSION_RC=0 on pass, 1 on failure. Triggers rollback on failure.
 run_regression_tests() {
   REGRESSION_RC=0
@@ -1507,8 +1507,8 @@ run_regression_tests() {
 
   if [ "${DEPLOY_ENV:-}" = "dev" ]; then
     bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
-      --base-url "https://${WEBAUTHN_HOST}:3001" \
-      --resolve "${WEBAUTHN_HOST}:3001:${LAN_IP}" \
+      --base-url "https://${SITE_HOST}:${NGINX_PORT}" \
+      --resolve "${SITE_HOST}:${NGINX_PORT}:${LAN_IP}" \
       --compose-file "$COMPOSE_FILE" \
       --service "$BACKEND_SERVICE" \
       --insecure \
