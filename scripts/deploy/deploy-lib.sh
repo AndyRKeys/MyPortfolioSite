@@ -31,6 +31,12 @@
 #                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
 #   LAST_GOOD_STATE_FILE — (optional) path to save/restore last successful deployment state
 #
+#   DEPLOY_ENV     — environment name (dev|prod); used by run_regression_tests
+#   SKIP_REGRESSION — set to 1 to skip regression smoke tests
+#   WEBAUTHN_HOST  — dev hostname used by run_regression_tests + auto_detect_lan_ip checks
+#   DOMAIN         — prod public domain used by run_regression_tests
+#   BACKEND_SERVICE — compose service name for the backend container
+#
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
 
@@ -1108,4 +1114,136 @@ print_deploy_report() {
       done
   echo "╚${border}╝"
   echo ""
+}
+
+# ── LAN IP auto-detection ─────────────────────────────────────────────────────
+
+# Detect the primary non-loopback IPv4 address and write it into ENV_FILE when
+# LAN_IP is unset or still a placeholder. Dev-only: prod uses a public domain.
+# Reads: LAN_IP, PLACEHOLDER_PATTERNS, ENV_FILE. Exports LAN_IP on success.
+auto_detect_lan_ip() {
+  local current="${LAN_IP:-}"
+  local is_placeholder=0
+
+  if [ -z "$current" ]; then
+    is_placeholder=1
+  else
+    for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+      if [[ "$current" == *"$pattern"* ]]; then
+        is_placeholder=1
+        break
+      fi
+    done
+  fi
+
+  if [ "$is_placeholder" = "0" ]; then
+    dstatus lan-ip status=ok reason=already-configured
+    return 0
+  fi
+
+  dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
+
+  local detected
+  # ip route is most reliable on Ubuntu; hostname -I is the fallback
+  detected=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  if [ -z "$detected" ]; then
+    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+
+  if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
+    dstatus lan-ip status=failed reason=no-non-loopback-ip
+    dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
+    return 0
+  fi
+
+  dinfo "Detected LAN IP: $detected"
+
+  if grep -qE '^LAN_IP=' "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^LAN_IP=.*|LAN_IP=${detected}|" "$ENV_FILE"
+  else
+    echo "LAN_IP=${detected}" >> "$ENV_FILE"
+  fi
+
+  export LAN_IP="$detected"
+  dstatus lan-ip status=detected reason=written-to-env
+  dok "LAN_IP set to $detected in $ENV_FILE"
+}
+
+# ── UFW port check ────────────────────────────────────────────────────────────
+
+# Warn if UFW is active but has no rule allowing the given port.
+# Non-fatal — missing a rule is surfaced as a warning, not a deploy failure,
+# since UFW may simply not be installed or the rule may use a different subnet.
+# Usage: check_ufw_port <port>
+check_ufw_port() {
+  local port="${1:?check_ufw_port requires a port argument}"
+
+  dsection "Checking firewall (UFW) for port $port"
+
+  if ! command -v ufw &>/dev/null; then
+    dstatus firewall status=skipped reason=ufw-not-installed
+    dinfo "UFW not installed — skipping firewall check"
+    return 0
+  fi
+
+  local ufw_status
+  if ! ufw_status=$(try_root ufw status 2>/dev/null); then
+    dstatus firewall status=skipped reason=needs-root-no-passwordless-sudo
+    dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
+    dinfo "To enable the check, allow just this read-only command without a password:"
+    dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
+    return 0
+  fi
+
+  if echo "$ufw_status" | grep -q "$port"; then
+    dstatus firewall status=ok port="$port"
+    dok "UFW rule for port $port is present"
+  else
+    dstatus firewall status=warn port="$port" reason=no-rule
+    dwarn "No UFW rule found for port $port."
+    dwarn "The dev site may not be reachable from other LAN devices."
+    dwarn "To open port $port to your LAN:"
+    dwarn "  sudo ufw allow from 192.168.0.0/16 to any port $port comment 'Dev site LAN-only'"
+    dwarn "Continuing anyway — this is a warning, not an error."
+  fi
+}
+
+# ── Regression smoke tests ────────────────────────────────────────────────────
+
+# Run the regression smoke suite against the live site.
+# Reads globals: DEPLOY_ENV, SKIP_REGRESSION, REPO_DIR, COMPOSE_FILE,
+#                BACKEND_SERVICE, LOG_FILE, WEBAUTHN_HOST, LAN_IP, DOMAIN.
+# Sets REGRESSION_RC=0 on pass, 1 on failure. Triggers rollback on failure.
+run_regression_tests() {
+  REGRESSION_RC=0
+
+  if [ "${SKIP_REGRESSION:-0}" = "1" ]; then
+    dstatus regression status=skipped reason=skip-flag
+    dinfo "Regression smoke tests skipped (--skip-regression)"
+    return 0
+  fi
+
+  dsection "Regression smoke tests"
+
+  if [ "${DEPLOY_ENV:-}" = "dev" ]; then
+    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+      --base-url "https://${WEBAUTHN_HOST}:3001" \
+      --resolve "${WEBAUTHN_HOST}:3001:${LAN_IP}" \
+      --compose-file "$COMPOSE_FILE" \
+      --service "$BACKEND_SERVICE" \
+      --insecure \
+      --reset-rate-limits \
+      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+  elif [ -n "${DOMAIN:-}" ]; then
+    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+      --base-url "https://${DOMAIN}" \
+      --resolve "${DOMAIN}:443:127.0.0.1" \
+      --compose-file "$COMPOSE_FILE" \
+      --service "$BACKEND_SERVICE" \
+      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+  fi
+
+  if [ "$REGRESSION_RC" -ne 0 ]; then
+    _do_rollback "regression smoke tests failed"
+  fi
 }

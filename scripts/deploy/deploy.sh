@@ -157,55 +157,6 @@ extra_env_checks() {
   fi
 }
 
-# ── Auto-detect LAN IP (dev only) ─────────────────────────────────────────────
-
-auto_detect_lan_ip() {
-  local current="${LAN_IP:-}"
-  local is_placeholder=0
-
-  if [ -z "$current" ]; then
-    is_placeholder=1
-  else
-    for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
-      if [[ "$current" == *"$pattern"* ]]; then
-        is_placeholder=1
-        break
-      fi
-    done
-  fi
-
-  if [ "$is_placeholder" = "0" ]; then
-    dstatus lan-ip status=ok reason=already-configured
-    return 0
-  fi
-
-  dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
-
-  local detected
-  detected=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
-  if [ -z "$detected" ]; then
-    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
-  fi
-
-  if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
-    dstatus lan-ip status=failed reason=no-non-loopback-ip
-    dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
-    return 0
-  fi
-
-  dinfo "Detected LAN IP: $detected"
-
-  if grep -qE '^LAN_IP=' "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^LAN_IP=.*|LAN_IP=${detected}|" "$ENV_FILE"
-  else
-    echo "LAN_IP=${detected}" >> "$ENV_FILE"
-  fi
-
-  export LAN_IP="$detected"
-  dstatus lan-ip status=detected reason=written-to-env
-  dok "LAN_IP set to $detected in $ENV_FILE"
-}
-
 # ── Load shared deploy helpers ────────────────────────────────────────────────
 
 # shellcheck source=/dev/null
@@ -274,35 +225,7 @@ fi
 
 # ── UFW check (dev only) ──────────────────────────────────────────────────────
 
-if [ "$RUN_UFW_CHECK" = "1" ]; then
-  dsection "Checking firewall (UFW)"
-  ufw_status=""
-  ufw_readable=0
-  if ! command -v ufw &>/dev/null; then
-    dstatus firewall status=skipped reason=ufw-not-installed
-    dinfo "UFW not installed — skipping firewall check"
-  elif ufw_status=$(try_root ufw status 2>/dev/null); then
-    ufw_readable=1
-  else
-    dstatus firewall status=skipped reason=needs-root-no-passwordless-sudo
-    dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
-    dinfo "To enable the check, allow just this read-only command without a password:"
-    dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
-  fi
-  if [ "$ufw_readable" -eq 1 ]; then
-    if echo "$ufw_status" | grep -q "3001"; then
-      dstatus firewall status=ok port=3001
-      dok "UFW rule for port 3001 is present"
-    else
-      dstatus firewall status=warn port=3001 reason=no-rule
-      dwarn "No UFW rule found for port 3001."
-      dwarn "The dev site may not be reachable from other LAN devices."
-      dwarn "To open port 3001 to your LAN:"
-      dwarn "  sudo ufw allow from 192.168.0.0/16 to any port 3001 comment 'Dev site LAN-only'"
-      dwarn "Continuing anyway — this is a warning, not an error."
-    fi
-  fi
-fi
+[ "$RUN_UFW_CHECK" = "1" ] && check_ufw_port 3001
 
 # ── Record deploy SHA ────────────────────────────────────────────────────────
 # Branch update is always handled by switch-branch.sh before this script runs.
@@ -370,32 +293,7 @@ test_csp_reporting
 
 # ── Regression smoke tests ────────────────────────────────────────────────────
 
-REGRESSION_RC=0
-if [ "$SKIP_REGRESSION" = "0" ]; then
-  dsection "Regression smoke tests"
-
-  if [ "$DEPLOY_ENV" = "dev" ]; then
-    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
-      --base-url "https://${WEBAUTHN_HOST}:3001" \
-      --resolve "${WEBAUTHN_HOST}:3001:${LAN_IP}" \
-      --compose-file "$COMPOSE_FILE" \
-      --service "$BACKEND_SERVICE" \
-      --insecure \
-      --reset-rate-limits \
-      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
-  elif [ -n "${DOMAIN:-}" ]; then
-    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
-      --base-url "https://${DOMAIN}" \
-      --resolve "${DOMAIN}:443:127.0.0.1" \
-      --compose-file "$COMPOSE_FILE" \
-      --service "$BACKEND_SERVICE" \
-      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
-  fi
-fi
-
-if [ "$REGRESSION_RC" -ne 0 ]; then
-  _do_rollback "regression smoke tests failed"
-fi
+run_regression_tests
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
