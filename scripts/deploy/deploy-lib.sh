@@ -37,7 +37,10 @@
 #   DOMAIN         — prod public domain used by run_regression_tests
 #   BACKEND_SERVICE — compose service name for the backend container
 #   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx-dev:3001)
-#   NGINX_PORT     — nginx-facing port; derived from WEBAUTHN_ORIGIN (dev) or fixed 443 (prod)
+#   NGINX_PORT     — external nginx port; read from .env (3001 dev, 443 prod)
+#   CERT_MODE      — read from .env: self-signed | letsencrypt. Drives HEALTH_INSECURE,
+#                    cert auto-generation, and DDNS-sync checks.
+#   BACKUP_DIR     — read from .env: local directory where backups are written (#164)
 #
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
@@ -1262,7 +1265,7 @@ run_regression_tests() {
 check_backup_health() {
   dsection "Backup health check"
   local ok=1
-  local backup_dir="${HOME}/backups"
+  local backup_dir="${BACKUP_DIR:-${HOME}/backups}"
   local max_age_days=2
 
   # ── Check 1: cron/systemd timer configured ───────────────────────────────

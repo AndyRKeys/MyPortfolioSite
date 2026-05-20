@@ -76,12 +76,8 @@ case "$DEPLOY_ENV" in
     ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
     LOG_FILE="${HOME}/dev-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-dev"
-    REQUIRED_VARS=(LAN_IP WEBAUTHN_HOST DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRONTEND_URL)
+    REQUIRED_VARS=(LAN_IP WEBAUTHN_HOST DB_PASSWORD JWT_SECRET WEBAUTHN_RP_ID WEBAUTHN_ORIGIN FRONTEND_URL NGINX_SERVICE BACKEND_SERVICE NGINX_PORT CERT_MODE ROLLBACK_BRANCH)
     PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
-    HEALTH_INSECURE=1
-    NGINX_SERVICE=nginx-dev
-    BACKEND_SERVICE=backend-dev
-    ROLLBACK_BRANCH=dev
     # Feature flags
     RUN_LAN_IP_DETECT=1  # dev .env uses LAN_IP for nginx/cert config; auto-detect saves manual setup
     RUN_UFW_CHECK=1      # both envs on same server; UFW must allow the nginx port or the site is unreachable
@@ -100,12 +96,8 @@ case "$DEPLOY_ENV" in
     ENV_TEMPLATE="${REPO_DIR}/.env.example"
     LOG_FILE="${HOME}/prod-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-prod"
-    REQUIRED_VARS=(JWT_SECRET DB_PASSWORD DOMAIN)
+    REQUIRED_VARS=(JWT_SECRET DB_PASSWORD DOMAIN NGINX_SERVICE BACKEND_SERVICE NGINX_PORT CERT_MODE ROLLBACK_BRANCH)
     PLACEHOLDER_PATTERNS=("change-me" "your-" "example.com" "xxx")
-    HEALTH_INSECURE=0
-    NGINX_SERVICE=nginx
-    BACKEND_SERVICE=backend
-    ROLLBACK_BRANCH=main
     # Feature flags
     RUN_LAN_IP_DETECT=0  # prod uses a public domain (DOMAIN), not a LAN IP
     RUN_UFW_CHECK=1      # both envs on same server; UFW must allow port 443 or the site is unreachable
@@ -180,21 +172,37 @@ sync_env_from_template
 
 load_env
 
-# ── Post-env config (vars that depend on loaded .env values) ──────────────────
+# ── Post-env config (derived from loaded .env values) ────────────────────────
+# All values below are derived from .env — no env-specific branching here.
 
-if [ "$DEPLOY_ENV" = "dev" ]; then
-  # Derive the nginx-facing port from WEBAUTHN_ORIGIN (e.g. https://dev.host:3001 → 3001)
-  # so that NGINX_URL, SITE_URL, and the UFW check stay in sync with the .env value
-  # rather than hardcoding 3001 in multiple places.
-  NGINX_PORT="${WEBAUTHN_ORIGIN##*:}"
-  HEALTH_URL="http://localhost:${PORT:-8081}/health"
-  NGINX_URL="https://${NGINX_SERVICE}:${NGINX_PORT}"
-  SITE_URL="https://${WEBAUTHN_HOST:-localhost}:${NGINX_PORT}"
+# HEALTH_INSECURE is derived from CERT_MODE rather than being declared per-env:
+# self-signed certs require --insecure for curl to accept them; Let's Encrypt
+# certs are valid so we verify them properly.
+if [ "${CERT_MODE:-}" = "self-signed" ]; then
+  HEALTH_INSECURE=1
 else
-  NGINX_PORT=443
-  HEALTH_URL="http://localhost:${PORT:-8080}/health"
+  HEALTH_INSECURE=0
+fi
+
+# Backend health URL — internal-only, talks to the backend container's health endpoint.
+HEALTH_URL="http://localhost:${PORT}/health"
+
+# Docker-internal nginx URL used by the error-logger test (puppeteer inside the
+# backend container reaches nginx by service name). Omit the port for 443 since
+# https:// implies it; include it otherwise.
+if [ "${NGINX_PORT}" = "443" ]; then
   NGINX_URL="https://${NGINX_SERVICE}"
-  SITE_URL="https://${DOMAIN:-}"
+else
+  NGINX_URL="https://${NGINX_SERVICE}:${NGINX_PORT}"
+fi
+
+# External site URL used by smoke tests. WEBAUTHN_HOST is the dev hostname;
+# DOMAIN is the prod public domain. One or the other will be set.
+SITE_HOST="${WEBAUTHN_HOST:-${DOMAIN:-localhost}}"
+if [ "${NGINX_PORT}" = "443" ]; then
+  SITE_URL="https://${SITE_HOST}"
+else
+  SITE_URL="https://${SITE_HOST}:${NGINX_PORT}"
 fi
 
 # ── LAN IP detection (dev only) ───────────────────────────────────────────────
