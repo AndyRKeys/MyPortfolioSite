@@ -385,13 +385,17 @@ redact_env() {
   done < "$file"
 }
 
-# Compare .env against the template and append any keys that are present in the
-# template but missing from the live .env. The appended block carries its
-# original template comments so the operator knows what each var does.
-# Returns 0 if .env was already complete, 1 if keys were added (operator must
-# fill in values before the next deploy succeeds).
+# Rebuild .env from the template, carrying over values for any keys still
+# present in the template. The template becomes the canonical structure
+# (ordering, comments, section headers); the operator's existing values are
+# preserved verbatim. Keys no longer in the template are dropped (but the
+# previous .env is timestamped and kept as a backup).
+#
+# Returns 0 if the rebuilt .env contains no template placeholders for new
+# keys, 1 if newly-introduced keys still hold their template default and
+# need the operator's attention.
 sync_env_from_template() {
-  dsection "Phase 3b: syncing .env against template"
+  dsection "Phase 3b: rebuilding .env from template"
 
   if [ -z "${ENV_TEMPLATE:-}" ]; then
     dstatus envsync status=skipped reason=no-template-var
@@ -404,64 +408,96 @@ sync_env_from_template() {
     return 0
   fi
 
-  # Keys already present in .env (only KEY lines, not comments)
-  local existing_keys
-  existing_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" | cut -d= -f1 | sort)
-
-  # Keys defined in the template
-  local template_keys
-  template_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_TEMPLATE" | cut -d= -f1 | sort)
-
-  # Keys in template but not in .env
-  local missing_keys
-  missing_keys=$(comm -23 <(echo "$template_keys") <(echo "$existing_keys"))
-
-  if [ -z "$missing_keys" ]; then
-    dstatus envsync status=ok
-    dok ".env is up to date with template — no missing keys"
-    return 0
-  fi
-
-  dwarn "New keys in template not yet in .env — appending with placeholder values:"
-  local appended_any=0
-
-  # Append a section header
-  printf '\n# ── Added by deploy sync %s ────────────────────────────────────────────────────\n' \
-    "$(date '+%Y-%m-%d')" >> "$ENV_FILE"
-
-  # Walk the template line-by-line, output comment+key blocks for missing keys only
-  local pending_comments=""
+  # Load existing KEY=VALUE pairs into an associative array (raw values,
+  # quotes and all). First '=' is the separator.
+  declare -A existing_values
+  local existing_keys_list=""
   while IFS= read -r line; do
-    if [[ "$line" =~ ^[[:space:]]*$ ]]; then
-      pending_comments=""
-      continue
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      local k="${BASH_REMATCH[1]}"
+      local v="${BASH_REMATCH[2]}"
+      existing_values["$k"]="$v"
+      existing_keys_list+="${k}"$'\n'
     fi
-    if [[ "$line" =~ ^[[:space:]]*# ]]; then
-      pending_comments+="${line}"$'\n'
-      continue
-    fi
-    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+  done < "$ENV_FILE"
+
+  # Build the new .env in a temp file by walking the template.
+  local tmp_env="${ENV_FILE}.sync.$$"
+  : > "$tmp_env"
+
+  local template_keys_list=""
+  local carried_count=0
+  local new_keys=()
+  local placeholder_keys=()
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
       local key="${BASH_REMATCH[1]}"
-      if echo "$missing_keys" | grep -qx "$key"; then
-        # Write buffered comments then the key line from the template
-        [ -n "$pending_comments" ] && printf '%s' "$pending_comments" >> "$ENV_FILE"
-        echo "$line" >> "$ENV_FILE"
-        dwarn "  + $key (added from template — fill in a real value)"
-        appended_any=1
+      local template_value="${BASH_REMATCH[2]}"
+      template_keys_list+="${key}"$'\n'
+      if [ -n "${existing_values[$key]+x}" ]; then
+        printf '%s=%s\n' "$key" "${existing_values[$key]}" >> "$tmp_env"
+        carried_count=$((carried_count + 1))
+      else
+        printf '%s\n' "$line" >> "$tmp_env"
+        new_keys+=("$key")
+        placeholder_keys+=("$key")
       fi
-      pending_comments=""
+    else
+      # Comment, blank line, section header — copy verbatim from template
+      printf '%s\n' "$line" >> "$tmp_env"
     fi
   done < "$ENV_TEMPLATE"
 
-  if [ "$appended_any" -eq 1 ]; then
-    dstatus envsync status=keys-added reason=action-required
+  # Detect dropped keys (in old .env but no longer in template)
+  local dropped_keys=()
+  while IFS= read -r k; do
+    [ -z "$k" ] && continue
+    if ! printf '%s' "$template_keys_list" | grep -qx "$k"; then
+      dropped_keys+=("$k")
+    fi
+  done <<< "$existing_keys_list"
+
+  # If nothing would change (no new, no dropped) we still rebuild — the
+  # template may have re-ordered or re-commented sections — but only swap
+  # the file if it actually differs, to avoid noisy timestamps.
+  if cmp -s "$tmp_env" "$ENV_FILE"; then
+    rm -f "$tmp_env"
+    dstatus envsync status=ok carried="$carried_count"
+    dok ".env already matches template structure — no changes needed"
+    return 0
+  fi
+
+  # Back up the old .env, then atomically replace.
+  local backup="${ENV_FILE}.bak-$(date '+%Y%m%d-%H%M%S')"
+  cp "$ENV_FILE" "$backup"
+  mv "$tmp_env" "$ENV_FILE"
+
+  dok "Rebuilt $ENV_FILE from template (backup: $backup)"
+  dlog "  carried over: $carried_count keys"
+  if [ "${#new_keys[@]}" -gt 0 ]; then
+    dwarn "  new keys (template default in place — review and set real values):"
+    local k
+    for k in "${new_keys[@]}"; do
+      dwarn "    + $k"
+    done
+  fi
+  if [ "${#dropped_keys[@]}" -gt 0 ]; then
+    dlog "  dropped keys (not in template — preserved only in backup):"
+    local k
+    for k in "${dropped_keys[@]}"; do
+      dlog "    - $k"
+    done
+  fi
+
+  if [ "${#placeholder_keys[@]}" -gt 0 ]; then
+    dstatus envsync status=keys-added carried="$carried_count" added="${#new_keys[@]}" dropped="${#dropped_keys[@]}" reason=action-required
     dwarn ""
     dwarn "  Action required: edit $ENV_FILE and set the new vars above before re-running."
-    # Treat missing-but-appended keys as a deploy blocker only if they are in REQUIRED_VARS.
-    # validate_env will catch them; we warn here so the operator sees the specific list first.
     return 1
   fi
 
+  dstatus envsync status=rebuilt carried="$carried_count" added=0 dropped="${#dropped_keys[@]}"
   return 0
 }
 
