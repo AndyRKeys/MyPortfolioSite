@@ -11,8 +11,12 @@
 # Prod: called by switch-branch.sh then prod-deploy.ps1
 #
 # Usage:
-#   deploy.sh --env dev  [branch] [--skip-regression] [--quiet]
-#   deploy.sh --env prod [--rollback <sha>] [--skip-regression] [--quiet]
+#   deploy.sh --env dev  [branch] [--skip-regression] [--quiet] [--dry-run]
+#   deploy.sh --env prod [--rollback <sha>] [--skip-regression] [--quiet] [--dry-run]
+#
+# --dry-run: runs all pre-flight checks (env validation, certs, nginx config,
+#            disk space) then prints what would be deployed and exits without
+#            rebuilding containers or running tests.
 
 set -euo pipefail
 
@@ -23,6 +27,7 @@ BRANCH=""
 ROLLBACK_SHA=""
 SKIP_REGRESSION=0
 DEPLOY_QUIET=0
+DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --rollback)        ROLLBACK_SHA="$2"; shift 2 ;;
     --skip-regression) SKIP_REGRESSION=1; shift ;;
     --quiet)           DEPLOY_QUIET=1; shift ;;
+    --dry-run)         DRY_RUN=1; shift ;;
     --*)               shift ;;
     *)
       # Positional arg: branch name (dev passes branch as first positional arg)
@@ -42,8 +48,13 @@ export DEPLOY_QUIET
 
 if [ -z "$DEPLOY_ENV" ]; then
   echo "[ERROR] --env <dev|prod> is required" >&2
-  echo "Usage: deploy.sh --env dev  [branch] [--skip-regression] [--quiet]" >&2
-  echo "       deploy.sh --env prod [--rollback <sha>] [--skip-regression] [--quiet]" >&2
+  echo "Usage: deploy.sh --env dev  [branch] [--skip-regression] [--quiet] [--dry-run]" >&2
+  echo "       deploy.sh --env prod [--rollback <sha>] [--skip-regression] [--quiet] [--dry-run]" >&2
+  exit 1
+fi
+
+if [ "$DRY_RUN" = "1" ] && [ -n "$ROLLBACK_SHA" ]; then
+  echo "[ERROR] --dry-run and --rollback cannot be used together" >&2
   exit 1
 fi
 
@@ -315,6 +326,29 @@ fi
 check_nginx_config "$NGINX_SERVICE"
 
 check_disk_space
+
+# ── Dry-run exit ──────────────────────────────────────────────────────────────
+# All pre-flight checks have passed. In dry-run mode, print what would be
+# deployed and exit without touching containers or running any tests.
+
+if [ "$DRY_RUN" = "1" ]; then
+  dsection "Dry-run complete — pre-flight checks passed"
+  dstatus dry-run status=ok env="$DEPLOY_ENV" branch="$BRANCH" sha="${NEW_SHA:0:7}"
+  dok "All pre-flight checks passed. Would deploy:"
+  dinfo "  env:          $DEPLOY_ENV"
+  dinfo "  branch:       $BRANCH"
+  dinfo "  commit:       ${NEW_SHA:0:7}"
+  dinfo "  compose file: $COMPOSE_FILE"
+  dinfo "  service:      $BACKEND_SERVICE"
+  dinfo "  health URL:   $HEALTH_URL"
+  [ "$RUN_VITEST"       = "1" ] && dinfo "  vitest:       would run after health check"
+  [ "$RUN_ERROR_LOGGER" = "1" ] && dinfo "  error-logger: would run after vitest"
+  [ "$SKIP_REGRESSION"  = "0" ] && dinfo "  regression:   would run smoke tests"
+  dinfo ""
+  dinfo "Re-run without --dry-run to perform the actual deploy."
+  print_deploy_status "DRY RUN" "$DEPLOY_ENV"
+  exit 0
+fi
 
 compose_up_with_rollback "$BACKEND_SERVICE"
 

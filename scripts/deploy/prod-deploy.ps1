@@ -12,15 +12,21 @@ param(
     [string]$Hostname = 'ak-home-server',
     [string]$Rollback = '',
     [bool]$SkipRegression = $false,
-    [bool]$Quiet = $false
+    [bool]$Quiet = $false,
+    [bool]$DryRun = $false
 )
 
-Write-Host "Deploying main to prod server..." -ForegroundColor Green
+if ($DryRun) {
+    Write-Host "Dry-run: checking pre-flights for main on prod server..." -ForegroundColor Cyan
+} else {
+    Write-Host "Deploying main to prod server..." -ForegroundColor Green
+}
 
 $flags = @()
 if ($Rollback)       { $flags += "--rollback $Rollback" }
 if ($SkipRegression) { $flags += '--skip-regression' }
 if ($Quiet)          { $flags += '--quiet' }
+if ($DryRun)         { $flags += '--dry-run' }
 $flagStr = $flags -join ' '
 
 $remoteCommand = @"

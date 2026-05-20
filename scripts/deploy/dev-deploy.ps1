@@ -7,7 +7,8 @@ param(
     [string]$Hostname = 'ak-home-server',
     [string]$Branch = '',
     [bool]$SkipRegression = $false,
-    [bool]$Quiet = $true
+    [bool]$Quiet = $true,
+    [bool]$DryRun = $false
 )
 
 # Detect current branch if not specified
@@ -16,11 +17,16 @@ if ([string]::IsNullOrEmpty($Branch)) {
     Write-Host "Detected branch: $Branch" -ForegroundColor Cyan
 }
 
-Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
+if ($DryRun) {
+    Write-Host "Dry-run: checking pre-flights for branch '$Branch' on dev server..." -ForegroundColor Cyan
+} else {
+    Write-Host "Deploying branch '$Branch' to dev server..." -ForegroundColor Green
+}
 
 $flags = @()
 if ($SkipRegression) { $flags += '--skip-regression' }
 if ($Quiet)          { $flags += '--quiet' }
+if ($DryRun)         { $flags += '--dry-run' }
 $flagStr = $flags -join ' '
 
 $remoteCommand = @"
