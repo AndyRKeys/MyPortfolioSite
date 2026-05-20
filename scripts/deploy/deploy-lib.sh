@@ -635,9 +635,14 @@ migrate_env_values() {
       target=$(head -n1 <<< "$available_services")
     fi
 
-    dwarn "$key='$current' is not a service in $COMPOSE_FILE"
-    dwarn "  available services: $(tr '\n' ' ' <<< "$available_services")"
-    dwarn "  suggested value: '$target'"
+    # In auto-yes mode the per-key chatter is informational only (status
+    # line still records the migration); demote to dinfo so quiet mode
+    # stays quiet. Otherwise the operator needs to see it — use dwarn.
+    local _say
+    if [ "$interactive" = "2" ]; then _say=dinfo; else _say=dwarn; fi
+    $_say "$key='$current' is not a service in $COMPOSE_FILE"
+    $_say "  available services: $(tr '\n' ' ' <<< "$available_services")"
+    $_say "  suggested value: '$target'"
 
     local do_update=0
     case "$interactive" in
