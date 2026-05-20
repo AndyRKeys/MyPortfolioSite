@@ -1,5 +1,6 @@
 # Trigger a dev server deploy from Windows via SSH.
-# Connects to the Ubuntu Server and runs dev-deploy.sh (which includes regression tests).
+# Connects to the Ubuntu Server, switches to the requested branch via
+# switch-branch.sh, then runs deploy.sh --env dev.
 #
 # Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression $true] [-Quiet $true]
 param(
@@ -30,7 +31,7 @@ if [ ! -d "`$DEV_REPO/.git" ]; then
     git clone "`$REPO_URL" "`$DEV_REPO"
 fi
 bash "`$DEV_REPO/scripts/deploy/switch-branch.sh" "`$BRANCH" "`$DEV_REPO"
-bash "`$DEV_REPO/scripts/deploy/dev-deploy.sh" "`$BRANCH" $flagStr
+bash "`$DEV_REPO/scripts/deploy/deploy.sh" --env dev "`$BRANCH" $flagStr
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings

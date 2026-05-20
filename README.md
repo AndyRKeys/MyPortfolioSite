@@ -196,13 +196,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deploy.sh`, which:
-1. Fetches and lists what changed
-2. Pulls the latest code
-3. Pulls the target branch and rebuilds images
-4. Re-runs `backend/db/schema.sql` (idempotent — `IF NOT EXISTS`)
-5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
-6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
+This SSHs into the server (`ak-home-server`), runs `switch-branch.sh main` to update the working tree, then runs `deploy.sh --env prod`, which:
+1. Validates `.env` and checks prerequisites
+2. Builds and restarts containers via `docker compose -f docker-compose.prod.yml up -d --build`
+3. Runs health checks and rolls back automatically on failure
+4. Runs regression smoke tests and reports the outcome
 
 ### What needs a restart?
 
@@ -250,8 +248,11 @@ scripts/
 │   ├── debug-network.sh    Network diagnostics helper
 │   └── watch-logs.sh       Tail multiple log streams
 ├── deploy/
-│   ├── prod-deploy.sh      Smart deploy — runs on the server, detects what changed
-│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
+│   ├── deploy.sh           Unified deploy script — env-aware via --env dev|prod
+│   ├── deploy-lib.sh       Shared helpers (logging, health checks, rollback, etc.)
+│   ├── switch-branch.sh    Updates repo to a branch before deploy runs
+│   ├── dev-deploy.ps1      Trigger dev deploy from Windows via SSH
+│   ├── prod-deploy.ps1     Trigger prod deploy from Windows via SSH
 │   ├── pi-setup.sh         Full server setup from scratch
 │   ├── install-monitor.sh  Install monitoring tooling
 │   ├── monitor.sh          Runtime monitoring script

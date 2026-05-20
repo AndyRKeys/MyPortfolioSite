@@ -106,7 +106,7 @@ Pipe any command through `Tee-Object` to write output to a timestamped file **an
 
 ### Regression smoke tests
 
-Regression tests run automatically at the end of every deploy (inside `dev-deploy.sh` / `prod-deploy.sh`). They are defined in `scripts/tests/test-regression.sh` and execute on the server against the live site. On failure, each test prints `[FAIL] <name> — Expected N got M | body: ...` or `| curl error: ...` for connection-level failures.
+Regression tests run automatically at the end of every deploy (inside `deploy.sh`). They are defined in `scripts/tests/test-regression.sh` and execute on the server against the live site. On failure, each test prints `[FAIL] <name> — Expected N got M | body: ...` or `| curl error: ...` for connection-level failures.
 
 To skip regression tests during a quick iteration deploy, or suppress verbose step output:
 

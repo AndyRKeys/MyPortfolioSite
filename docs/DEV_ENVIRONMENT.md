@@ -42,7 +42,8 @@ If your home network uses a `10.x.x.x` subnet, adjust the range accordingly.
 **From the server directly:**
 
 ```bash
-bash ~/MyPortfolioSite-dev/scripts/deploy/dev-deploy.sh
+bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite-dev
+bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev dev
 ```
 
 ### What happens on the first run
@@ -90,7 +91,8 @@ Whenever you want to pull the latest `dev` branch to the server, run the same co
 
 ```bash
 # From the server
-bash ~/MyPortfolioSite-dev/scripts/deploy/dev-deploy.sh
+bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite-dev
+bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev dev
 ```
 
 Logs are written to `~/dev-deploy.log` on the server.
