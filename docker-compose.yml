@@ -25,7 +25,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: dev
     environment:
       PORT: ${PORT:-8080}
       DB_HOST: postgres

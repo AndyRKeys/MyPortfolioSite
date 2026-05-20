@@ -110,8 +110,8 @@ case "$DEPLOY_ENV" in
     RUN_LAN_IP_DETECT=0  # prod uses a public domain (DOMAIN), not a LAN IP
     RUN_UFW_CHECK=0      # prod is public on 443; UFW is managed separately, not per-deploy
     RUN_DEV_CERTS=0      # prod uses Let's Encrypt certs managed by certbot, not self-signed
-    RUN_VITEST=0         # prod image built with --omit=dev; vitest is not installed
-    RUN_ERROR_LOGGER=0   # puppeteer devDependency; not present in prod image
+    RUN_VITEST=1         # unified image includes devDependencies; run tests post-deploy on prod too
+    RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger on prod too
     RUN_DDNS_CHECK=1     # prod is public; verify DNS points to this server before deploying
     RUN_UPLOADS_DIR=1    # prod bind-mounts ~/MyPortfolioSite/uploads; must exist on the host
     ;;

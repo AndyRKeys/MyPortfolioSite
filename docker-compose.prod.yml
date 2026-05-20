@@ -2,7 +2,7 @@
 # Usage: docker compose -f docker-compose.prod.yml up -d --build
 #
 # Differences from docker-compose.yml (dev):
-#   - Backend uses prod build target (no devDependencies)
+#   - Backend uses the same unified image as dev (includes devDependencies, Chromium)
 #   - No source code bind mounts — image contains built code
 #   - Named volume for uploads (persists across deployments)
 #   - Nginx listens on 443 with SSL certs from host Certbot
@@ -38,7 +38,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: prod
     restart: unless-stopped
     environment:
       PORT: ${PORT:-8080}
