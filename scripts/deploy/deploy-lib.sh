@@ -721,11 +721,14 @@ check_nginx_config() {
   # volume mounts, so template substitution and cert paths are tested for real.
   # Capture output so we can surface it inline on failure (in non-verbose mode
   # _log_cmd only writes to the log file, hiding the real error from the operator).
-  local nginx_output nginx_status
-  nginx_output=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t 2>&1)
-  nginx_status=$?
+  local nginx_output nginx_failed=0
+  # Wrap in `if` so set -e doesn't abort on a non-zero exit before we capture
+  # and surface the output.
+  if ! nginx_output=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t 2>&1); then
+    nginx_failed=1
+  fi
   echo "$nginx_output" | _log_cmd
-  if [ "$nginx_status" -ne 0 ]; then
+  if [ "$nginx_failed" -eq 1 ]; then
     dstatus nginx status=failed reason=config-test-failed
     dfail ""
     dfail "Nginx config test failed. Common causes:"
