@@ -345,11 +345,27 @@ ensure_env_file() {
 }
 
 load_env() {
-  # Export only KEY=VALUE lines, ignore comments
-  set -a
-  # shellcheck disable=SC1090
-  source <(grep -E '^[A-Z_]+=.' "$ENV_FILE" | grep -v '^#') 2>/dev/null || true
-  set +a
+  # Parse .env line-by-line and export each KEY=VALUE directly. Going via
+  # `source` would treat values as bash code, so any unescaped paren, space,
+  # `$`, backtick, or quote in a password/display name would break the parse
+  # and silently drop every variable after it. Reading raw lines avoids that
+  # entirely — values are taken verbatim, exactly as written in .env.
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Skip blanks and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Match KEY=VALUE (key must be uppercase/underscore/digit, value is rest of line)
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+      # Strip a single matched pair of surrounding quotes (single or double) —
+      # common dotenv convention. Unmatched quotes are left intact.
+      if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
 }
 
 # Print the current .env with secret values masked.
