@@ -8,7 +8,8 @@ param(
     [string]$Branch = '',
     [bool]$SkipRegression = $false,
     [bool]$Quiet = $true,
-    [bool]$DryRun = $false
+    [bool]$DryRun = $false,
+    [bool]$AutoYes = $true
 )
 
 # Detect current branch if not specified
@@ -27,6 +28,7 @@ $flags = @()
 if ($SkipRegression) { $flags += '--skip-regression' }
 if ($Quiet)          { $flags += '--quiet' }
 if ($DryRun)         { $flags += '--dry-run' }
+if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
 $remoteCommand = @"

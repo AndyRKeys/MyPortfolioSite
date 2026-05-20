@@ -608,8 +608,14 @@ migrate_env_values() {
     return 0
   fi
 
+  # Auto-yes (set by --auto-yes / -AutoYes from the PS1 wrapper) accepts every
+  # suggested migration without prompting. Otherwise prompt only on a real TTY.
   local interactive=0
-  [ -t 0 ] && interactive=1
+  if [ "${AUTO_YES:-0}" = "1" ]; then
+    interactive=2  # auto-accept
+  elif [ -t 0 ]; then
+    interactive=1
+  fi
 
   local migrated=0 flagged=0
   local key
@@ -634,16 +640,23 @@ migrate_env_values() {
     dwarn "  suggested value: '$target'"
 
     local do_update=0
-    if [ "$interactive" = "1" ]; then
-      printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$target" "$ENV_FILE"
-      local reply
-      read -r reply
-      case "$reply" in
-        ''|y|Y|yes|YES) do_update=1 ;;
-      esac
-    else
-      dwarn "  non-interactive run — set $key=$target in $ENV_FILE before re-running"
-    fi
+    case "$interactive" in
+      2)  # --auto-yes: accept without prompting
+        dinfo "  auto-accepting (--auto-yes): $key → '$target'"
+        do_update=1
+        ;;
+      1)  # interactive TTY: prompt
+        printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$target" "$ENV_FILE"
+        local reply
+        read -r reply
+        case "$reply" in
+          ''|y|Y|yes|YES) do_update=1 ;;
+        esac
+        ;;
+      *)  # non-interactive, no auto-yes: warn and leave alone
+        dwarn "  non-interactive run — set $key=$target in $ENV_FILE before re-running (or pass --auto-yes)"
+        ;;
+    esac
 
     if [ "$do_update" = "1" ]; then
       if grep -qE "^${key}=" "$ENV_FILE"; then

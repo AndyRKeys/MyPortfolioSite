@@ -28,6 +28,7 @@ ROLLBACK_SHA=""
 SKIP_REGRESSION=0
 DEPLOY_QUIET=0
 DRY_RUN=0
+AUTO_YES=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --skip-regression) SKIP_REGRESSION=1; shift ;;
     --quiet)           DEPLOY_QUIET=1; shift ;;
     --dry-run)         DRY_RUN=1; shift ;;
+    --auto-yes|--yes)  AUTO_YES=1; shift ;;
     --*)               shift ;;
     *)
       # Positional arg: branch name (dev passes branch as first positional arg)
@@ -44,7 +46,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-export DEPLOY_QUIET
+export DEPLOY_QUIET AUTO_YES
 
 if [ -z "$DEPLOY_ENV" ]; then
   echo "[ERROR] --env <dev|prod> is required" >&2
