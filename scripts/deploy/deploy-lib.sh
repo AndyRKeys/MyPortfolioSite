@@ -1265,7 +1265,15 @@ test_csp_reporting() {
     curl_opts="-s"
   fi
 
-  local csp_header=$(curl $curl_opts -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
+  # The dev server can't reach its own public hostname (no hairpin NAT),
+  # so without --resolve the curl times out silently and we wrongly report
+  # CSP as missing. Force hostname → LAN_IP when LAN_IP is set (dev).
+  local resolve_opt=""
+  if [ -n "${LAN_IP:-}" ] && [ -n "${SITE_HOST:-}" ]; then
+    resolve_opt="--resolve ${SITE_HOST}:${NGINX_PORT}:${LAN_IP}"
+  fi
+
+  local csp_header=$(curl $curl_opts $resolve_opt -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
 
   if [ -n "$csp_header" ]; then
     if echo "$csp_header" | grep -q "report-uri"; then
