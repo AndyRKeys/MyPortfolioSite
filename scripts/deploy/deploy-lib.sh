@@ -686,6 +686,91 @@ migrate_env_values() {
   fi
 }
 
+# Tear down any compose stacks that this codebase used to use under a
+# different COMPOSE_PROJECT_NAME. `docker compose up --remove-orphans` only
+# cleans orphans within the current project, so containers from earlier
+# project names (e.g. myportfoliosite-dev before the compose unification)
+# linger forever, holding ports and confusing nginx/backend dependency
+# resolution. Detect them via `docker compose ls -a` and tear them down.
+cleanup_stale_compose_projects() {
+  dsection "Phase 3d: cleaning up stale compose stacks"
+
+  # Project names this codebase has used historically. The currently-active
+  # COMPOSE_PROJECT_NAME is filtered out before any teardown so we never
+  # nuke the live stack.
+  # Names from before the compose unification (#300). Do NOT add the
+  # current dev/prod project names here — both dev and prod run on the
+  # same host and must coexist.
+  local known_stale_projects=(
+    myportfoliosite
+    myportfoliosite-dev
+  )
+
+  local active_projects
+  if ! active_projects=$(docker compose ls -a --format json 2>/dev/null \
+        | grep -oE '"Name":"[^"]+"' | cut -d'"' -f4 | sort -u); then
+    dstatus stalecleanup status=skipped reason=compose-ls-failed
+    dwarn "Could not list compose projects — skipping stale-stack cleanup"
+    return 0
+  fi
+
+  local interactive=0
+  if [ "${AUTO_YES:-0}" = "1" ]; then
+    interactive=2
+  elif [ -t 0 ]; then
+    interactive=1
+  fi
+
+  local stale_found=()
+  local proj
+  for proj in "${known_stale_projects[@]}"; do
+    # Never tear down the project this deploy is running as.
+    [ "$proj" = "${COMPOSE_PROJECT_NAME:-}" ] && continue
+    if grep -qx "$proj" <<< "$active_projects"; then
+      stale_found+=("$proj")
+    fi
+  done
+
+  if [ "${#stale_found[@]}" -eq 0 ]; then
+    dstatus stalecleanup status=ok stale=0
+    dok "No stale compose stacks present"
+    return 0
+  fi
+
+  local _say
+  if [ "$interactive" = "2" ]; then _say=dinfo; else _say=dwarn; fi
+  $_say "Found ${#stale_found[@]} stale compose stack(s): ${stale_found[*]}"
+  $_say "  These predate the compose unification (COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-?})"
+  $_say "  and will block ports / confuse dependency resolution if left running."
+
+  local removed=0
+  for proj in "${stale_found[@]}"; do
+    local do_remove=0
+    case "$interactive" in
+      2) dinfo "  auto-accepting (--auto-yes): tearing down project '$proj'"
+         do_remove=1 ;;
+      1) printf "  Tear down compose project '%s'? [Y/n] " "$proj"
+         local reply
+         read -r reply
+         case "$reply" in
+           ''|y|Y|yes|YES) do_remove=1 ;;
+         esac ;;
+      *) dwarn "  non-interactive run — manually run: docker compose -p $proj down --remove-orphans" ;;
+    esac
+
+    if [ "$do_remove" = "1" ]; then
+      if docker compose -p "$proj" down --remove-orphans 2>&1 | _log_cmd; then
+        removed=$((removed + 1))
+        dok "  $proj torn down"
+      else
+        dwarn "  failed to tear down $proj — may need manual cleanup"
+      fi
+    fi
+  done
+
+  dstatus stalecleanup status=cleaned stale="${#stale_found[@]}" removed="$removed"
+}
+
 # Interactively prompt the operator for any REQUIRED_VARS that are still empty or
 # contain placeholder values. Only runs when stdin is a TTY (not in CI or piped
 # deploys). Writes updated values directly to ENV_FILE so validate_env sees them.
