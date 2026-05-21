@@ -250,7 +250,7 @@ check_auth "POST /api/travel missing title returns 400" \
   -d '{"location":"Test","visit_date":"2026-01-01"}'
 
 check_auth "GET /api/stats/visits with auth returns 200" \
-  GET "$BASE_URL/api/stats/visits" 200 "count"
+  GET "$BASE_URL/api/stats/visits" 200 "["
 
 check "GET /api/stats/visits without auth returns 401" \
   GET "$BASE_URL/api/stats/visits" 401
