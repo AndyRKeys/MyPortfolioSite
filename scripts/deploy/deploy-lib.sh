@@ -1236,12 +1236,16 @@ test_error_logger_all_pages() {
   dinfo "Running comprehensive page coverage test..."
   dinfo "  Testing all pages for error-logger deployment"
 
-  # Run comprehensive test inside the backend container
-  if docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
+  # Run comprehensive test inside the backend container — capture output and
+  # surface it inline so failures are visible without SSHing to read the log.
+  local test_output
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then
     dstatus error-logger status=ok
     dok "Error logger site-wide test passed ✓"
   else
     dstatus error-logger status=failed
+    dwarn "Error logger test output:"
+    echo "$test_output" | tee -a "$LOG_FILE"
     dwarn "Error logger site-wide test failed or had warnings — see log above"
   fi
 }
