@@ -982,7 +982,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -993,7 +994,8 @@ _do_rollback() {
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
     git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -1002,7 +1004,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -1068,9 +1071,12 @@ compose_up_with_rollback() {
     done <<< "$running_services"
   fi
 
-  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --force-recreate --remove-orphans"
+  dinfo "Stopping existing stack before rebuild..."
+  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | _log_cmd || true
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --remove-orphans 2>&1 | _log_cmd; then
+  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
+
+  if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | _log_cmd; then
     dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
