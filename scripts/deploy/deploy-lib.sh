@@ -1189,7 +1189,7 @@ wait_for_health() {
 
       _do_rollback "health check timed out"
 
-      ddie "Deploy failed — see log at $LOG_FILE"
+      ddie "Deploy failed — health check timed out after ${timeout}s"
     fi
 
     dinfo "  attempt $i/$attempts — not ready yet, retrying in ${interval}s..."
@@ -1246,7 +1246,7 @@ test_error_logger_all_pages() {
     dstatus error-logger status=failed
     dwarn "Error logger test output:"
     echo "$test_output" | tee -a "$LOG_FILE"
-    dwarn "Error logger site-wide test failed or had warnings — see log above"
+    dwarn "Error logger site-wide test failed — output above"
   fi
 }
 
