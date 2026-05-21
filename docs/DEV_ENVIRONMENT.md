@@ -43,7 +43,7 @@ If your home network uses a `10.x.x.x` subnet, adjust the range accordingly.
 
 ```bash
 bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite-dev
-bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev dev
+bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev
 ```
 
 ### What happens on the first run
@@ -92,7 +92,7 @@ Whenever you want to pull the latest `dev` branch to the server, run the same co
 ```bash
 # From the server
 bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite-dev
-bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev dev
+bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev
 ```
 
 Logs are written to `~/dev-deploy.log` on the server.
@@ -103,16 +103,16 @@ Logs are written to `~/dev-deploy.log` on the server.
 
 ```bash
 # Check container status
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml ps
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev ps
 
 # View backend logs
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs -f backend-dev
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs -f backend
 
 # Stop dev environment (frees resources when not needed)
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml down
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev down
 
 # Restart backend only
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml restart backend-dev
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev restart backend
 ```
 
 ---
@@ -123,14 +123,14 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml restart ba
 
 The deploy script automatically dumps container logs on failure. To investigate manually:
 ```bash
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs --tail=50 backend-dev
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs --tail=20 postgres-dev
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs --tail=50 backend
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs --tail=20 postgres
 ```
 
 **Port 3001 not reachable from other LAN devices**
 ```bash
 sudo ufw status        # confirm the allow rule is present
-sudo lsof -i :3001     # confirm nginx-dev is listening
+sudo lsof -i :3001     # confirm nginx is listening
 ```
 
 **WebAuthn / passkey errors on the dev site**

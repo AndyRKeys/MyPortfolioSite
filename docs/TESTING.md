@@ -13,17 +13,17 @@ The dev server at `http://<LAN_IP>:3001` is the canonical test environment. Depl
 1. **Deploy your branch** to the dev server:
    ```powershell
    git checkout fix/your-issue
-   .\scripts\deploy\dev-server-deploy.ps1
+   .\scripts\deploy\dev-deploy.ps1
    ```
 
-2. **Test the feature** in a browser at `http://<LAN_IP>:3001`
+2. **Test the feature** in a browser at `https://<SITE_HOST>:3001`
    - Test the golden path (happy case)
    - Test error cases and edge conditions
    - Check for regressions in related features
 
 3. **View server logs** if something fails:
    ```bash
-   docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml logs -f backend-dev
+   docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml logs -f backend
    ```
 
 4. **If tests pass**, create a PR and merge to `dev`
@@ -34,8 +34,8 @@ This approach catches integration issues that unit tests cannot (database state,
 
 Dev and prod deploy scripts now run automated checks as part of every deployment to the server:
 
-- **Backend Vitest suite** runs inside the already-deployed container (`backend-dev` on dev, `backend` on prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
-- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<WEBAUTHN_HOST>:3001`, prod: `https://<DOMAIN>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
+- **Backend Vitest suite** runs inside the already-deployed container (`backend` on both dev and prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
+- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
 
 You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
@@ -126,8 +126,8 @@ To run them manually on the server:
 ```bash
 bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
   --base-url https://dev.andykeys.me:3001 \
-  --compose-file ~/MyPortfolioSite-dev/docker-compose.dev-server.yml \
-  --service backend-dev \
+  --compose-file ~/MyPortfolioSite-dev/docker-compose.yml \
+  --service backend \
   --insecure
 ```
 
@@ -141,9 +141,9 @@ Every deploy ends with a structured report block that collects all `[deploy:*]` 
 ╠════════════════════════════════════════════════════════════════════════════╣
 ║  [deploy:preflight] status=ok tools=docker git curl openssl                ║
 ║  [deploy:git] status=updated branch=feat/x pre=abc1234 sha=def5678         ║
-║  [deploy:compose] status=ok service=backend-dev                            ║
+║  [deploy:compose] status=ok service=backend                                ║
 ║  [deploy:health] status=ok url=https://dev.andykeys.me:3001/api/h… attem… ║
-║  [deploy:vitest] status=ok service=backend-dev                             ║
+║  [deploy:vitest] status=ok service=backend                                 ║
 ║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
 ║  [regression] status=OK passed=12 failed=0 skipped=0 total=12              ║
 ╚════════════════════════════════════════════════════════════════════════════╝
