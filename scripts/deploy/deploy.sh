@@ -295,9 +295,21 @@ if [ "$RUN_DEV_CERTS" = "1" ]; then
   ensure_dev_certs "$LAN_IP" "${SITE_HOST:-}"
 fi
 
-check_nginx_config "$NGINX_SERVICE"
+if ! check_nginx_config "$NGINX_SERVICE"; then
+  compose_up_with_rollback "$BACKEND_SERVICE" "nginx config test failed"
+  print_deploy_status "FAILED" "$DEPLOY_ENV"
+  exit 1
+fi
 
 check_disk_space
+
+# Port pre-flight: verify nginx ports are free before Docker tries to bind them.
+# Backend port is excluded — it is no longer bound to the host.
+if [ "${NGINX_PORT}" = "443" ]; then
+  check_port_availability 80 443 || { print_deploy_status "FAILED" "$DEPLOY_ENV"; exit 1; }
+else
+  check_port_availability "${NGINX_PORT}" || { print_deploy_status "FAILED" "$DEPLOY_ENV"; exit 1; }
+fi
 
 # ── Dry-run exit ──────────────────────────────────────────────────────────────
 # All pre-flight checks have passed. In dry-run mode, print what would be
@@ -330,6 +342,8 @@ compose_up_with_rollback "$BACKEND_SERVICE"
 wait_for_health "$BACKEND_SERVICE"
 
 log_deploy_summary "$DEPLOY_ENV"
+
+check_outlook_token "$BACKEND_SERVICE"
 
 # ── In-container test suite ───────────────────────────────────────────────────
 

@@ -937,7 +937,8 @@ check_nginx_config() {
     while IFS= read -r line; do
       dfail "  $line"
     done <<< "$nginx_output"
-    ddie "Fix the nginx config then re-run."
+    # Return rather than ddie so the caller can trigger rollback before exiting.
+    return 1
   fi
 
   dstatus nginx status=ok
@@ -1018,6 +1019,36 @@ _do_rollback() {
 
 # Warn if less than 1 GB free on the filesystem hosting REPO_DIR.
 # Docker image builds can fail silently when space runs out, so surface this early.
+check_port_availability() {
+  # Checks that all ports required by nginx are free on the host before Docker
+  # tries to bind them. Reports the holding process by name so the operator
+  # knows exactly what to kill. Backend port is intentionally excluded — it is
+  # no longer bound to the host (health checks go through nginx).
+  local ports=("$@")
+  local blocked=0
+
+  dsection "Pre-flight: port availability"
+
+  for port in "${ports[@]}"; do
+    local holder
+    # ss is available on all modern Ubuntu/Debian; grep the LISTEN state only.
+    holder=$(ss -tlnp 2>/dev/null | awk -v p=":${port} " '$0 ~ p {match($0, /users:\(\("[^"]+/, a); gsub(/users:\(\("|".*/, "", a[0]); print a[0]; exit}')
+    if [ -n "$holder" ]; then
+      dstatus port-check status=blocked port="$port" process="$holder"
+      dwarn "Port $port is already bound by: $holder"
+      blocked=1
+    else
+      dstatus port-check status=free port="$port"
+    fi
+  done
+
+  if [ "$blocked" -eq 1 ]; then
+    dfail "One or more required ports are in use. Free them before deploying."
+    dfail "Find the process: sudo lsof -i :<port>"
+    return 1
+  fi
+}
+
 check_disk_space() {
   local min_gb="${1:-1}"
   local min_kb=$(( min_gb * 1024 * 1024 ))
@@ -1351,6 +1382,28 @@ check_ddns_sync() {
 }
 
 # ── Structured deploy summary ─────────────────────────────────────────────────
+
+check_outlook_token() {
+  local backend_service="${1:-backend}"
+
+  # Grep the startup logs for the preflight result emitted by server.js.
+  # Non-blocking: a missing or invalid token is a warning, not a deploy failure.
+  local log_output
+  log_output=$(docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail=50 "$backend_service" 2>&1)
+
+  if echo "$log_output" | grep -q "\[startup:preflight\] Outlook OAuth2 not configured"; then
+    dstatus outlook status=skipped reason=not-configured
+  elif echo "$log_output" | grep -q "\[startup:preflight\] Outlook token invalid\|\[startup:preflight\] Outlook OAuth2 token invalid"; then
+    dstatus outlook status=warn reason=token-invalid
+    dwarn "Outlook OAuth2 token is invalid — magic link emails will not send."
+    dwarn "Refresh the token: node scripts/generate-outlook-refresh-token.js"
+  elif echo "$log_output" | grep -q "\[startup:preflight\] Outlook OAuth2 token valid"; then
+    dstatus outlook status=ok
+  else
+    dstatus outlook status=unknown reason=log-not-found
+    dwarn "Could not find Outlook preflight log line — check backend logs manually."
+  fi
+}
 
 log_deploy_summary() {
   local env_name="${1:-unknown}"
