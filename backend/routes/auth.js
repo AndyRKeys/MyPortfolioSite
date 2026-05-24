@@ -351,29 +351,35 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     }
 
     logger.info('[auth/email/send] Gate passed — looking up user in DB');
-    const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [
-      normalizedEmail,
-    ]);
 
-    logger.info({ rows: userResult.rows.length }, '[auth/email/send] DB lookup complete');
+    // Find or create the admin user. Magic links are gated to ADMIN_EMAIL above,
+    // so auto-creating here is safe and allows bootstrapping a fresh DB (e.g. dev
+    // environment) without needing to go through /setup/ first.
+    const upsertResult = await pool.query(
+      `INSERT INTO users (email, username)
+       VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+       RETURNING id, (xmax = 0) AS created`,
+      [normalizedEmail, normalizedEmail.split('@')[0]]
+    );
+    const userId = upsertResult.rows[0].id;
+    const wasCreated = upsertResult.rows[0].created;
 
-    if (userResult.rows.length) {
-      const token = uuidv4();
-      await pool.query(
-        `INSERT INTO email_tokens (user_id, token, expires_at)
-         VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
-        [userResult.rows[0].id, token]
+    logger.info({ wasCreated }, '[auth/email/send] User resolved');
+
+    const token = uuidv4();
+    await pool.query(
+      `INSERT INTO email_tokens (user_id, token, expires_at)
+       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
+      [userId, token]
+    );
+    logger.info('[auth/email/send] Token inserted — attempting email send');
+    await sendMagicLink(normalizedEmail, token).catch(err => {
+      logger.error(
+        { err },
+        '[auth/email/send] Failed to send magic link — check OUTLOOK_*/SMTP_* in .env'
       );
-      logger.info('[auth/email/send] Token inserted — attempting email send');
-      await sendMagicLink(normalizedEmail, token).catch(err => {
-        logger.error(
-          { err },
-          '[auth/email/send] Failed to send magic link — check OUTLOOK_*/SMTP_* in .env'
-        );
-      });
-    } else {
-      logger.info('[auth/email/send] No user found for this email — skipping send');
-    }
+    });
 
     // Deliberate anti-enumeration: always same response regardless of whether email exists
     res.json({ sent: true });
