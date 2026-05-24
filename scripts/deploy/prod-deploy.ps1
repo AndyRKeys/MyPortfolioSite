@@ -13,7 +13,8 @@ param(
     [string]$Rollback = '',
     [bool]$SkipRegression = $false,
     [bool]$Quiet = $false,
-    [bool]$DryRun = $false
+    [bool]$DryRun = $false,
+    [bool]$AutoYes = $false
 )
 
 if ($DryRun) {
@@ -27,6 +28,7 @@ if ($Rollback)       { $flags += "--rollback $Rollback" }
 if ($SkipRegression) { $flags += '--skip-regression' }
 if ($Quiet)          { $flags += '--quiet' }
 if ($DryRun)         { $flags += '--dry-run' }
+if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
 $remoteCommand = @"
