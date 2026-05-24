@@ -127,6 +127,14 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs --tail=20 postgres
 ```
 
+**JS/CSS files fail to load after a cert change or browser restart (Firefox)**
+
+Firefox applies self-signed cert exceptions per-origin but does not automatically extend them to sub-resource loads (JS, CSS). Symptom: the HTML page loads but scripts fail with "Loading failed for the module".
+
+Fix: navigate directly to `https://dev.andykeys.me:3001/resources/js/nav.js` in a new tab, accept the cert warning, then reload the page. You may need to repeat this after each browser restart.
+
+Permanent fix: import the cert into Firefox's certificate store — Preferences → Privacy & Security → Certificates → View Certificates → Import → select `scripts/config/certs/dev-server.crt`.
+
 **Port 3001 not reachable from other LAN devices**
 ```bash
 sudo ufw status        # confirm the allow rule is present
