@@ -937,7 +937,8 @@ check_nginx_config() {
     while IFS= read -r line; do
       dfail "  $line"
     done <<< "$nginx_output"
-    ddie "Fix the nginx config then re-run."
+    # Return rather than ddie so the caller can trigger rollback before exiting.
+    return 1
   fi
 
   dstatus nginx status=ok
@@ -982,8 +983,8 @@ _do_rollback() {
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
     # Roll back to a known-stable branch (e.g. dev or main) rather than a
@@ -994,8 +995,8 @@ _do_rollback() {
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
     # Same branch deploy: revert to the previous commit.
@@ -1004,8 +1005,8 @@ _do_rollback() {
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   else
     dstatus rollback reason="$reason" method=none status=no-rollback-available
@@ -1014,10 +1015,118 @@ _do_rollback() {
   fi
 }
 
+_poll_health() {
+  # Poll HEALTH_URL up to max_attempts times, returning 0 on first 200.
+  local max_attempts="${1:-12}" interval="${2:-5}"
+  local attempts=0
+  local curl_flags=()
+  [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_flags+=("--insecure")
+
+  while [ "$attempts" -lt "$max_attempts" ]; do
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" "${curl_flags[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
+    [ "$http_code" = "200" ] && return 0
+    attempts=$(( attempts + 1 ))
+    sleep "$interval"
+  done
+  return 1
+}
+
+_check_rollback_health() {
+  # Confirms the rollback is serving traffic. If not, escalates through
+  # increasingly aggressive recovery attempts before giving up.
+  #
+  # Level 1 — rollback already brought containers up; just poll health.
+  # Level 2 — no-cache rebuild: stale image layers may be the problem.
+  # Level 3 — docker system prune + rebuild: clears dangling images/networks.
+  #           Prod stops here. Dev only — never deletes named volumes (data safe).
+  # Manual  — all levels failed; print exact commands for operator.
+
+  dwarn "Checking rollback health at $HEALTH_URL ..."
+
+  if _poll_health 12 5; then
+    dstatus rollback-health status=ok level=1
+    dok "Rollback is live and healthy."
+    return 0
+  fi
+
+  # ── Level 2: no-cache rebuild ─────────────────────────────────────────────
+  dstatus rollback-health status=failed level=1
+  dwarn "Rollback unhealthy — escalating to level 2: no-cache image rebuild..."
+  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+  docker compose -f "$COMPOSE_FILE" up -d --build --no-cache 2>&1 | tee -a "$LOG_FILE" || true
+
+  if _poll_health 12 5; then
+    dstatus rollback-health status=ok level=2
+    dok "Recovered at level 2 (no-cache rebuild)."
+    return 0
+  fi
+
+  # ── Level 3: docker system prune + rebuild (dev only) ────────────────────
+  dstatus rollback-health status=failed level=2
+  if [ "${DEPLOY_ENV:-}" = "dev" ]; then
+    dwarn "Escalating to level 3: docker system prune + rebuild (dev only)..."
+    dwarn "This removes dangling images and networks — named volumes (data) are preserved."
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker system prune -f 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+
+    if _poll_health 12 5; then
+      dstatus rollback-health status=ok level=3
+      dok "Recovered at level 3 (system prune + rebuild)."
+      return 0
+    fi
+    dstatus rollback-health status=failed level=3
+  fi
+
+  # ── All levels exhausted — manual intervention required ───────────────────
+  dstatus rollback-health status=failed level=manual
+  dfail "All automated recovery attempts failed. Manual intervention required."
+  dfail ""
+  dfail "Diagnostic commands:"
+  dfail "  docker compose -f $COMPOSE_FILE logs --tail=50 ${BACKEND_SERVICE:-backend}"
+  dfail "  docker compose -f $COMPOSE_FILE logs --tail=30 ${NGINX_SERVICE:-nginx}"
+  dfail "  docker compose -f $COMPOSE_FILE ps"
+  dfail ""
+  dfail "To attempt a manual recovery:"
+  dfail "  docker compose -f $COMPOSE_FILE down --remove-orphans"
+  dfail "  docker compose -f $COMPOSE_FILE up -d --build"
+}
+
 # ── Disk space preflight ──────────────────────────────────────────────────────
 
 # Warn if less than 1 GB free on the filesystem hosting REPO_DIR.
 # Docker image builds can fail silently when space runs out, so surface this early.
+check_port_availability() {
+  # Checks that all ports required by nginx are free on the host before Docker
+  # tries to bind them. Reports the holding process by name so the operator
+  # knows exactly what to kill. Backend port is intentionally excluded — it is
+  # no longer bound to the host (health checks go through nginx).
+  local ports=("$@")
+  local blocked=0
+
+  dsection "Pre-flight: port availability"
+
+  for port in "${ports[@]}"; do
+    local holder
+    # ss is available on all modern Ubuntu/Debian; grep the LISTEN state only.
+    holder=$(ss -tlnp 2>/dev/null | awk -v p=":${port} " '$0 ~ p {match($0, /users:\(\("[^"]+/, a); gsub(/users:\(\("|".*/, "", a[0]); print a[0]; exit}')
+    if [ -n "$holder" ]; then
+      dstatus port-check status=blocked port="$port" process="$holder"
+      dwarn "Port $port is already bound by: $holder"
+      blocked=1
+    else
+      dstatus port-check status=free port="$port"
+    fi
+  done
+
+  if [ "$blocked" -eq 1 ]; then
+    dfail "One or more required ports are in use. Free them before deploying."
+    dfail "Find the process: sudo lsof -i :<port>"
+    return 1
+  fi
+}
+
 check_disk_space() {
   local min_gb="${1:-1}"
   local min_kb=$(( min_gb * 1024 * 1024 ))
@@ -1351,6 +1460,28 @@ check_ddns_sync() {
 }
 
 # ── Structured deploy summary ─────────────────────────────────────────────────
+
+check_outlook_token() {
+  local backend_service="${1:-backend}"
+
+  # Grep the startup logs for the preflight result emitted by server.js.
+  # Non-blocking: a missing or invalid token is a warning, not a deploy failure.
+  local log_output
+  log_output=$(docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail=50 "$backend_service" 2>&1)
+
+  if echo "$log_output" | grep -q "\[startup:preflight\] Outlook OAuth2 not configured"; then
+    dstatus outlook status=skipped reason=not-configured
+  elif echo "$log_output" | grep -q "\[startup:preflight\] Outlook token invalid\|\[startup:preflight\] Outlook OAuth2 token invalid"; then
+    dstatus outlook status=warn reason=token-invalid
+    dwarn "Outlook OAuth2 token is invalid — magic link emails will not send."
+    dwarn "Refresh the token: node scripts/generate-outlook-refresh-token.js"
+  elif echo "$log_output" | grep -q "\[startup:preflight\] Outlook OAuth2 token valid"; then
+    dstatus outlook status=ok
+  else
+    dstatus outlook status=unknown reason=log-not-found
+    dwarn "Could not find Outlook preflight log line — check backend logs manually."
+  fi
+}
 
 log_deploy_summary() {
   local env_name="${1:-unknown}"
