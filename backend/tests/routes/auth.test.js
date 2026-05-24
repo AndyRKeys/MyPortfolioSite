@@ -114,20 +114,22 @@ describe('POST /auth/email/send — magic link find-or-create', () => {
     delete process.env.SMTP_PASS;
   });
 
-  it('returns sent:true and skips DB when email does not match ADMIN_EMAIL', async () => {
+  it('returns sent:true and skips user/token DB calls when email does not match ADMIN_EMAIL', async () => {
     const { pool } = vi.mocked(await import('../../db/pool.js'));
+    // Rate limiter fires first (DB-backed), then the admin-email gate blocks — no user/token queries.
+    pool.query.mockResolvedValueOnce({ rows: [{ count: 1 }] }); // rate limiter
     const res = await request(app)
       .post('/auth/email/send')
       .send({ email: 'attacker@evil.com' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ sent: true });
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(pool.query).toHaveBeenCalledTimes(1); // only the rate limiter
   });
 
   it('creates user and issues token when no user exists (fresh DB)', async () => {
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    // upsert returns a newly created user
     pool.query
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] })                     // rate limiter
       .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: true }] })  // upsert
       .mockResolvedValueOnce({ rows: [] });                                  // token insert
     const res = await request(app)
@@ -135,20 +137,20 @@ describe('POST /auth/email/send — magic link find-or-create', () => {
       .send({ email: ADMIN });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ sent: true });
-    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(pool.query).toHaveBeenCalledTimes(3);
   });
 
   it('reuses existing user and issues token when user already exists', async () => {
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    // upsert returns the existing user (created=false)
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: false }] }) // upsert
-      .mockResolvedValueOnce({ rows: [] });                                  // token insert
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] })                      // rate limiter
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: false }] })  // upsert (existing)
+      .mockResolvedValueOnce({ rows: [] });                                   // token insert
     const res = await request(app)
       .post('/auth/email/send')
       .send({ email: ADMIN });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ sent: true });
-    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(pool.query).toHaveBeenCalledTimes(3);
   });
 });
