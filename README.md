@@ -217,7 +217,7 @@ The whole stack is containerised, so a deploy rebuilds and recreates the affecte
 
 ### Useful server commands
 
-> Both dev and prod use the unified `docker-compose.yml`. SSH into the server first, then run from the repo directory (`~/MyPortfolioSite-prod` for prod, `~/MyPortfolioSite-dev` for dev). The project is namespaced via `COMPOSE_PROJECT_NAME` in `.env` (`portfolio_prod` / `portfolio_dev`).
+> Both dev and prod use the unified `docker-compose.yml`. SSH into the server first, then run from the repo directory (`~/MyPortfolioSite` for prod, `~/MyPortfolioSite-dev` for dev). The project is namespaced via `COMPOSE_PROJECT_NAME` in `.env` (`portfolio_prod` / `portfolio_dev`).
 
 ```bash
 # Check backend logs

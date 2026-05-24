@@ -143,7 +143,7 @@ These checks apply regardless of environment:
 
   ```bash
   docker ps
-  # Prod (from ~/MyPortfolioSite-prod):
+  # Prod (from ~/MyPortfolioSite):
   docker compose ps
   # Dev (from ~/MyPortfolioSite-dev):
   docker compose ps
@@ -152,7 +152,7 @@ These checks apply regardless of environment:
 - **Logs:**
 
   ```bash
-  # Prod (from ~/MyPortfolioSite-prod):
+  # Prod (from ~/MyPortfolioSite):
   docker compose logs --tail=50 backend
   docker compose logs --tail=50 nginx
   # Dev (from ~/MyPortfolioSite-dev):

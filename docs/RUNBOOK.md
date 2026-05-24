@@ -43,7 +43,7 @@ SSH into the server first:
 
 ```bash
 ssh ak-home-server
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 ```
 
 Then:
@@ -70,7 +70,7 @@ On the server:
 
 ```bash
 # Prod stack
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 
 # Restart just backend
 docker compose restart backend
@@ -133,7 +133,7 @@ bash scripts/tests/test-regression.sh \
 On the server (prod stack, only if needed and safe):
 
 ```bash
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 bash scripts/tests/test-regression.sh \
   --base-url https://andykeys.me \
   --compose-file docker-compose.yml \
@@ -155,7 +155,7 @@ For a specific PR, run its PowerShell smoke test from Windows against dev (see *
 
 ```bash
 ssh ak-home-server
-docker compose -f ~/MyPortfolioSite-prod/docker-compose.yml logs backend --tail=50 | grep -i "auth/email\|invalid_grant\|oauth"
+docker compose -f ~/MyPortfolioSite/docker-compose.yml logs backend --tail=50 | grep -i "auth/email\|invalid_grant\|oauth"
 # Look for: invalid_grant or AADSTS700082
 ```
 
@@ -179,11 +179,11 @@ OUTLOOK_EMAIL=...
 
 ```bash
 ssh ak-home-server
-micro ~/MyPortfolioSite-prod/.env
+micro ~/MyPortfolioSite/.env
 # Update OUTLOOK_REFRESH_TOKEN (and OUTLOOK_CLIENT_SECRET if you rotated it)
 
 # Full restart required — `restart` alone doesn't reload .env
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 docker compose down
 docker compose up -d
 
@@ -214,7 +214,7 @@ On the server:
 
 ```bash
 # Check containers
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 docker compose ps
 
 # If nginx is missing or exited, check logs
@@ -235,7 +235,7 @@ If DNS/SSL is the issue (cert expired, host unreachable), follow **docs/INFRASTR
 Check backend logs while reproducing the error:
 
 ```bash
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 docker compose logs -f backend
 ```
 
