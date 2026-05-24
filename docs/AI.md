@@ -173,7 +173,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 
 **Test plan commands — mandatory rules:**
 - Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
-- Use the correct compose file and service name for the environment being tested (e.g. `docker-compose.dev-server.yml` with service `backend-dev` and `postgres-dev` for the dev server; `docker-compose.yml` with `backend`/`postgres` for local Docker).
+- Use the correct compose file and service name for the environment being tested: `docker-compose.yml` with services `backend` / `postgres` for both the dev server (project `portfolio_dev`) and prod (project `portfolio_prod`); `docker-compose.local.yml` with services `backend` / `postgres` for local laptop dev.
 - Add a **comment line above every command** (using `#`) that explains what the command does and why it matters for this specific PR — not just what the tool is, but what you are verifying.
 - Include the **expected output or outcome** after each command so the tester knows immediately whether it passed or failed.
 - Where a step would normally require waiting (e.g. token expiry), provide a DB command to simulate it rather than leaving the tester to wait.
@@ -470,7 +470,7 @@ When working with this project:
 - **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
-- **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
+- **Deployment:** Script-driven Docker Compose deploy (`switch-branch.sh` → `deploy.sh --env prod` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for server (`ak-home-server`) / container operations.
 - **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 

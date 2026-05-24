@@ -196,13 +196,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 .\scripts\deploy\prod-deploy.ps1
 ```
 
-This SSHs into the server (`ak-home-server`) and runs `scripts/deploy/prod-deploy.sh`, which:
-1. Fetches and lists what changed
-2. Pulls the latest code
-3. Pulls the target branch and rebuilds images
-4. Re-runs `backend/db/schema.sql` (idempotent — `IF NOT EXISTS`)
-5. Brings the stack up with `docker compose -f docker-compose.prod.yml up -d --build`
-6. Reports container status via `docker compose -f docker-compose.prod.yml ps`
+This SSHs into the server (`ak-home-server`), runs `switch-branch.sh main` to update the working tree, then runs `deploy.sh --env prod`, which:
+1. Validates `.env` and checks prerequisites
+2. Builds and restarts containers via `docker compose up -d --build` (unified `docker-compose.yml`, project `portfolio_prod`)
+3. Runs health checks and rolls back automatically on failure
+4. Runs regression smoke tests and reports the outcome
 
 ### What needs a restart?
 
@@ -219,20 +217,20 @@ The whole stack is containerised, so a deploy rebuilds and recreates the affecte
 
 ### Useful server commands
 
-> Prod uses `docker-compose.prod.yml`. SSH into the server first, then run from the repo directory.
+> Both dev and prod use the unified `docker-compose.yml`. SSH into the server first, then run from the repo directory (`~/MyPortfolioSite` for prod, `~/MyPortfolioSite-dev` for dev). The project is namespaced via `COMPOSE_PROJECT_NAME` in `.env` (`portfolio_prod` / `portfolio_dev`).
 
 ```bash
 # Check backend logs
-docker compose -f docker-compose.prod.yml logs --tail=50 backend
+docker compose logs --tail=50 backend
 
 # Check container status
-docker compose -f docker-compose.prod.yml ps
+docker compose ps
 
 # Restart the backend container
-docker compose -f docker-compose.prod.yml restart backend
+docker compose restart backend
 
 # Check Nginx (containerised — via Compose, not systemd)
-docker compose -f docker-compose.prod.yml logs --tail=50 nginx
+docker compose logs --tail=50 nginx
 
 # Renew SSL cert (also auto-renews via systemd timer)
 ssh <hostname> "sudo certbot renew"
@@ -250,8 +248,11 @@ scripts/
 │   ├── debug-network.sh    Network diagnostics helper
 │   └── watch-logs.sh       Tail multiple log streams
 ├── deploy/
-│   ├── prod-deploy.sh      Smart deploy — runs on the server, detects what changed
-│   ├── prod-deploy.ps1     Trigger deploy from Windows via SSH
+│   ├── deploy.sh           Unified deploy script — env-aware via --env dev|prod
+│   ├── deploy-lib.sh       Shared helpers (logging, health checks, rollback, etc.)
+│   ├── switch-branch.sh    Updates repo to a branch before deploy runs
+│   ├── dev-deploy.ps1      Trigger dev deploy from Windows via SSH
+│   ├── prod-deploy.ps1     Trigger prod deploy from Windows via SSH
 │   ├── pi-setup.sh         Full server setup from scratch
 │   ├── install-monitor.sh  Install monitoring tooling
 │   ├── monitor.sh          Runtime monitoring script

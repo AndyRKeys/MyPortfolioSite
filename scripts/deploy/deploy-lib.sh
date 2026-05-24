@@ -31,6 +31,17 @@
 #                      Falls back to PRE_SHA behaviour when ROLLBACK_BRANCH == BRANCH.
 #   LAST_GOOD_STATE_FILE — (optional) path to save/restore last successful deployment state
 #
+#   DEPLOY_ENV     — environment name (dev|prod); used by run_regression_tests
+#   SKIP_REGRESSION — set to 1 to skip regression smoke tests
+#   SITE_HOST      — canonical hostname (dev/prod) used by run_regression_tests + cert generation
+#   DOMAIN         — prod public domain used by run_regression_tests
+#   BACKEND_SERVICE — compose service name for the backend container
+#   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx-dev:3001)
+#   NGINX_PORT     — external nginx port; read from .env (3001 dev, 443 prod)
+#   CERT_MODE      — read from .env: self-signed | letsencrypt. Drives HEALTH_INSECURE,
+#                    cert auto-generation, and DDNS-sync checks.
+#   BACKUP_DIR     — read from .env: local directory where backups are written (#164)
+#
 # Optional, per-caller hooks:
 #   extra_env_checks() — function for additional env validation per environment
 
@@ -275,6 +286,21 @@ update_to_branch() {
   fi
 }
 
+# Record current HEAD as the deploy SHA without performing any git update.
+# Use when branch switching is handled by an external wrapper (e.g. switch-branch.sh).
+# Sets PRE_SHA and NEW_SHA so rollback logic has a valid reference.
+record_deploy_sha() {
+  dsection "Phase 2: recording deploy SHA (branch managed by wrapper)"
+
+  cd "$REPO_DIR"
+
+  PRE_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
+  NEW_SHA="$PRE_SHA"
+
+  dstatus git status=wrapper-managed branch="$BRANCH" sha="${NEW_SHA:0:7}"
+  dinfo "Branch update handled by wrapper — current HEAD: ${NEW_SHA:0:7}"
+}
+
 show_deployment_info() {
   dsection "Deployment details"
 
@@ -319,11 +345,27 @@ ensure_env_file() {
 }
 
 load_env() {
-  # Export only KEY=VALUE lines, ignore comments
-  set -a
-  # shellcheck disable=SC1090
-  source <(grep -E '^[A-Z_]+=.' "$ENV_FILE" | grep -v '^#') 2>/dev/null || true
-  set +a
+  # Parse .env line-by-line and export each KEY=VALUE directly. Going via
+  # `source` would treat values as bash code, so any unescaped paren, space,
+  # `$`, backtick, or quote in a password/display name would break the parse
+  # and silently drop every variable after it. Reading raw lines avoids that
+  # entirely — values are taken verbatim, exactly as written in .env.
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Skip blanks and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Match KEY=VALUE (key must be uppercase/underscore/digit, value is rest of line)
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+      # Strip a single matched pair of surrounding quotes (single or double) —
+      # common dotenv convention. Unmatched quotes are left intact.
+      if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
 }
 
 # Print the current .env with secret values masked.
@@ -359,13 +401,17 @@ redact_env() {
   done < "$file"
 }
 
-# Compare .env against the template and append any keys that are present in the
-# template but missing from the live .env. The appended block carries its
-# original template comments so the operator knows what each var does.
-# Returns 0 if .env was already complete, 1 if keys were added (operator must
-# fill in values before the next deploy succeeds).
+# Rebuild .env from the template, carrying over values for any keys still
+# present in the template. The template becomes the canonical structure
+# (ordering, comments, section headers); the operator's existing values are
+# preserved verbatim. Keys no longer in the template are dropped (but the
+# previous .env is timestamped and kept as a backup).
+#
+# Returns 0 if the rebuilt .env contains no template placeholders for new
+# keys, 1 if newly-introduced keys still hold their template default and
+# need the operator's attention.
 sync_env_from_template() {
-  dsection "Phase 3b: syncing .env against template"
+  dsection "Phase 3b: rebuilding .env from template"
 
   if [ -z "${ENV_TEMPLATE:-}" ]; then
     dstatus envsync status=skipped reason=no-template-var
@@ -378,64 +424,100 @@ sync_env_from_template() {
     return 0
   fi
 
-  # Keys already present in .env (only KEY lines, not comments)
-  local existing_keys
-  existing_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" | cut -d= -f1 | sort)
-
-  # Keys defined in the template
-  local template_keys
-  template_keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$ENV_TEMPLATE" | cut -d= -f1 | sort)
-
-  # Keys in template but not in .env
-  local missing_keys
-  missing_keys=$(comm -23 <(echo "$template_keys") <(echo "$existing_keys"))
-
-  if [ -z "$missing_keys" ]; then
-    dstatus envsync status=ok
-    dok ".env is up to date with template — no missing keys"
-    return 0
-  fi
-
-  dwarn "New keys in template not yet in .env — appending with placeholder values:"
-  local appended_any=0
-
-  # Append a section header
-  printf '\n# ── Added by deploy sync %s ────────────────────────────────────────────────────\n' \
-    "$(date '+%Y-%m-%d')" >> "$ENV_FILE"
-
-  # Walk the template line-by-line, output comment+key blocks for missing keys only
-  local pending_comments=""
+  # Load existing KEY=VALUE pairs into an associative array (raw values,
+  # quotes and all). First '=' is the separator.
+  declare -A existing_values
+  local existing_keys_list=""
   while IFS= read -r line; do
-    if [[ "$line" =~ ^[[:space:]]*$ ]]; then
-      pending_comments=""
-      continue
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      local k="${BASH_REMATCH[1]}"
+      local v="${BASH_REMATCH[2]}"
+      existing_values["$k"]="$v"
+      existing_keys_list+="${k}"$'\n'
     fi
-    if [[ "$line" =~ ^[[:space:]]*# ]]; then
-      pending_comments+="${line}"$'\n'
-      continue
-    fi
-    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+  done < "$ENV_FILE"
+
+  # Build the new .env in a temp file by walking the template.
+  local tmp_env="${ENV_FILE}.sync.$$"
+  : > "$tmp_env"
+
+  local template_keys_list=""
+  local carried_count=0
+  local new_keys=()
+  local placeholder_keys=()
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
       local key="${BASH_REMATCH[1]}"
-      if echo "$missing_keys" | grep -qx "$key"; then
-        # Write buffered comments then the key line from the template
-        [ -n "$pending_comments" ] && printf '%s' "$pending_comments" >> "$ENV_FILE"
-        echo "$line" >> "$ENV_FILE"
-        dwarn "  + $key (added from template — fill in a real value)"
-        appended_any=1
+      local template_value="${BASH_REMATCH[2]}"
+      template_keys_list+="${key}"$'\n'
+      # Carry over only if the existing value is non-empty. An empty
+      # ADMIN_EMAIL= in the old file is effectively unset, so fall back
+      # to the template default so validate_env / prompt_missing_vars can
+      # flag it as a placeholder rather than silently dropping the key.
+      if [ -n "${existing_values[$key]:-}" ]; then
+        printf '%s=%s\n' "$key" "${existing_values[$key]}" >> "$tmp_env"
+        carried_count=$((carried_count + 1))
+      else
+        printf '%s\n' "$line" >> "$tmp_env"
+        new_keys+=("$key")
+        placeholder_keys+=("$key")
       fi
-      pending_comments=""
+    else
+      # Comment, blank line, section header — copy verbatim from template
+      printf '%s\n' "$line" >> "$tmp_env"
     fi
   done < "$ENV_TEMPLATE"
 
-  if [ "$appended_any" -eq 1 ]; then
-    dstatus envsync status=keys-added reason=action-required
+  # Detect dropped keys (in old .env but no longer in template)
+  local dropped_keys=()
+  while IFS= read -r k; do
+    [ -z "$k" ] && continue
+    if ! printf '%s' "$template_keys_list" | grep -qx "$k"; then
+      dropped_keys+=("$k")
+    fi
+  done <<< "$existing_keys_list"
+
+  # If nothing would change (no new, no dropped) we still rebuild — the
+  # template may have re-ordered or re-commented sections — but only swap
+  # the file if it actually differs, to avoid noisy timestamps.
+  if cmp -s "$tmp_env" "$ENV_FILE"; then
+    rm -f "$tmp_env"
+    dstatus envsync status=ok carried="$carried_count"
+    dok ".env already matches template structure — no changes needed"
+    return 0
+  fi
+
+  # Back up the old .env, then atomically replace.
+  local backup="${ENV_FILE}.bak-$(date '+%Y%m%d-%H%M%S')"
+  cp "$ENV_FILE" "$backup"
+  mv "$tmp_env" "$ENV_FILE"
+
+  dok "Rebuilt $ENV_FILE from template (backup: $backup)"
+  dlog "  carried over: $carried_count keys"
+  if [ "${#new_keys[@]}" -gt 0 ]; then
+    dwarn "  new keys (template default in place — review and set real values):"
+    local k
+    for k in "${new_keys[@]}"; do
+      dwarn "    + $k"
+    done
+  fi
+  if [ "${#dropped_keys[@]}" -gt 0 ]; then
+    dlog "  dropped keys (not in template — preserved only in backup):"
+    local k
+    for k in "${dropped_keys[@]}"; do
+      dlog "    - $k"
+    done
+  fi
+
+  if [ "${#placeholder_keys[@]}" -gt 0 ]; then
+    dstatus envsync status=keys-added carried="$carried_count" added="${#new_keys[@]}" dropped="${#dropped_keys[@]}" reason=action-required
     dwarn ""
     dwarn "  Action required: edit $ENV_FILE and set the new vars above before re-running."
-    # Treat missing-but-appended keys as a deploy blocker only if they are in REQUIRED_VARS.
-    # validate_env will catch them; we warn here so the operator sees the specific list first.
     return 1
   fi
 
+  dstatus envsync status=rebuilt carried="$carried_count" added=0 dropped="${#dropped_keys[@]}"
   return 0
 }
 
@@ -477,11 +559,214 @@ validate_env() {
     for err in "${errors[@]}"; do
       dfail "  • $err"
     done
+    dfail ""
+    dfail "Current .env contents (secrets redacted) — for debugging:"
+    dfail "  file: $ENV_FILE"
+    redact_env "$ENV_FILE" | while IFS= read -r line; do
+      dfail "    $line"
+    done
     ddie "Fix the above .env issues then re-run."
   fi
 
   dstatus env status=ok
   dok "All required env vars set and valid."
+}
+
+# Detect .env values whose meaning has changed across template versions and
+# offer to update them. sync_env_from_template carries existing values
+# verbatim, so a variable like NGINX_SERVICE=nginx-dev (valid in the old
+# split compose files) survives into a world where the unified compose file
+# only knows a service called `nginx`. Each migration entry is the form
+#   KEY|expected_new_value|deprecated_regex|reason
+# If the live value matches the deprecated regex and differs from the
+# expected new value, prompt the operator (interactive) or warn loudly
+# (non-interactive) and update ENV_FILE in place. Call after load_env so
+# the exported vars and ENV_FILE both end up consistent.
+migrate_env_values() {
+  dsection "Phase 3c: checking for outdated .env values"
+
+  # Vars whose value must reference a real docker-compose service. If the
+  # current value isn't in the compose file's actual service list, the
+  # deploy will fail later with a confusing "no such service" — catch it
+  # here and offer to update .env to a service that does exist.
+  local service_vars=(NGINX_SERVICE BACKEND_SERVICE)
+  # Preferred replacement when the current value is wrong. Falls back to
+  # whatever service does exist if the preferred name isn't there either.
+  declare -A preferred=(
+    [NGINX_SERVICE]=nginx
+    [BACKEND_SERVICE]=backend
+  )
+
+  # Pull the list of services the unified compose file actually defines.
+  # docker compose config --services is the authoritative answer; if it
+  # fails (e.g. compose can't parse the file) we skip this check rather
+  # than block the deploy on a secondary signal.
+  local available_services
+  if ! available_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null); then
+    dstatus envmigrate status=skipped reason=compose-config-failed
+    dwarn "Could not list compose services — skipping .env migration check"
+    return 0
+  fi
+
+  # Auto-yes (set by --auto-yes / -AutoYes from the PS1 wrapper) accepts every
+  # suggested migration without prompting. Otherwise prompt only on a real TTY.
+  local interactive=0
+  if [ "${AUTO_YES:-0}" = "1" ]; then
+    interactive=2  # auto-accept
+  elif [ -t 0 ]; then
+    interactive=1
+  fi
+
+  local migrated=0 flagged=0
+  local key
+  for key in "${service_vars[@]}"; do
+    local current="${!key:-}"
+    [ -z "$current" ] && continue
+    # If the current value is a real service, nothing to do.
+    if grep -qx "$current" <<< "$available_services"; then
+      continue
+    fi
+
+    flagged=$((flagged + 1))
+    local target="${preferred[$key]}"
+    # If the preferred replacement isn't a real service either, pick the
+    # first available service as a last-resort suggestion.
+    if ! grep -qx "$target" <<< "$available_services"; then
+      target=$(head -n1 <<< "$available_services")
+    fi
+
+    # In auto-yes mode the per-key chatter is informational only (status
+    # line still records the migration); demote to dinfo so quiet mode
+    # stays quiet. Otherwise the operator needs to see it — use dwarn.
+    local _say
+    if [ "$interactive" = "2" ]; then _say=dinfo; else _say=dwarn; fi
+    $_say "$key='$current' is not a service in $COMPOSE_FILE"
+    $_say "  available services: $(tr '\n' ' ' <<< "$available_services")"
+    $_say "  suggested value: '$target'"
+
+    local do_update=0
+    case "$interactive" in
+      2)  # --auto-yes: accept without prompting
+        dinfo "  auto-accepting (--auto-yes): $key → '$target'"
+        do_update=1
+        ;;
+      1)  # interactive TTY: prompt
+        printf "  Update %s to '%s' in %s? [Y/n] " "$key" "$target" "$ENV_FILE"
+        local reply
+        read -r reply
+        case "$reply" in
+          ''|y|Y|yes|YES) do_update=1 ;;
+        esac
+        ;;
+      *)  # non-interactive, no auto-yes: warn and leave alone
+        dwarn "  non-interactive run — set $key=$target in $ENV_FILE before re-running (or pass --auto-yes)"
+        ;;
+    esac
+
+    if [ "$do_update" = "1" ]; then
+      if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${target}|" "$ENV_FILE"
+      else
+        printf '%s=%s\n' "$key" "$target" >> "$ENV_FILE"
+      fi
+      export "$key=$target"
+      migrated=$((migrated + 1))
+      dok "  $key updated to '$target'"
+    fi
+  done
+
+  if [ "$flagged" -eq 0 ]; then
+    dstatus envmigrate status=ok flagged=0
+    dok "No outdated .env values detected"
+  else
+    dstatus envmigrate status=migrated flagged="$flagged" migrated="$migrated"
+    if [ "$migrated" -lt "$flagged" ]; then
+      dwarn "$((flagged - migrated)) outdated value(s) left in place — deploy will likely fail downstream."
+    fi
+  fi
+}
+
+# Tear down any compose stacks that this codebase used to use under a
+# different COMPOSE_PROJECT_NAME. `docker compose up --remove-orphans` only
+# cleans orphans within the current project, so containers from earlier
+# project names (e.g. myportfoliosite-dev before the compose unification)
+# linger forever, holding ports and confusing nginx/backend dependency
+# resolution. Detect them via `docker compose ls -a` and tear them down.
+cleanup_stale_compose_projects() {
+  dsection "Phase 3d: cleaning up stale compose stacks"
+
+  # Project names this codebase has used historically that are safe to tear
+  # down. ONLY include names that can never be an active prod or dev stack:
+  # - myportfoliosite-dev: old dev stack name before compose unification
+  # Do NOT include myportfoliosite — prod still uses that name until the
+  # #300 PR is merged and prod is migrated to portfolio_prod.
+  local known_stale_projects=(
+    myportfoliosite-dev
+  )
+
+  local active_projects
+  if ! active_projects=$(docker compose ls -a --format json 2>/dev/null \
+        | grep -oE '"Name":"[^"]+"' | cut -d'"' -f4 | sort -u); then
+    dstatus stalecleanup status=skipped reason=compose-ls-failed
+    dwarn "Could not list compose projects — skipping stale-stack cleanup"
+    return 0
+  fi
+
+  local interactive=0
+  if [ "${AUTO_YES:-0}" = "1" ]; then
+    interactive=2
+  elif [ -t 0 ]; then
+    interactive=1
+  fi
+
+  local stale_found=()
+  local proj
+  for proj in "${known_stale_projects[@]}"; do
+    # Never tear down the project this deploy is running as.
+    [ "$proj" = "${COMPOSE_PROJECT_NAME:-}" ] && continue
+    if grep -qx "$proj" <<< "$active_projects"; then
+      stale_found+=("$proj")
+    fi
+  done
+
+  if [ "${#stale_found[@]}" -eq 0 ]; then
+    dstatus stalecleanup status=ok stale=0
+    dok "No stale compose stacks present"
+    return 0
+  fi
+
+  local _say
+  if [ "$interactive" = "2" ]; then _say=dinfo; else _say=dwarn; fi
+  $_say "Found ${#stale_found[@]} stale compose stack(s): ${stale_found[*]}"
+  $_say "  These predate the compose unification (COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-?})"
+  $_say "  and will block ports / confuse dependency resolution if left running."
+
+  local removed=0
+  for proj in "${stale_found[@]}"; do
+    local do_remove=0
+    case "$interactive" in
+      2) dinfo "  auto-accepting (--auto-yes): tearing down project '$proj'"
+         do_remove=1 ;;
+      1) printf "  Tear down compose project '%s'? [Y/n] " "$proj"
+         local reply
+         read -r reply
+         case "$reply" in
+           ''|y|Y|yes|YES) do_remove=1 ;;
+         esac ;;
+      *) dwarn "  non-interactive run — manually run: docker compose -p $proj down --remove-orphans" ;;
+    esac
+
+    if [ "$do_remove" = "1" ]; then
+      if docker compose -p "$proj" down --remove-orphans 2>&1 | _log_cmd; then
+        removed=$((removed + 1))
+        dok "  $proj torn down"
+      else
+        dwarn "  failed to tear down $proj — may need manual cleanup"
+      fi
+    fi
+  done
+
+  dstatus stalecleanup status=cleaned stale="${#stale_found[@]}" removed="$removed"
 }
 
 # Interactively prompt the operator for any REQUIRED_VARS that are still empty or
@@ -578,7 +863,7 @@ ensure_dev_certs() {
       dinfo "Certificate generation passed"
     else
       dstatus certs status=failed reason=generation-failed
-      ddie "Failed to generate SSL certificates. Check LAN_IP / WEBAUTHN_HOST in .env."
+      ddie "Failed to generate SSL certificates. Check LAN_IP / SITE_HOST in .env."
     fi
   fi
 
@@ -631,14 +916,27 @@ check_nginx_config() {
 
   # Runs nginx -t inside a throw-away container using the same compose env and
   # volume mounts, so template substitution and cert paths are tested for real.
-  if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t \
-      2>&1 | _log_cmd; then
+  # Capture output so we can surface it inline on failure (in non-verbose mode
+  # _log_cmd only writes to the log file, hiding the real error from the operator).
+  local nginx_output nginx_failed=0
+  # Wrap in `if` so set -e doesn't abort on a non-zero exit before we capture
+  # and surface the output.
+  if ! nginx_output=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t 2>&1); then
+    nginx_failed=1
+  fi
+  echo "$nginx_output" | _log_cmd
+  if [ "$nginx_failed" -eq 1 ]; then
     dstatus nginx status=failed reason=config-test-failed
     dfail ""
     dfail "Nginx config test failed. Common causes:"
     dfail "  • SSL cert or key file missing at the path mounted into the container"
     dfail "  • Syntax error in nginx config template"
     dfail "  • Environment variable not set (check .env and COMPOSE_FILE)"
+    dfail ""
+    dfail "nginx -t output:"
+    while IFS= read -r line; do
+      dfail "  $line"
+    done <<< "$nginx_output"
     ddie "Fix the nginx config then re-run."
   fi
 
@@ -682,7 +980,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -693,7 +992,8 @@ _do_rollback() {
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
     git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -702,7 +1002,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
 
@@ -768,9 +1069,12 @@ compose_up_with_rollback() {
     done <<< "$running_services"
   fi
 
-  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build --remove-orphans"
+  dinfo "Stopping existing stack before rebuild..."
+  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | _log_cmd || true
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans 2>&1 | _log_cmd; then
+  dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
+
+  if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | _log_cmd; then
     dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
     docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
@@ -883,7 +1187,7 @@ wait_for_health() {
 
       _do_rollback "health check timed out"
 
-      ddie "Deploy failed — see log at $LOG_FILE"
+      ddie "Deploy failed — health check timed out after ${timeout}s"
     fi
 
     dinfo "  attempt $i/$attempts — not ready yet, retrying in ${interval}s..."
@@ -930,13 +1234,17 @@ test_error_logger_all_pages() {
   dinfo "Running comprehensive page coverage test..."
   dinfo "  Testing all pages for error-logger deployment"
 
-  # Run comprehensive test inside the backend container
-  if docker compose -f "$COMPOSE_FILE" exec -T backend-dev npm run test:error-logger:all-pages -- "$base_url" 2>&1 | _log_cmd; then
+  # Run comprehensive test inside the backend container — capture output and
+  # surface it inline so failures are visible without SSHing to read the log.
+  local test_output
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then
     dstatus error-logger status=ok
     dok "Error logger site-wide test passed ✓"
   else
     dstatus error-logger status=failed
-    dwarn "Error logger site-wide test failed or had warnings — see log above"
+    dwarn "Error logger test output:"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    dwarn "Error logger site-wide test failed — output above"
   fi
 }
 
@@ -965,7 +1273,15 @@ test_csp_reporting() {
     curl_opts="-s"
   fi
 
-  local csp_header=$(curl $curl_opts -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
+  # The dev server can't reach its own public hostname (no hairpin NAT),
+  # so without --resolve the curl times out silently and we wrongly report
+  # CSP as missing. Force hostname → LAN_IP when LAN_IP is set (dev).
+  local resolve_opt=""
+  if [ -n "${LAN_IP:-}" ] && [ -n "${SITE_HOST:-}" ]; then
+    resolve_opt="--resolve ${SITE_HOST}:${NGINX_PORT}:${LAN_IP}"
+  fi
+
+  local csp_header=$(curl $curl_opts $resolve_opt -I --max-time 5 "$test_url" 2>/dev/null | grep -i "content-security-policy" | head -1 || echo "")
 
   if [ -n "$csp_header" ]; then
     if echo "$csp_header" | grep -q "report-uri"; then
@@ -1055,6 +1371,7 @@ print_deploy_status() {
   local colour icon
   case "$status" in
     COMPLETE)      colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="✅" ;;
+    "DRY RUN")     colour="${DEPLOY_GREEN}${DEPLOY_BOLD}";  icon="🧪" ;;
     "ROLLED BACK") colour="${DEPLOY_YELLOW}${DEPLOY_BOLD}"; icon="↩️ " ;;
     *)             colour="${DEPLOY_RED}${DEPLOY_BOLD}";    icon="❌" ;;
   esac
@@ -1093,4 +1410,200 @@ print_deploy_report() {
       done
   echo "╚${border}╝"
   echo ""
+}
+
+# ── LAN IP auto-detection ─────────────────────────────────────────────────────
+
+# Detect the primary non-loopback IPv4 address and write it into ENV_FILE when
+# LAN_IP is unset or still a placeholder. Dev-only: prod uses a public domain.
+# Reads: LAN_IP, PLACEHOLDER_PATTERNS, ENV_FILE. Exports LAN_IP on success.
+auto_detect_lan_ip() {
+  local current="${LAN_IP:-}"
+  local is_placeholder=0
+
+  if [ -z "$current" ]; then
+    is_placeholder=1
+  else
+    for pattern in "${PLACEHOLDER_PATTERNS[@]}"; do
+      if [[ "$current" == *"$pattern"* ]]; then
+        is_placeholder=1
+        break
+      fi
+    done
+  fi
+
+  if [ "$is_placeholder" = "0" ]; then
+    dstatus lan-ip status=ok reason=already-configured
+    return 0
+  fi
+
+  dinfo "LAN_IP is unset or a placeholder — attempting auto-detection..."
+
+  local detected
+  # ip route is most reliable on Ubuntu; hostname -I is the fallback
+  detected=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  if [ -z "$detected" ]; then
+    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+
+  if [ -z "$detected" ] || [[ "$detected" == "127."* ]]; then
+    dstatus lan-ip status=failed reason=no-non-loopback-ip
+    dwarn "Could not detect a non-loopback LAN IP — set LAN_IP manually in $ENV_FILE"
+    return 0
+  fi
+
+  dinfo "Detected LAN IP: $detected"
+
+  if grep -qE '^LAN_IP=' "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^LAN_IP=.*|LAN_IP=${detected}|" "$ENV_FILE"
+  else
+    echo "LAN_IP=${detected}" >> "$ENV_FILE"
+  fi
+
+  export LAN_IP="$detected"
+  dstatus lan-ip status=detected reason=written-to-env
+  dok "LAN_IP set to $detected in $ENV_FILE"
+}
+
+# ── UFW port check ────────────────────────────────────────────────────────────
+
+# Warn if UFW is active but has no rule allowing the given port.
+# Non-fatal — missing a rule is surfaced as a warning, not a deploy failure,
+# since UFW may simply not be installed or the rule may use a different subnet.
+# Usage: check_ufw_port <port>
+check_ufw_port() {
+  local port="${1:?check_ufw_port requires a port argument}"
+
+  dsection "Checking firewall (UFW) for port $port"
+
+  if ! command -v ufw &>/dev/null; then
+    dstatus firewall status=skipped reason=ufw-not-installed
+    dinfo "UFW not installed — skipping firewall check"
+    return 0
+  fi
+
+  local ufw_status
+  if ! ufw_status=$(try_root ufw status 2>/dev/null); then
+    dstatus firewall status=skipped reason=needs-root-no-passwordless-sudo
+    dinfo "Skipping UFW check — needs root and passwordless sudo is unavailable in this non-interactive deploy."
+    dinfo "To enable the check, allow just this read-only command without a password:"
+    dinfo "  echo \"\$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status\" | sudo tee /etc/sudoers.d/deploy-ufw-status"
+    return 0
+  fi
+
+  if echo "$ufw_status" | grep -q "$port"; then
+    dstatus firewall status=ok port="$port"
+    dok "UFW rule for port $port is present"
+  else
+    dstatus firewall status=warn port="$port" reason=no-rule
+    dwarn "No UFW rule found for port $port."
+    dwarn "The dev site may not be reachable from other LAN devices."
+    dwarn "To open port $port to your LAN:"
+    dwarn "  sudo ufw allow from 192.168.0.0/16 to any port $port comment 'Dev site LAN-only'"
+    dwarn "Continuing anyway — this is a warning, not an error."
+  fi
+}
+
+# ── Regression smoke tests ────────────────────────────────────────────────────
+
+# Run the regression smoke suite against the live site.
+# Reads globals: DEPLOY_ENV, SKIP_REGRESSION, REPO_DIR, COMPOSE_FILE,
+#                BACKEND_SERVICE, LOG_FILE, SITE_HOST, NGINX_PORT, LAN_IP, DOMAIN.
+# Sets REGRESSION_RC=0 on pass, 1 on failure. Triggers rollback on failure.
+run_regression_tests() {
+  REGRESSION_RC=0
+
+  if [ "${SKIP_REGRESSION:-0}" = "1" ]; then
+    dstatus regression status=skipped reason=skip-flag
+    dinfo "Regression smoke tests skipped (--skip-regression)"
+    return 0
+  fi
+
+  dsection "Regression smoke tests"
+
+  if [ "${DEPLOY_ENV:-}" = "dev" ]; then
+    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+      --base-url "https://${SITE_HOST}:${NGINX_PORT}" \
+      --resolve "${SITE_HOST}:${NGINX_PORT}:${LAN_IP}" \
+      --compose-file "$COMPOSE_FILE" \
+      --service "$BACKEND_SERVICE" \
+      --insecure \
+      --reset-rate-limits \
+      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+  elif [ -n "${DOMAIN:-}" ]; then
+    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+      --base-url "https://${DOMAIN}" \
+      --resolve "${DOMAIN}:443:127.0.0.1" \
+      --compose-file "$COMPOSE_FILE" \
+      --service "$BACKEND_SERVICE" \
+      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+  fi
+
+  if [ "$REGRESSION_RC" -ne 0 ]; then
+    _do_rollback "regression smoke tests failed"
+  fi
+}
+
+# ── Backup Health Check ───────────────────────────────────────────────────────
+# Non-fatal: warns if scheduled backups are not configured or recent backup
+# files are missing. Runs post-deploy so it surfaces in every deploy log.
+# Checks:
+#   1. A cron job or systemd timer referencing a backup script exists.
+#   2. Recent backup files exist under ~/backups (within 2 days).
+# Both checks are warn-only — missing backups don't block a deploy, but the
+# warning is logged loudly so it cannot be silently ignored. (#164)
+
+check_backup_health() {
+  dsection "Backup health check"
+  local ok=1
+  local backup_dir="${BACKUP_DIR:-${HOME}/backups}"
+  local max_age_days=2
+
+  # ── Check 1: cron/systemd timer configured ───────────────────────────────
+  local cron_found=0
+  if crontab -l 2>/dev/null | grep -qi "backup"; then
+    cron_found=1
+  elif systemctl list-timers --all 2>/dev/null | grep -qi "backup"; then
+    cron_found=1
+  fi
+
+  if [ "$cron_found" = "1" ]; then
+    dstatus backup-schedule status=ok
+    dok "Backup schedule: cron/timer found ✓"
+  else
+    dstatus backup-schedule status=warn
+    dwarn "No backup cron job or systemd timer found — automated backups may not be configured (#164)"
+    ok=0
+  fi
+
+  # ── Check 2: recent backup files exist ──────────────────────────────────
+  if [ -d "$backup_dir" ]; then
+    local recent
+    recent=$(find "$backup_dir" -maxdepth 2 -name "*.sql*" -o -name "*.dump" -o -name "*.tar*" \
+      2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
+    if [ -n "$recent" ]; then
+      local age_days
+      age_days=$(( ( $(date +%s) - $(stat -c %Y "$recent" 2>/dev/null || echo 0) ) / 86400 ))
+      if [ "$age_days" -le "$max_age_days" ]; then
+        dstatus backup-files status=ok age_days="$age_days"
+        dok "Most recent backup: $(basename "$recent") (${age_days}d ago) ✓"
+      else
+        dstatus backup-files status=warn age_days="$age_days"
+        dwarn "Most recent backup is ${age_days} days old (threshold: ${max_age_days}d) — check backup job (#164)"
+        ok=0
+      fi
+    else
+      dstatus backup-files status=warn dir="$backup_dir"
+      dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
+      ok=0
+    fi
+  else
+    dstatus backup-files status=warn dir="$backup_dir"
+    dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
+    ok=0
+  fi
+
+  if [ "$ok" = "0" ]; then
+    dwarn "Backup health: one or more checks failed — see RUNBOOK.md §Backups to set up automated backups"
+  fi
 }

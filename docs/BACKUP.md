@@ -49,7 +49,7 @@ tar czf "backups/$(date +"%Y-%m-%d")/uploads.tgz" uploads/
 ### 4. Copy critical config
 
 ```bash
-cp ~/MyPortfolioSite-prod/.env "backups/$(date +"%Y-%m-%d")/prod.env"
+cp ~/MyPortfolioSite/.env "backups/$(date +"%Y-%m-%d")/prod.env"
 cp ~/MyPortfolioSite-dev/.env  "backups/$(date +"%Y-%m-%d")/dev.env"
 ```
 
@@ -67,19 +67,19 @@ This is a high-level outline for rebuilding on a new Ubuntu host if `ak-home-ser
 
 1. **Rebuild base environment**
    - Install Docker, Docker Compose, and Git.
-   - Clone the repositories into `~/MyPortfolioSite-prod` and `~/MyPortfolioSite-dev`.
+   - Clone the repositories into `~/MyPortfolioSite` and `~/MyPortfolioSite-dev`.
 
 2. **Restore uploads and config**
 
 ```bash
 # On the new host
-mkdir -p ~/MyPortfolioSite-prod/uploads
+mkdir -p ~/MyPortfolioSite/uploads
 # Copy uploads.tgz from your backup location
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 tar xzf ~/uploads.tgz -C .
 
 # Restore .env files
-cp ~/backups/YYYY-MM-DD/prod.env ~/MyPortfolioSite-prod/.env
+cp ~/backups/YYYY-MM-DD/prod.env ~/MyPortfolioSite/.env
 cp ~/backups/YYYY-MM-DD/dev.env  ~/MyPortfolioSite-dev/.env
 ```
 
@@ -89,7 +89,7 @@ After bringing up the stacks once to create the DB containers:
 
 ```bash
 # Prod
-docker compose -f ~/MyPortfolioSite-prod/docker-compose.prod.yml exec -T postgres pg_restore \
+docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml exec -T postgres pg_restore \
   -d portfolio_prod --clean --if-exists < ~/backups/YYYY-MM-DD/portfolio_prod.dump
 
 # Dev
@@ -103,7 +103,7 @@ Adjust service names if they differ (see **docs/DEV_ENVIRONMENT.md** and **docs/
 
 ```bash
 # Prod
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 docker compose -f docker-compose.prod.yml up -d --build
 
 # Dev

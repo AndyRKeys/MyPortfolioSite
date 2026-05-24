@@ -23,6 +23,11 @@ param(
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
+# Point bare `docker compose` calls at the laptop-local compose file. The
+# repo's docker-compose.yml is the unified SERVER compose; local dev uses
+# docker-compose.local.yml (bind-mounted source, exposed DB port).
+$env:COMPOSE_FILE = 'docker-compose.local.yml'
+
 switch ($Command) {
 
   'test' {

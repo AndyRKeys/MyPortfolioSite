@@ -28,25 +28,25 @@ read -r -p "WARNING: This will DROP and recreate $DB_NAME. Continue? [y/N] " CON
 [ "$CONFIRM" = "y" ] || { echo "Aborted."; exit 0; }
 
 echo "Stopping backend..."
-docker compose -f docker-compose.prod.yml stop backend
+docker compose -f docker-compose.yml stop backend
 
 echo "Dropping database..."
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose -f docker-compose.yml exec -T postgres \
     psql -U "$DB_USER" postgres \
     -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
 
 echo "Creating database..."
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose -f docker-compose.yml exec -T postgres \
     psql -U "$DB_USER" postgres \
     -c "CREATE DATABASE \"$DB_NAME\";"
 
 echo "Restoring data..."
 gunzip -c "$BACKUP_FILE" | \
-    docker compose -f docker-compose.prod.yml exec -T postgres \
+    docker compose -f docker-compose.yml exec -T postgres \
     psql -U "$DB_USER" "$DB_NAME"
 
 echo "Restarting backend..."
-docker compose -f docker-compose.prod.yml start backend
+docker compose -f docker-compose.yml start backend
 
 echo ""
 echo "=== Restore complete ==="

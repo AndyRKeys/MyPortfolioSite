@@ -61,7 +61,7 @@ The prod deploy script validates required variables (including length and obviou
 ```
 
 - Connects to the server via SSH.
-- Runs `scripts/deploy/prod-deploy.sh`.
+- Switches to `main` via `switch-branch.sh`, then runs `deploy.sh --env prod`.
 - Optional rollback:
 
   ```powershell
@@ -71,18 +71,17 @@ The prod deploy script validates required variables (including length and obviou
 ### From the server
 
 ```bash
-cd ~/MyPortfolioSite
-bash scripts/deploy/prod-deploy.sh
-# or
-bash scripts/deploy/prod-deploy.sh --rollback <sha>
+bash ~/MyPortfolioSite/scripts/deploy/switch-branch.sh main ~/MyPortfolioSite
+bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod
+# or for rollback:
+bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod --rollback <sha>
 ```
 
-On the feature branch, `prod-deploy.sh` uses `deploy-lib.sh` to:
+`deploy.sh --env prod` uses `deploy-lib.sh` to:
 
 - Check prerequisites (docker, docker compose plugin, git, curl).
 - Ensure the repo exists and is on `main`.
 - Load and validate `.env`.
-- Fetch and reset to `origin/main`.
 - Rebuild containers via `docker compose -f docker-compose.prod.yml up -d --build`.
 - Run backend and HTTPS health checks.
 - Roll back to the previous commit if deploy or health fails.
