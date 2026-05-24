@@ -73,7 +73,6 @@ services:
       - "127.0.0.1:${PORT}:${PORT}"
     volumes:
       - uploads_data:/app/uploads
-      - ./scripts:/app/scripts:ro
     depends_on:
       postgres:
         condition: service_healthy
