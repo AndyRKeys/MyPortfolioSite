@@ -216,7 +216,11 @@ fi
 # us remove the host-port binding from the backend container, eliminating the
 # port conflict on server restart. Nginx proxies /api/health to the backend,
 # so a 200 from nginx confirms both services are up.
-if [ "${NGINX_PORT}" = "443" ]; then
+# Protocol follows CERT_MODE: self-signed (dev) means nginx speaks HTTPS even
+# on non-443 ports, so we must use https:// regardless of port number.
+if [ "${CERT_MODE:-}" = "self-signed" ]; then
+  HEALTH_URL="https://localhost:${NGINX_PORT}/api/health"
+elif [ "${NGINX_PORT}" = "443" ]; then
   HEALTH_URL="https://localhost/api/health"
 else
   HEALTH_URL="http://localhost:${NGINX_PORT}/api/health"
