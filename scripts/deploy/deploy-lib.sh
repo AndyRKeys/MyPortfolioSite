@@ -1021,6 +1021,7 @@ _poll_health() {
   local attempts=0
   local curl_flags=()
   [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_flags+=("--insecure")
+  [ -n "${HEALTH_RESOLVE:-}" ]      && curl_flags+=("--resolve" "${HEALTH_RESOLVE}")
 
   while [ "$attempts" -lt "$max_attempts" ]; do
     local http_code
@@ -1224,9 +1225,9 @@ wait_for_health() {
   local url2="${HEALTH_URL_2:-}"
   local timeout="${HEALTH_TIMEOUT:-60}"
   local interval="${HEALTH_INTERVAL:-5}"
-  # Set HEALTH_INSECURE=1 in caller to skip SSL cert verification (e.g. dev self-signed certs)
   local curl_opts=""
   [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_opts="--insecure"
+  [ -n "${HEALTH_RESOLVE:-}" ]      && curl_opts="$curl_opts --resolve ${HEALTH_RESOLVE}"
 
   dsection "Phase 6: HTTP/HTTPS health checks"
 
