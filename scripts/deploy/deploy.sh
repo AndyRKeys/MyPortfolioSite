@@ -212,18 +212,20 @@ else
   HEALTH_INSECURE=0
 fi
 
-# Health check through nginx rather than the backend port directly. This lets
-# us remove the host-port binding from the backend container, eliminating the
-# port conflict on server restart. Nginx proxies /api/health to the backend,
-# so a 200 from nginx confirms both services are up.
-# Protocol follows CERT_MODE: self-signed (dev) means nginx speaks HTTPS even
-# on non-443 ports, so we must use https:// regardless of port number.
+# Health check URL and curl flags.
+# - self-signed (dev): curl localhost with --insecure (cert isn't trusted)
+# - letsencrypt (prod): curl via SITE_HOST so the cert CN matches; use
+#   --resolve to force local resolution and avoid hairpin NAT
 if [ "${CERT_MODE:-}" = "self-signed" ]; then
   HEALTH_URL="https://localhost:${NGINX_PORT}/api/health"
+  HEALTH_INSECURE=1
 elif [ "${NGINX_PORT}" = "443" ]; then
-  HEALTH_URL="https://localhost/api/health"
+  HEALTH_URL="https://${SITE_HOST}/api/health"
+  HEALTH_RESOLVE="${SITE_HOST}:443:127.0.0.1"
+  HEALTH_INSECURE=0
 else
   HEALTH_URL="http://localhost:${NGINX_PORT}/api/health"
+  HEALTH_INSECURE=0
 fi
 
 # Docker-internal nginx URL used by the error-logger test (puppeteer inside the
