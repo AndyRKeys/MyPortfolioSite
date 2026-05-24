@@ -38,8 +38,8 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$DEV_REPO
-ExecStart=/usr/bin/docker compose -f docker-compose.dev-server.yml up -d
-ExecStop=/usr/bin/docker compose -f docker-compose.dev-server.yml down
+ExecStart=/usr/bin/docker compose -f docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml down
 Restart=on-failure
 
 [Install]

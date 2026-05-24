@@ -8,10 +8,10 @@ This is aimed at **future you on a tired evening** — copy-paste commands first
 
 ## Environments at a Glance
 
-| Environment | Host | Compose file | Backend service | Nginx service | DB name |
-|-------------|------|--------------|-----------------|---------------|---------|
-| Dev server | `ak-home-server` (LAN) | `docker-compose.dev-server.yml` | `backend-dev` | `nginx-dev` | `portfolio_dev` |
-| Prod | `ak-home-server` (public `andykeys.me`) | `docker-compose.prod.yml` | `backend` | `nginx` | `portfolio_prod` |
+| Environment | Host | Compose file | Project name | Backend service | Nginx service | DB name |
+|-------------|------|--------------|--------------|-----------------|---------------|---------|
+| Dev server | `ak-home-server` (LAN) | `docker-compose.yml` | `portfolio_dev` | `backend` | `nginx` | `portfolio_dev` |
+| Prod | `ak-home-server` (public `andykeys.me`) | `docker-compose.yml` | `portfolio_prod` | `backend` | `nginx` | `portfolio_prod` |
 
 See **[docs/DEV_ENVIRONMENT.md](./DEV_ENVIRONMENT.md)** and **[docs/PROD_ENVIRONMENT.md](./PROD_ENVIRONMENT.md)** for full details.
 
@@ -43,21 +43,21 @@ SSH into the server first:
 
 ```bash
 ssh ak-home-server
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 ```
 
 Then:
 
 ```bash
 # Backend logs (prod)
-docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose logs --tail=100 backend
 
 # Nginx logs (prod)
-docker compose -f docker-compose.prod.yml logs --tail=100 nginx
+docker compose logs --tail=100 nginx
 
 # Dev backend logs
 cd ~/MyPortfolioSite-dev
-docker compose -f docker-compose.dev-server.yml logs --tail=100 backend-dev
+docker compose logs --tail=100 backend
 ```
 
 If containers are not running, see **Restart services**.
@@ -70,16 +70,16 @@ On the server:
 
 ```bash
 # Prod stack
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 
 # Restart just backend
-docker compose -f docker-compose.prod.yml restart backend
+docker compose restart backend
 
 # Restart just nginx
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose restart nginx
 
 # Restart whole stack (backend + nginx + postgres)
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose up -d --build
 ```
 
 Dev server equivalent:
@@ -87,9 +87,9 @@ Dev server equivalent:
 ```bash
 cd ~/MyPortfolioSite-dev
 
-docker compose -f docker-compose.dev-server.yml restart backend-dev
+docker compose restart backend
 # or full stack
-docker compose -f docker-compose.dev-server.yml up -d --build
+docker compose up -d --build
 ```
 
 If `up -d --build` fails, run `docker compose ... logs` and `docker compose ... ps` to see which container is unhealthy.
@@ -125,23 +125,75 @@ On the server (dev stack):
 cd ~/MyPortfolioSite-dev
 bash scripts/tests/test-regression.sh \
   --base-url https://dev.andykeys.me:3001 \
-  --compose-file docker-compose.dev-server.yml \
-  --service backend-dev \
+  --compose-file docker-compose.yml \
+  --service backend \
   --insecure
 ```
 
 On the server (prod stack, only if needed and safe):
 
 ```bash
-cd ~/MyPortfolioSite-prod
+cd ~/MyPortfolioSite
 bash scripts/tests/test-regression.sh \
   --base-url https://andykeys.me \
-  --compose-file docker-compose.prod.yml \
+  --compose-file docker-compose.yml \
   --service backend \
   --insecure
 ```
 
 For a specific PR, run its PowerShell smoke test from Windows against dev (see **docs/TESTING.md** and `scripts/tests/Test-PR<N>.ps1`).
+
+---
+
+### 6. Renew the Outlook OAuth2 refresh token
+
+**When:** Magic link emails stop arriving. Backend logs show `invalid_grant` or `AADSTS70000`. This happens because:
+- Microsoft invalidates refresh tokens after **90 days of inactivity**
+- Refresh tokens are also invalidated immediately if the **client secret is rotated** in Azure
+
+**Symptom in logs:**
+
+```bash
+ssh ak-home-server
+docker compose -f ~/MyPortfolioSite/docker-compose.yml logs backend --tail=50 | grep -i "auth/email\|invalid_grant\|oauth"
+# Look for: invalid_grant or AADSTS700082
+```
+
+**Fix — must run on your Windows machine (needs a browser for the OAuth flow):**
+
+```powershell
+# On Windows, in the MyPortfolioSite repo root
+node scripts/generate-outlook-refresh-token.js
+```
+
+You'll be prompted for your Azure app's CLIENT_ID, CLIENT_SECRET (the _value_, not the ID), and your Outlook email. The script opens a browser, you authorise, and it prints the new values:
+
+```
+OUTLOOK_CLIENT_ID=...
+OUTLOOK_CLIENT_SECRET=...
+OUTLOOK_REFRESH_TOKEN=...
+OUTLOOK_EMAIL=...
+```
+
+**Update prod and restart:**
+
+```bash
+ssh ak-home-server
+micro ~/MyPortfolioSite/.env
+# Update OUTLOOK_REFRESH_TOKEN (and OUTLOOK_CLIENT_SECRET if you rotated it)
+
+# Full restart required — `restart` alone doesn't reload .env
+cd ~/MyPortfolioSite
+docker compose down
+docker compose up -d
+
+# Verify — send a test magic link and check logs
+docker compose logs -f backend | grep -i "auth/email"
+```
+
+**If the script fails with `invalid_client`:** You used the Client ID instead of the Client Secret Value. Go to Azure Portal → App registrations → your app → Certificates & secrets → copy the **Value** column (not the ID column). If the secret has expired, create a new one there first.
+
+**Token lifetime:** Microsoft's refresh tokens for personal accounts last 90 days from last use. Using magic links regularly resets the clock. If the site goes unused for 90 days, a new token will be needed.
 
 ---
 
@@ -162,19 +214,19 @@ On the server:
 
 ```bash
 # Check containers
-cd ~/MyPortfolioSite-prod
-docker compose -f docker-compose.prod.yml ps
+cd ~/MyPortfolioSite
+docker compose ps
 
 # If nginx is missing or exited, check logs
-docker compose -f docker-compose.prod.yml logs --tail=100 nginx
+docker compose logs --tail=100 nginx
 
 # If backend is missing or exited
-docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose logs --tail=100 backend
 ```
 
 Common fixes:
 - Fix any config error reported in logs (env var, port conflict, bad nginx config)
-- Re-run `docker compose -f docker-compose.prod.yml up -d --build`
+- Re-run `docker compose up -d --build`
 
 If DNS/SSL is the issue (cert expired, host unreachable), follow **docs/INFRASTRUCTURE.md**.
 
@@ -183,8 +235,8 @@ If DNS/SSL is the issue (cert expired, host unreachable), follow **docs/INFRASTR
 Check backend logs while reproducing the error:
 
 ```bash
-cd ~/MyPortfolioSite-prod
-docker compose -f docker-compose.prod.yml logs -f backend
+cd ~/MyPortfolioSite
+docker compose logs -f backend
 ```
 
 Look for:

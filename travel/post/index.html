@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <!-- Global error logger (load first to catch all errors) -->
-    <script type="module" src="./resources/java/error-logger.js"></script>
+    <script type="module" src="/resources/js/error-logger.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Travel Memory | AK Portfolio</title>
-    <link rel="shortcut icon" href="./resources/img/AK.jpg" type="image/x-icon">
-    <link rel="stylesheet" href="./resources/css/reset.css" />
-    <link rel="stylesheet" href="./resources/css/styles.css" />
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,24 +27,24 @@
             <span class="nav-toggle-icon">☰</span>
         </button>
         <ul class="nav">
-            <li><a href="index.html">🏠 Home</a></li>
-            <li><a href="index.html#about">👤 About</a></li>
-            <li><a href="index.html#portfolio">💼 Projects</a></li>
-            <li><a href="index.html#ai-dev">🤖 AI Dev</a></li>
-            <li><a href="index.html#timeline">📅 Timeline</a></li>
-            <li><a href="index.html#skills">🛠 Skills</a></li>
-            <li><a href="index.html#github-activity">🐙 GitHub</a></li>
-            <li><a href="index.html#contact">✉ Contact</a></li>
-            <li><a href="blog.html">✏ Blog</a></li>
-            <li><a href="travel.html">✈ Travel</a></li>
-            <li><a href="login.html">🔒 Admin</a></li>
+            <li><a href="/">🏠 Home</a></li>
+            <li><a href="/#about">👤 About</a></li>
+            <li><a href="/#portfolio">💼 Projects</a></li>
+            <li><a href="/#ai-dev">🤖 AI Dev</a></li>
+            <li><a href="/#timeline">📅 Timeline</a></li>
+            <li><a href="/#skills">🛠 Skills</a></li>
+            <li><a href="/#github-activity">🐙 GitHub</a></li>
+            <li><a href="/#contact">✉ Contact</a></li>
+            <li><a href="/blog/">✏ Blog</a></li>
+            <li><a href="/travel/">✈ Travel</a></li>
+            <li><a href="/login/">🔒 Admin</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
     <main>
         <div class="post-back-bar sec-cont">
-            <a href="travel.html" class="post-back-link">← All travel memories</a>
+            <a href="/travel/" class="post-back-link">← All travel memories</a>
         </div>
         <article class="sec-cont post-article" id="post-content">
             <div id="post-loading" class="hint" style="text-align:center;padding:3rem;">Loading memory…</div>
@@ -62,7 +62,7 @@
                 <div id="post-notes" class="post-markdown"></div>
             </div>
             <div id="post-error" class="hidden" style="text-align:center;padding:3rem;color:var(--color-error);">
-                Travel memory not found. <a href="travel.html">Back to memories</a>.
+                Travel memory not found. <a href="/travel/">Back to memories</a>.
             </div>
         </article>
     </main>
@@ -87,13 +87,13 @@
         </div>
     </div>
 
-    <script src="./resources/java/dev-env.js"></script>
-    <script src="./resources/java/darkmode.js"></script>
-    <script src="./resources/java/nav.js"></script>
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
     <!-- jQuery must load before the module so $ is available as a global -->
-    <script src="./resources/java/jquery-3.5.1.min.js"></script>
+    <script src="/resources/js/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script type="module" src="./resources/java/travel-post.js"></script>
+    <script type="module" src="/resources/js/travel-post.js"></script>
 </body>
 </html>

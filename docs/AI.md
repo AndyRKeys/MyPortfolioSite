@@ -13,12 +13,27 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
   - **If significant** (e.g. a larger refactor, architectural change, new abstraction): raise a new GitHub issue instead and continue with the original scope only. Ask the owner before proceeding with the improvement
   - **If unclear whether it's within scope**: ask before acting
 - Never convert literal Unicode characters to escape sequences — `—`, `…`, `©`, `✏`, `✈`, `☾`, `−` etc. must stay as-is in source files
+- **Preserve existing comments when editing files.** Only remove a comment if it is factually wrong or entirely redundant with the new code. Do not strip comments just because you are rewriting nearby lines — if the comment explained a non-obvious WHY before your edit, it still explains it after.
 - If a change requires touching more than the requested lines, flag it and ask first — do not proceed
 - Ask before acting if anything is unclear or the scope is ambiguous
 - **One PR per issue**, unless issues are explicitly related:
   - Related issues (e.g. #80 and #81 fixing the same feature) can be bundled in one PR
   - Unrelated issues must go in separate PRs
   - If unsure whether issues are related, ask before bundling
+
+## Workarounds and Proper Fixes
+
+**The owner's strong preference is always a proper fix.** Workarounds — commenting out checks, skipping pipeline steps, adding bypass flags, or patching over symptoms — are a last resort reserved for genuine site-down emergencies where there is no time for a correct fix.
+
+If a workaround is unavoidable:
+1. Apply the minimum workaround needed to restore service
+2. Raise a GitHub issue immediately documenting what was bypassed and why
+3. Treat the proper fix as the next highest-priority task — do not move on to other work first
+4. Never commit a workaround without a linked issue and a clear `# TODO #N` comment pointing to it
+
+When given a choice between a workaround and a proper fix, always attempt the proper fix first. Only fall back to a workaround if the proper fix would take significantly longer than the urgency of the situation allows.
+
+---
 
 ## File Safety
 
@@ -130,6 +145,7 @@ Before writing code:
 2. Commit regularly with clear messages
 3. Keep changes focused — one issue per branch
 4. Push commits as you go (don't wait until done)
+5. **Prefer proper fixes over workarounds.** Workarounds (commenting out code, skipping steps, adding flags to bypass checks) are a last resort — only acceptable when a site-down incident makes them unavoidable. If a workaround is ever applied in an emergency: raise a GitHub issue immediately, note the workaround explicitly in the issue body, and treat remediation as the next highest-priority task. Never leave a workaround in place and move on.
 
 ### 4. PR to Dev
 
@@ -157,7 +173,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 
 **Test plan commands — mandatory rules:**
 - Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
-- Use the correct compose file and service name for the environment being tested (e.g. `docker-compose.dev-server.yml` with service `backend-dev` and `postgres-dev` for the dev server; `docker-compose.yml` with `backend`/`postgres` for local Docker).
+- Use the correct compose file and service name for the environment being tested: `docker-compose.yml` with services `backend` / `postgres` for both the dev server (project `portfolio_dev`) and prod (project `portfolio_prod`); `docker-compose.local.yml` with services `backend` / `postgres` for local laptop dev.
 - Add a **comment line above every command** (using `#`) that explains what the command does and why it matters for this specific PR — not just what the tool is, but what you are verifying.
 - Include the **expected output or outcome** after each command so the tester knows immediately whether it passed or failed.
 - Where a step would normally require waiting (e.g. token expiry), provide a DB command to simulate it rather than leaving the tester to wait.
@@ -329,7 +345,7 @@ var name = user.name; // Get the user's name
 
 **ES Modules & Code Organization**
 - Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
-- Create shared utilities in `resources/java/utils/*` instead of duplicating functions
+- Create shared utilities in `resources/js/utils/*` instead of duplicating functions
 - Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
 - Import utilities as: `import { escapeHtml, formatVisitDate } from './utils/html.js'`
 - Avoid copy-pasting logic across multiple files — extract to utils first
@@ -377,7 +393,7 @@ Recent work has lost significant time to deployment bugs and blind debugging. Ob
 
 ## Architecture Notes
 
-- **Frontend:** ES modules for JavaScript, shared utilities in `resources/java/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
+- **Frontend:** ES modules for JavaScript, shared utilities in `resources/js/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
 - **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
 - **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
 - **Auth:** JWT + WebAuthn/FIDO2 passkeys
@@ -454,7 +470,7 @@ When working with this project:
 - **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
 - **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
-- **Deployment:** Script-driven Docker Compose deploy (`prod-deploy.sh` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
+- **Deployment:** Script-driven Docker Compose deploy (`switch-branch.sh` → `deploy.sh --env prod` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for server (`ak-home-server`) / container operations.
 - **Testing:** All tests run inside the Docker backend container via `docker compose exec`. Never instruct the developer to run `npm test` directly on their local machine.
 

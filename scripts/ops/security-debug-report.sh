@@ -16,10 +16,10 @@ red()    { echo -e "\033[0;31m✗  $*\033[0m"; ((FAIL++)); }
 yellow() { echo -e "\033[1;33m⚠  $*\033[0m"; ((WARN++)); }
 section(){ echo ""; echo "──────────────────────────────────────────────"; echo "  $*"; echo "──────────────────────────────────────────────"; }
 
-echo "╔══════════════════════════════════════════════╗"
-echo "║  SECURITY DEBUG REPORT                       ║"
-echo "║  Target: $HOST"
-echo "╚══════════════════════════════════════════════╝"
+# shellcheck source=../deploy/output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../deploy/output-lib.sh"
+
+_print_multi_box "" 40 "SECURITY DEBUG REPORT" "Target: $HOST"
 
 # ── Fetch headers ─────────────────────────────────────────────────────────────
 section "1. HTTP Response Headers"

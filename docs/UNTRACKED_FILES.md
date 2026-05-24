@@ -87,7 +87,7 @@ Stores:
 
 ## Deployment Script Checklist
 
-The deployment script (`scripts/deploy/dev-deploy.sh`) automatically:
+The deployment script (`scripts/deploy/deploy.sh --env dev`) automatically:
 1. ✅ Clones repo (if needed)
 2. ✅ Creates `.env` from template if missing
 3. ✅ Validates `.env` (required variables, no placeholders)
@@ -107,9 +107,10 @@ The deployment script (`scripts/deploy/dev-deploy.sh`) automatically:
 ```bash
 # On dev server:
 rm -rf ~/MyPortfolioSite-dev
-bash scripts/deploy/dev-server-deploy.ps1  # from Windows
-# or
-bash ~/MyPortfolioSite/scripts/deploy/dev-deploy.sh  # from server
+.\scripts\deploy\dev-deploy.ps1  # from Windows
+# or from the server directly:
+bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite-dev
+bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev dev
 ```
 
 This will:

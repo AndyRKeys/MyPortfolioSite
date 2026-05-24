@@ -2,14 +2,14 @@
 # seed-dev-data.sh — Populate the dev-server database with realistic dummy data.
 #
 # Bash counterpart to Seed-DevData.ps1, targeting the Ubuntu dev-server stack
-# (docker-compose.dev-server.yml — service backend-dev on port 8081).
+# (docker-compose.yml — service name and port read from .env, default: backend:8080).
 #
 # Inserts:
 #   - 5 published blog posts, 3 drafts
 #   - 6 published travel memories (with coordinates), 2 drafts
 #
 # Safe to run multiple times. To wipe and re-seed cleanly:
-#   docker compose -f docker-compose.dev-server.yml down -v
+#   docker compose -f docker-compose.yml down -v
 #   bash scripts/deploy/dev-deploy.sh <branch>
 # then re-run this script.
 #
@@ -17,16 +17,26 @@
 #   bash scripts/dev/seed-dev-data.sh
 #
 # Overridable via environment:
-#   COMPOSE_FILE  (default: docker-compose.dev-server.yml)
-#   BACKEND_SVC   (default: backend-dev)
-#   BASE_URL      (default: http://localhost:8081)  — backend direct, no /api prefix
+#   COMPOSE_FILE  (default: docker-compose.yml)
+#   BACKEND_SVC   (default: BACKEND_SERVICE from .env, else backend)
+#   BASE_URL      (default: http://localhost:<PORT from .env>, else http://localhost:8080)
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.dev-server.yml}"
-BACKEND_SVC="${BACKEND_SVC:-backend-dev}"
-BASE_URL="${BASE_URL:-http://localhost:8081}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+
+# Read BACKEND_SERVICE and PORT from .env if present (set by compose unification).
+# Explicit env vars always win; .env is the fallback; then safe built-in defaults.
+_env_backend=""
+_env_port=""
+if [ -f ".env" ]; then
+  _env_backend=$(grep -m1 '^BACKEND_SERVICE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+  _env_port=$(grep -m1 '^PORT=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+fi
+BACKEND_SVC="${BACKEND_SVC:-${_env_backend:-backend}}"
+_default_port="${_env_port:-8080}"
+BASE_URL="${BASE_URL:-http://localhost:${_default_port}}"
 TOKEN="${TOKEN:-}"
 
 pass=0
@@ -82,7 +92,7 @@ if [ -z "$TOKEN" ]; then
   docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SVC" env 2>/dev/null | grep JWT_SECRET || echo "    [NOT SET]" >&2
   echo "" >&2
   echo "  3. Deploy first:" >&2
-  echo "    bash scripts/deploy/dev-deploy.sh <branch>" >&2
+  echo "    .\\scripts\\deploy\\dev-deploy.ps1 -Branch <branch>" >&2
   echo "" >&2
   exit 1
 fi
@@ -248,7 +258,7 @@ JSON
 seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
 {
   "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
-  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.dev-server.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
+  "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`), backend instance (`backend` port 8080 vs `backend-dev` port 8081), and nginx instance (`nginx` port 443 vs `nginx-dev` port 3001).\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
   "post_date": "2026-05-09",
   "publish": true
 }

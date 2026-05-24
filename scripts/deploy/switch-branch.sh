@@ -77,6 +77,10 @@ CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
 
 if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
   echo "[INFO][switch-branch] Current branch is '$CURRENT_BRANCH' — switching to '$TARGET_BRANCH'..."
+  # Discard local changes before checkout so a dirty working tree never blocks
+  # the branch switch. The hard reset below will enforce origin state anyway.
+  git reset --hard HEAD 2>/dev/null || true
+  git clean -fd 2>/dev/null || true
   if ! git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
     echo "[DEBUG][switch-branch] Creating local tracking branch '$TARGET_BRANCH' from origin."
     git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"

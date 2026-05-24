@@ -143,16 +143,20 @@ These checks apply regardless of environment:
 
   ```bash
   docker ps
-  docker compose -f docker-compose.prod.yml ps
-  docker compose -f docker-compose.dev-server.yml ps
+  # Prod (from ~/MyPortfolioSite):
+  docker compose ps
+  # Dev (from ~/MyPortfolioSite-dev):
+  docker compose ps
   ```
 
 - **Logs:**
 
   ```bash
-  docker compose -f docker-compose.prod.yml logs --tail=50 backend
-  docker compose -f docker-compose.prod.yml logs --tail=50 nginx
-  docker compose -f docker-compose.dev-server.yml logs --tail=50 backend-dev
+  # Prod (from ~/MyPortfolioSite):
+  docker compose logs --tail=50 backend
+  docker compose logs --tail=50 nginx
+  # Dev (from ~/MyPortfolioSite-dev):
+  docker compose logs --tail=50 backend
   ```
 
 - **Port usage:**

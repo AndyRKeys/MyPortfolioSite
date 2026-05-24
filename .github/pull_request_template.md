@@ -64,11 +64,11 @@ Closes #<!-- issue number -->
 
 - 
 
-## Squash Commit Message (optional)
+## Squash Commit Message
 
-<!-- If this PR will be squash-merged, add a ready-to-paste commit message here.
-     Format: short imperative summary (≤50 chars), blank line, short why/what body,
-     then Co-Authored-By footer. -->
+<!-- Mandatory — repo squash-merges, so this becomes the permanent history entry.
+     Format: short imperative summary (≤50 chars), blank line, short why/what body
+     (focus on WHY, not what — the diff shows what), then Co-Authored-By footer. -->
 
 ```text
 <summary>

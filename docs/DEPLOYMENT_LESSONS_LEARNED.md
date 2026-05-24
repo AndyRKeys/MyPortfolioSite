@@ -314,8 +314,8 @@ Instead of attempting everything at once, deploy incrementally:
 1. Test all endpoints:
    - `/health` (system health)
    - `/api/posts` (public content)
-   - `/login.html` (authentication)
-   - `/admin.html` (admin panel, via magic link)
+   - `/login/` (authentication)
+   - `/admin/` (admin panel, via magic link)
 2. Test backup scripts
 3. Verify cron jobs: `sudo crontab -l`
 
@@ -596,8 +596,8 @@ After deployment, verify these manually:
 # Check site accessibility
 curl -L https://yourdomain.com/health          # Backend health (follow redirect)
 curl https://yourdomain.com/api/posts          # Public API
-curl https://yourdomain.com/login.html         # Admin login page
-curl https://yourdomain.com/admin.html         # Admin console (after login)
+curl https://yourdomain.com/login/         # Admin login page
+curl https://yourdomain.com/admin/         # Admin console (after login)
 
 # Note: a 301 response from http://yourdomain.com/health is CORRECT —
 # it is the HTTP→HTTPS redirect. Use curl -L or request via HTTPS directly.
@@ -654,5 +654,137 @@ After implementing improvements, test the revised setup script:
 ## Conclusion
 
 The deployment succeeded despite numerous obstacles. The issues were primarily environmental (pre-installed software, missing files) rather than architectural. With the improvements outlined here, future deployments should be significantly faster and more reliable.
+
+---
+
+## Release 2026-05-18 Deployment — 2026-05-19
+
+### Executive Summary
+
+Release 2026-05-18 (security hardening + deploy automation) was deployed to production after an extended troubleshooting session. The deploy pipeline itself surfaced several configuration gaps in the prod compose and deploy scripts that were not caught during dev testing. All issues were resolved and the site is live and healthy.
+
+**Outcome:** Successful after ~2.5 hours of troubleshooting across 8 distinct issues.
+
+---
+
+### Issue 1: Port 8080 Conflict — Wekan Snap
+
+**Symptom:** `failed to bind host port 127.0.0.1:8080/tcp: address already in use` — backend container refused to start.
+
+**Root Cause:** Wekan (a Kanban app installed as a snap) was running a Node.js process bound to `0.0.0.0:8080` on the host. The prod compose now explicitly binds `127.0.0.1:8080` for health checks, which collashed with Wekan's binding.
+
+**Resolution:** `sudo snap stop wekan` before deploying.
+
+**Root Cause Analysis:** Port assignments are not tracked centrally. The dev backend also binds internally to port 8080 (mapped to 8081 on the host), creating a second collision risk when both stacks run simultaneously.
+
+**Lesson Learned:** All services on the host (Docker and non-Docker) must be audited for port usage before deploying. The pre-flight `check_disk_space` phase should include a port availability check for all ports the compose file will bind.
+
+**Recommended Fix:** Add a port pre-flight check to `deploy-lib.sh`; change prod backend to a port that doesn't clash with dev or Wekan (see issue #297).
+
+---
+
+### Issue 2: `check_nginx_config` False-Fails in Standalone Container
+
+**Symptom:** `nginx: [emerg] host not found in upstream "backend"` — deploy aborted at the nginx config test phase before any containers were up.
+
+**Root Cause:** `check_nginx_config` runs `nginx -t` inside a standalone container outside the Docker Compose network. The `backend` hostname is only resolvable inside the compose network at runtime — nginx's upstream resolution fails in isolation.
+
+**Resolution:** Manually commented out `check_nginx_config nginx` in `prod-deploy.sh` on the server.
+
+**Root Cause Analysis:** The function was designed for dev where it worked incidentally (different network topology). It was ported to prod without accounting for the upstream resolution difference.
+
+**Lesson Learned:** `nginx -t` validates config syntax but cannot validate upstream hostnames without the full network. The check needs to either use `resolver 127.0.0.11` in the nginx template or be restructured to run inside the running compose network.
+
+---
+
+### Issue 3: `NODE_ENV` and `LOG_LEVEL` Not Wired into Prod Compose
+
+**Symptom:** Backend crashed immediately with `unable to determine transport target for "pino-pretty"` — `pino-pretty` is a dev dependency not present in the prod image.
+
+**Root Cause:** `docker-compose.prod.yml` uses an explicit `environment:` block. `NODE_ENV` and `LOG_LEVEL` were in `.env` but not listed in the block, so they were never passed to the container. The logger defaulted to `pino-pretty` (non-production mode).
+
+**Resolution:** Added `NODE_ENV` and `LOG_LEVEL` to the backend environment block in the compose file.
+
+**Root Cause Analysis:** The explicit `environment:` pattern requires every variable to be listed — unlike `env_file:` which passes all variables wholesale. New env vars added to `.env` and the template are invisible to containers until explicitly wired into the compose file.
+
+**Lesson Learned:** When adding new env vars, always check all three compose files (`docker-compose.yml`, `docker-compose.dev-server.yml`, `docker-compose.prod.yml`) and wire them in. The template sync only updates `.env` — it does not update compose files.
+
+---
+
+### Issue 4: Backend Port Not Exposed on Host in Prod Compose
+
+**Symptom:** Even after fixing the `NODE_ENV` issue, the deploy health check at `http://localhost:8080/health` timed out — the backend was healthy inside Docker but unreachable from the host.
+
+**Root Cause:** `docker-compose.prod.yml` had no `ports:` mapping for the backend service. The health check in `deploy-lib.sh` polls `http://localhost:${PORT}/health` from the host, which requires a host-bound port.
+
+**Resolution:** Added `"127.0.0.1:${PORT:-8080}:${PORT:-8080}"` to the backend ports in the prod compose file.
+
+**Root Cause Analysis:** This binding was documented as part of the #279 (`/health` internal-only) work but was not present in the version of the compose file that shipped. The dev compose had `8081:8081` explicitly; prod was missing the equivalent.
+
+**Lesson Learned:** Always diff prod and dev compose files when making infrastructure changes. The port binding is intentionally localhost-only so the backend is not publicly exposed.
+
+---
+
+### Issue 5: `run_deploy_tests` Runs Vitest in Prod Image
+
+**Symptom:** Deploy passed health checks but immediately rolled back with `sh: vitest: not found`.
+
+**Root Cause:** `run_deploy_tests` executes `npm test` inside the running backend container. The prod image is built with `--omit=dev`, so `vitest` and all other devDependencies are absent.
+
+**Resolution:** Commented out `run_deploy_tests backend` in `prod-deploy.sh`.
+
+**Root Cause Analysis:** The function was designed for the dev stack (which uses `target: dev` and includes devDependencies). When ported to prod, this was not accounted for. In prod, post-deploy validation should use the regression smoke suite (`test-regression.sh`) run externally — not `npm test` inside the container.
+
+**Lesson Learned:** Vitest belongs in dev; smoke tests belong in prod. `run_deploy_tests` should detect the build target / `NODE_ENV` and skip gracefully in production, with a clear log message directing operators to the regression suite instead.
+
+---
+
+### Issue 6: `HEALTH_INSECURE` Unbound Variable in Prod
+
+**Symptom:** `deploy-lib.sh: line 963: HEALTH_INSECURE: unbound variable` — deploy aborted during CSP test phase.
+
+**Root Cause:** `HEALTH_INSECURE` is set in `dev-deploy.sh` (needed for the self-signed cert) but was never added to `prod-deploy.sh`. The variable is referenced in `deploy-lib.sh` which is shared between both.
+
+**Resolution:** Added `HEALTH_INSECURE=0` to `prod-deploy.sh`.
+
+**Root Cause Analysis:** Shared library variables must be explicitly set in every caller. When `deploy-lib.sh` was extended with new variables, the prod deploy script was not updated in sync.
+
+**Lesson Learned:** Shared deploy library variables should have documented defaults or use `${VAR:-default}` expansion throughout `deploy-lib.sh` to prevent unbound variable errors in `set -u` mode.
+
+---
+
+### Issue 7: Outlook Refresh Token Expired
+
+**Symptom:** Magic link email silently failed — `invalid_grant: AADSTS70000: The provided value for the input parameter 'refresh_token' is not valid`.
+
+**Root Cause:** The Outlook OAuth2 refresh token in `.env` had expired or been invalidated (Microsoft invalidates tokens if the client secret changes or the token is unused for 90 days).
+
+**Resolution:** Re-ran `generate-outlook-refresh-token.js` on Windows to obtain a new token, updated `.env`, restarted containers.
+
+**Lesson Learned:** Outlook refresh tokens are long-lived but not permanent. Add a proactive token validity check to the backend startup preflight. The magic link flow fails silently from the user's perspective (anti-enumeration response is always `{sent: true}`) — this makes expired tokens hard to detect without checking logs.
+
+---
+
+### Issue 8: Deploy Script Reverts Local Edits via `git reset --hard`
+
+**Symptom:** Edits made to `docker-compose.prod.yml` and `prod-deploy.sh` were wiped on each deploy run because `update_to_branch` calls `git reset --hard origin/$BRANCH`.
+
+**Root Cause:** By design — the deploy script ensures the server always runs exactly what's in the repo. But during an active debugging session this creates a frustrating loop where fixes must be committed before they can be tested.
+
+**Lesson Learned:** All config fixes must be committed and pushed to the branch being deployed before running the deploy. Do not attempt to fix-and-deploy with local edits — they will be wiped. Use `--skip-regression` and `--quiet` during iterative debugging runs to speed up the cycle.
+
+---
+
+### Self-Healing Recommendation
+
+Several issues above (port conflicts, unhealthy containers, unbound variables) could be mitigated by escalating self-healing in the deploy pipeline:
+
+1. **Port pre-flight:** Detect bound ports before starting compose; kill or warn about conflicting non-Docker processes
+2. **Nginx config test fix:** Run inside the compose network or use `resolver 127.0.0.11` to avoid upstream resolution failures
+3. **Graceful `run_deploy_tests` skip:** Detect prod environment and skip vitest, emit a clear checkpoint instead
+4. **Token validity pre-flight:** Test Outlook token at backend startup and emit a structured warning (not a crash) if invalid
+5. **Unbound variable defaults:** Use `${VAR:-default}` throughout `deploy-lib.sh` to survive missing declarations in callers
+
+These are captured in issue #298.
 
 Key takeaway: **Start simple (HTTP), validate each phase, then add complexity (SSL, backups, monitoring).**

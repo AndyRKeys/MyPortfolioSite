@@ -6,10 +6,11 @@
 
 set +e  # Don't exit on errors — collect what we can
 
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  INFRASTRUCTURE INFO GATHERING                                 ║"
-echo "║  Run this on the Ubuntu Server, pipe output to a file or copy ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
+# shellcheck source=../deploy/output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../deploy/output-lib.sh"
+
+_print_multi_box "" 60 "INFRASTRUCTURE INFO GATHERING" \
+  "Run this on the Ubuntu Server, pipe output to a file or copy"
 echo ""
 
 # ── System Info ────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ echo "**Compose files in repo:**"
 find . -maxdepth 1 -name "docker-compose*.yml" -o -name ".env*" | grep -v ".git" | sort
 echo ""
 echo "**Running containers:**"
-docker compose -f docker-compose.prod.yml ps 2>/dev/null || echo "(docker compose not running or file not found)"
+docker compose -f docker-compose.yml ps 2>/dev/null || echo "(docker compose not running or file not found)"
 echo ""
 
 # ── Nginx Config ───────────────────────────────────────────────────────────
@@ -57,8 +58,8 @@ echo ""
 echo "**Nginx config location in repo:**"
 find . -name "*nginx*.conf*" | grep -v ".git" | sort
 echo ""
-echo "**Template variables (from docker-compose.prod.yml):**"
-grep -E "DOMAIN|REPO_DIR|APP_PORT|BACKEND_HOST" docker-compose.prod.yml 2>/dev/null | head -20
+echo "**Template variables (from docker-compose.yml):**"
+grep -E "DOMAIN|REPO_DIR|APP_PORT|BACKEND_HOST" docker-compose.yml 2>/dev/null | head -20
 echo ""
 
 # ── SSL Certificates ───────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ echo ""
 echo "## PostgreSQL Database"
 echo ""
 echo "**Container name (from compose):**"
-grep "postgres:" docker-compose.prod.yml 2>/dev/null | head -3
+grep "postgres:" docker-compose.yml 2>/dev/null | head -3
 echo ""
 echo "**Database credentials location:**"
 echo "  File: ~/.env.prod (not shown — contains secrets)"
@@ -117,7 +118,7 @@ echo ""
 echo "## Service Status"
 echo ""
 echo "**Docker services:**"
-docker compose -f docker-compose.prod.yml ps 2>/dev/null || echo "(docker compose not initialized)"
+docker compose -f docker-compose.yml ps 2>/dev/null || echo "(docker compose not initialized)"
 echo ""
 echo "**Systemd services (if using):**"
 systemctl status docker 2>/dev/null | head -5

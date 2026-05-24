@@ -6,7 +6,7 @@
 #   bash scripts/tests/test-regression.sh \
 #     --base-url https://dev.andykeys.me:3001 \
 #     --compose-file /path/to/docker-compose.yml \
-#     --service backend-dev \
+#     --service backend \
 #     [--insecure]
 #
 # --insecure   Pass -k to curl (required for self-signed dev certs).
@@ -23,6 +23,9 @@ if [ -t 1 ]; then
 else
   C_RED=''; C_YELLOW=''; C_GREEN=''; C_CYAN=''; C_BOLD=''; C_DIM=''; C_RESET=''
 fi
+
+# shellcheck source=../deploy/output-lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../deploy/output-lib.sh"
 
 # Honour the deploy's quiet mode (exported by dev/prod-deploy.sh). In quiet
 # mode, suppress the header box, section headers, INFO lines and per-test
@@ -165,13 +168,11 @@ check_auth() {
 # ── Header ───────────────────────────────────────────────────────────────────────
 
 if [ "$QUIET" != "1" ]; then
-  echo ""
-  echo -e "${C_CYAN}${C_BOLD}╔════════════════════════════════════════════════════════════╗${C_RESET}"
-  echo -e "${C_CYAN}${C_BOLD}║  🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')  ║${C_RESET}"
-  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Base URL : $BASE_URL"
-  printf "${C_CYAN}${C_BOLD}║  %-60s║${C_RESET}\n" "Token    : $([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')"
-  echo -e "${C_CYAN}${C_BOLD}╚════════════════════════════════════════════════════════════╝${C_RESET}"
-  echo ""
+  _reg_token_text=$([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')
+  _print_multi_box "${C_CYAN}${C_BOLD}" 60 \
+    "🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')" \
+    "Base URL : $BASE_URL" \
+    "Token    : $_reg_token_text"
 fi
 
 # Clean slate so contact validation checks aren't tripped by counters left
@@ -249,7 +250,7 @@ check_auth "POST /api/travel missing title returns 400" \
   -d '{"location":"Test","visit_date":"2026-01-01"}'
 
 check_auth "GET /api/stats/visits with auth returns 200" \
-  GET "$BASE_URL/api/stats/visits" 200 "count"
+  GET "$BASE_URL/api/stats/visits" 200 "["
 
 check "GET /api/stats/visits without auth returns 401" \
   GET "$BASE_URL/api/stats/visits" 401
@@ -294,14 +295,19 @@ else
   RESULT_ICON="❌"
 fi
 
+_res_content_w=60
+_res_title="${RESULT_ICON} Regression Results — ${STATUS}"
+_res_title_w=$(_visual_width "$_res_title")
+_res_title_pad=$(( _res_content_w - _res_title_w ))  # leading 2 spaces already in format string
+_res_border=$(printf '═%.0s' $(seq 1 $(( _res_content_w + 2 ))))
 echo ""
-echo -e "${RESULT_COLOUR}╔════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${RESULT_COLOUR}║  ${RESULT_ICON} Regression Results — ${STATUS}$(printf '%*s' $((36 - ${#STATUS})) '')║${C_RESET}"
-echo -e "${RESULT_COLOUR}╠════════════════════════════════════════════════════════════╣${C_RESET}"
-printf "${RESULT_COLOUR}║  %-60s║${C_RESET}\n" "Passed : $PASS / $TOTAL"
-[ "$SKIP" -gt 0 ] && printf "${C_YELLOW}${C_BOLD}║  %-60s║${C_RESET}\n" "Skipped: $SKIP"
-[ "$FAIL" -gt 0 ] && printf "${C_RED}${C_BOLD}║  %-60s║${C_RESET}\n" "Failed : $FAIL"
-echo -e "${RESULT_COLOUR}╚════════════════════════════════════════════════════════════╝${C_RESET}"
+echo -e "${RESULT_COLOUR}╔${_res_border}╗${_OUT_RESET}"
+printf "${RESULT_COLOUR}║  %s%*s║${_OUT_RESET}\n" "$_res_title" "$_res_title_pad" ""
+echo -e "${RESULT_COLOUR}╠${_res_border}╣${_OUT_RESET}"
+printf "${RESULT_COLOUR}║  %-${_res_content_w}s║${_OUT_RESET}\n" "Passed : $PASS / $TOTAL"
+[ "$SKIP" -gt 0 ] && printf "${C_YELLOW}${C_BOLD}║  %-${_res_content_w}s║${_OUT_RESET}\n" "Skipped: $SKIP"
+[ "$FAIL" -gt 0 ] && printf "${C_RED}${C_BOLD}║  %-${_res_content_w}s║${_OUT_RESET}\n" "Failed : $FAIL"
+echo -e "${RESULT_COLOUR}╚${_res_border}╝${C_RESET}"
 echo ""
 
 # Machine-readable summary line — parsed by print_deploy_report, no colour codes

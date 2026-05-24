@@ -151,9 +151,9 @@ router.get('/test-errors', (req, res) => {
 <head>
   <title>Error Logger Test</title>
   <!-- Load error logger first so it captures all errors -->
-  <script type="module" src="/resources/java/error-logger.js"></script>
+  <script type="module" src="/resources/js/error-logger.js"></script>
   <!-- Load test script from external file to comply with CSP (no inline scripts) -->
-  <script type="module" src="/resources/java/test-errors.js"></script>
+  <script type="module" src="/resources/js/test-errors.js"></script>
 </head>
 <body>
   <h1>Error Logger Test in Progress</h1>

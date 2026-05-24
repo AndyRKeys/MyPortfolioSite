@@ -68,7 +68,7 @@ export function buildTimelineItem(opts) {
 export function buildPostCard(type, data) {
     if (type === 'blog') {
         var card = $('<a class="post-card"></a>');
-        card.attr('href', 'blog-post.html?slug=' + encodeURIComponent(data.slug));
+        card.attr('href', '/blog/post/?slug=' + encodeURIComponent(data.slug));
         $('<h3 class="post-card-title"></h3>').text(data.title || 'Untitled').appendTo(card);
         if (data.date) {
             $('<p class="post-card-date"></p>').text(data.date).appendTo(card);
@@ -118,7 +118,7 @@ export function buildPostCard(type, data) {
  */
 export function buildPublicTravelCard(travel, formatVisitDateFn) {
     var card = $('<a class="travel-card box draft-card"></a>');
-    card.attr('href', 'travel-post.html?id=' + encodeURIComponent(travel.id));
+    card.attr('href', '/travel/post/?id=' + encodeURIComponent(travel.id));
     card.attr('data-memory-id', travel.id);
     var media = $('<div class="media"></div>');
 

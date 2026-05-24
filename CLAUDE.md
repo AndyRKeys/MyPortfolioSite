@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `backend/server.js` — Express app entry point, middleware, route registration
 - `backend/routes/` — API endpoints (auth, posts, travel, deploy, etc.)
 - `backend/db/schema.sql` — PostgreSQL schema (idempotent, uses IF NOT EXISTS)
-- `resources/java/` — frontend ES modules (one per feature: script.js, blog.js, travel.js, admin.js, etc.)
+- `resources/js/` — frontend ES modules (one per feature: script.js, blog.js, travel.js, admin.js, etc.)
 - `docs/AI.md` — your working instructions (scope, commits, documentation, code style)
 - `docker-compose.yml` — local dev setup; prod uses same file with .env.prod overrides
 
@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - No build step — frontend is vanilla JS with imports; Nginx serves directly
    - All tests run in Docker: `docker compose exec backend npm test` or use dev-local.ps1
 
-3. **Current state:** See `PROJECT_ASSESSMENT.md` and `ROADMAP.md` for what's working, what's fragile, and what's planned.
+3. **Current state:** See `docs/PROJECT_ASSESSMENT.md` and `docs/ROADMAP.md` for what's working, what's fragile, and what's planned.
 
 ---
 
@@ -163,12 +163,12 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 No build step. HTML pages load ES modules directly via `<script type="module">`.
 
 **Frontend JS structure:**
-- `resources/java/config.js` — exports `API_BASE` (empty string for same-origin, auto-detects localhost in dev)
-- `resources/java/script.js` — homepage only: GitHub widget, contact form, home visit counter
-- `resources/java/blog.js` — blog listing page
-- `resources/java/travel.js` — travel listing page (map, cards, timeline, lightbox)
-- `resources/java/admin.js` — admin panel (18KB, monolithic, highest-risk file to modify)
-- `resources/java/utils/` — shared utilities (escapeHtml, formatVisitDate, buildTimelineItem, etc.)
+- `resources/js/config.js` — exports `API_BASE` (empty string for same-origin, auto-detects localhost in dev)
+- `resources/js/script.js` — homepage only: GitHub widget, contact form, home visit counter
+- `resources/js/blog.js` — blog listing page
+- `resources/js/travel.js` — travel listing page (map, cards, timeline, lightbox)
+- `resources/js/admin.js` — admin panel (18KB, monolithic, highest-risk file to modify)
+- `resources/js/utils/` — shared utilities (escapeHtml, formatVisitDate, buildTimelineItem, etc.)
 
 **Key pattern:** jQuery used only for legacy compatibility (DOM queries, $.ajax for API calls). New code uses vanilla DOM APIs and fetch.
 
@@ -204,8 +204,8 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 
 ### Auth Model
 
-- **Signup:** User visits `/setup.html` → creates account → registers FIDO2 passkey via WebAuthn
-- **Login:** User visits `/login.html` → chooses passkey or email magic link → WebAuthn ceremony or email click → JWT issued
+- **Signup:** User visits `/setup/` → creates account → registers FIDO2 passkey via WebAuthn
+- **Login:** User visits `/login/` → chooses passkey or email magic link → WebAuthn ceremony or email click → JWT issued
 - **Protected routes:** Check `Authorization: Bearer <JWT>` header; JWT contains user ID + issued-at timestamp
 
 **JWT structure:**
@@ -217,13 +217,13 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 **Email magic links:**
 - User requests link at `/api/auth/email/send`
 - Backend generates random token, stores bcrypt hash in email_tokens table
-- Email contains `/login.html?token=<raw-token>`
+- Email contains `/login/?token=<raw-token>`
 - On click: verify via `crypt(raw, stored_hash) = stored_hash` (constant-time comparison)
 - Sets JWT, marks token as used
 
 ### Admin Panel
 
-Single HTML file (`admin.html`) with inline JS (`admin.js`). Handles:
+Single HTML file (`admin/index.html`) with inline JS (`admin.js`). Handles:
 - Blog post CRUD
 - Travel memory CRUD
 - CV upload + file browser
@@ -264,7 +264,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
 **DRY principle (Don't Repeat Yourself):**
-- **Frontend:** Reuse utility functions from `resources/java/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
+- **Frontend:** Reuse utility functions from `resources/js/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
 - **Backend:** Extract common logic into middleware or route helpers. Don't repeat validation, error handling, or CORS logic.
 - **Deployment scripts:** Extract reusable functions into `scripts/deploy/deploy-lib.sh` (shared helpers like `ensure_repo_cloned()`, `update_to_branch()`, `validate_env()`, `ensure_dev_certs()`). Each `*-deploy.sh` focuses on environment-specific logic only. PowerShell wrappers (`.ps1`) are thin — mostly SSH + arg passing.
 - **Configuration:** Use single source of truth for CSP headers (nginx-security-headers.conf), environment templates (.env.*.example), and docker-compose settings.
@@ -276,7 +276,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 
 ### Debugging & Logging
 
-**Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `ROADMAP.md` §3.5).
+**Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `docs/ROADMAP.md` §3.5).
 
 - Add structured log lines at meaningful decision points (entry, external-call outcomes, branch taken, failure reasons) — not just the happy path. Use a unique, greppable `[area] message — context` prefix.
 - Log the *why* of a failure (error + relevant inputs + expectation), never secrets (`.env`, tokens, JWTs, hashes).
@@ -343,21 +343,21 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 
 | File | Why | Mitigation |
 |------|-----|----------|
-| `admin.html` (18KB) | Monolithic, handles blog + travel + CV + deploy; one mistake breaks multiple features | Read full file before edits; test admin flows thoroughly |
+| `admin/index.html` (18KB) | Monolithic, handles blog + travel + CV + deploy; one mistake breaks multiple features | Read full file before edits; test admin flows thoroughly |
 | `backend/routes/auth.js` (12KB) | WebAuthn state machine is complex; JWT + magic links state must be correct | High test coverage; read full file; don't eyeball auth logic |
-| `resources/java/admin.js` | Mirrors admin.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
+| `resources/js/admin.js` | Mirrors admin/index.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
 | `docker-compose.yml` | Volume mounts, env vars, networking — errors break the entire dev environment | Test `docker compose up/down/reset` after changes |
 | `backend/db/schema.sql` | Idempotent, no migration tool — altering existing columns requires careful planning | Always use IF NOT EXISTS / IF NOT; test schema changes on a clean DB |
 
 ---
 
-## Fragile / Incomplete Areas (from PROJECT_ASSESSMENT.md)
+## Fragile / Incomplete Areas (from docs/PROJECT_ASSESSMENT.md)
 
 - **No backups:** Database and uploads have no automated backup. (#164)
 - **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
-- **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; ROADMAP §3.5)
+- **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; docs/ROADMAP.md §3.5)
 
 ---
 

@@ -12,7 +12,7 @@ function setMessage(msg, isError = false) {
 }
 
 if (isAdminSession()) {
-    location.replace('admin.html');
+    location.replace('/admin/');
 }
 
 // Auto-verify email magic link token from URL
@@ -28,7 +28,7 @@ if (emailToken) {
         .then(({ ok, data }) => {
             if (!ok) throw new Error(data.error || 'Verification failed');
             localStorage.setItem('adminToken', data.token);
-            location.replace('admin.html');
+            location.replace('/admin/');
         })
         .catch(err => {
             statusEl.textContent = err.message;
@@ -62,7 +62,7 @@ document.getElementById('passkey-btn').addEventListener('click', async () => {
         if (!finishRes.ok) throw new Error(data.error || 'Authentication failed');
 
         localStorage.setItem('adminToken', data.token);
-        location.replace('admin.html');
+        location.replace('/admin/');
     } catch (err) {
         if (err.name === 'NotAllowedError') {
             setMessage('Passkey sign-in was cancelled.', true);

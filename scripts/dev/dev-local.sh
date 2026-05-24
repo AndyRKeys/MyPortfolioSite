@@ -18,6 +18,11 @@ set -e
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_DIR"
 
+# Default to the laptop-local compose file. The repo root's docker-compose.yml
+# is the unified SERVER compose; local dev uses docker-compose.local.yml,
+# which has source bind-mounts and exposes the DB port for psql.
+export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.local.yml}"
+
 case "$1" in
 
   up)
