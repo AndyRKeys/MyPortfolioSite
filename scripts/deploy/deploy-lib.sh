@@ -983,8 +983,8 @@ _do_rollback() {
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to last-good state — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   elif [ -n "${ROLLBACK_BRANCH:-}" ] && [ "${ROLLBACK_BRANCH}" != "${BRANCH:-}" ]; then
     # Roll back to a known-stable branch (e.g. dev or main) rather than a
@@ -995,8 +995,8 @@ _do_rollback() {
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to '$ROLLBACK_BRANCH' — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   elif [ "${PRE_SHA:-none}" != "none" ] && [ "${PRE_SHA:-none}" != "${NEW_SHA:-none}" ]; then
     # Same branch deploy: revert to the previous commit.
@@ -1005,14 +1005,40 @@ _do_rollback() {
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
-    dwarn "Rolled back to ${PRE_SHA:0:7} — verify service health before investigating the failed update."
     DEPLOY_ROLLED_BACK=1
+    _check_rollback_health
 
   else
     dstatus rollback reason="$reason" method=none status=no-rollback-available
     dwarn "No automatic rollback available (already on '$ROLLBACK_BRANCH' or no prior commit)."
     dwarn "Manual intervention required — check container logs above."
   fi
+}
+
+_check_rollback_health() {
+  # Non-fatal health poll run after every rollback. Uses a shorter timeout than
+  # the main deploy health check — we just want to confirm the restored state
+  # is serving traffic, not block indefinitely on a broken rollback target.
+  local attempts=0 max_attempts=12 interval=5
+  local curl_flags=()
+  [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_flags+=("--insecure")
+
+  dwarn "Checking rollback health at $HEALTH_URL ..."
+  while [ "$attempts" -lt "$max_attempts" ]; do
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" "${curl_flags[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
+    if [ "$http_code" = "200" ]; then
+      dstatus rollback-health status=ok url="$HEALTH_URL"
+      dok "Rollback is live and healthy."
+      return 0
+    fi
+    attempts=$(( attempts + 1 ))
+    sleep "$interval"
+  done
+
+  dstatus rollback-health status=failed url="$HEALTH_URL"
+  dwarn "Rollback health check failed — site may be down. Check container logs:"
+  dwarn "  docker compose -f $COMPOSE_FILE logs --tail=50 ${BACKEND_SERVICE:-backend}"
 }
 
 # ── Disk space preflight ──────────────────────────────────────────────────────
