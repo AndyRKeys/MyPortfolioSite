@@ -1015,30 +1015,82 @@ _do_rollback() {
   fi
 }
 
-_check_rollback_health() {
-  # Non-fatal health poll run after every rollback. Uses a shorter timeout than
-  # the main deploy health check — we just want to confirm the restored state
-  # is serving traffic, not block indefinitely on a broken rollback target.
-  local attempts=0 max_attempts=12 interval=5
+_poll_health() {
+  # Poll HEALTH_URL up to max_attempts times, returning 0 on first 200.
+  local max_attempts="${1:-12}" interval="${2:-5}"
+  local attempts=0
   local curl_flags=()
   [ "${HEALTH_INSECURE:-0}" = "1" ] && curl_flags+=("--insecure")
 
-  dwarn "Checking rollback health at $HEALTH_URL ..."
   while [ "$attempts" -lt "$max_attempts" ]; do
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" "${curl_flags[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
-    if [ "$http_code" = "200" ]; then
-      dstatus rollback-health status=ok url="$HEALTH_URL"
-      dok "Rollback is live and healthy."
-      return 0
-    fi
+    [ "$http_code" = "200" ] && return 0
     attempts=$(( attempts + 1 ))
     sleep "$interval"
   done
+  return 1
+}
 
-  dstatus rollback-health status=failed url="$HEALTH_URL"
-  dwarn "Rollback health check failed — site may be down. Check container logs:"
-  dwarn "  docker compose -f $COMPOSE_FILE logs --tail=50 ${BACKEND_SERVICE:-backend}"
+_check_rollback_health() {
+  # Confirms the rollback is serving traffic. If not, escalates through
+  # increasingly aggressive recovery attempts before giving up.
+  #
+  # Level 1 — rollback already brought containers up; just poll health.
+  # Level 2 — no-cache rebuild: stale image layers may be the problem.
+  # Level 3 — docker system prune + rebuild: clears dangling images/networks.
+  #           Prod stops here. Dev only — never deletes named volumes (data safe).
+  # Manual  — all levels failed; print exact commands for operator.
+
+  dwarn "Checking rollback health at $HEALTH_URL ..."
+
+  if _poll_health 12 5; then
+    dstatus rollback-health status=ok level=1
+    dok "Rollback is live and healthy."
+    return 0
+  fi
+
+  # ── Level 2: no-cache rebuild ─────────────────────────────────────────────
+  dstatus rollback-health status=failed level=1
+  dwarn "Rollback unhealthy — escalating to level 2: no-cache image rebuild..."
+  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+  docker compose -f "$COMPOSE_FILE" up -d --build --no-cache 2>&1 | tee -a "$LOG_FILE" || true
+
+  if _poll_health 12 5; then
+    dstatus rollback-health status=ok level=2
+    dok "Recovered at level 2 (no-cache rebuild)."
+    return 0
+  fi
+
+  # ── Level 3: docker system prune + rebuild (dev only) ────────────────────
+  dstatus rollback-health status=failed level=2
+  if [ "${DEPLOY_ENV:-}" = "dev" ]; then
+    dwarn "Escalating to level 3: docker system prune + rebuild (dev only)..."
+    dwarn "This removes dangling images and networks — named volumes (data) are preserved."
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker system prune -f 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+
+    if _poll_health 12 5; then
+      dstatus rollback-health status=ok level=3
+      dok "Recovered at level 3 (system prune + rebuild)."
+      return 0
+    fi
+    dstatus rollback-health status=failed level=3
+  fi
+
+  # ── All levels exhausted — manual intervention required ───────────────────
+  dstatus rollback-health status=failed level=manual
+  dfail "All automated recovery attempts failed. Manual intervention required."
+  dfail ""
+  dfail "Diagnostic commands:"
+  dfail "  docker compose -f $COMPOSE_FILE logs --tail=50 ${BACKEND_SERVICE:-backend}"
+  dfail "  docker compose -f $COMPOSE_FILE logs --tail=30 ${NGINX_SERVICE:-nginx}"
+  dfail "  docker compose -f $COMPOSE_FILE ps"
+  dfail ""
+  dfail "To attempt a manual recovery:"
+  dfail "  docker compose -f $COMPOSE_FILE down --remove-orphans"
+  dfail "  docker compose -f $COMPOSE_FILE up -d --build"
 }
 
 # ── Disk space preflight ──────────────────────────────────────────────────────
