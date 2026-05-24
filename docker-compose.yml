@@ -67,10 +67,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       UPLOADS_DIR: /app/uploads
-    # Bound to localhost only — allows deploy health checks from the host
-    # without exposing the backend port externally.
-    ports:
-      - "127.0.0.1:${PORT}:${PORT}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
