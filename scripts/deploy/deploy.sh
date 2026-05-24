@@ -212,8 +212,15 @@ else
   HEALTH_INSECURE=0
 fi
 
-# Backend health URL — internal-only, talks to the backend container's health endpoint.
-HEALTH_URL="http://localhost:${PORT}/health"
+# Health check through nginx rather than the backend port directly. This lets
+# us remove the host-port binding from the backend container, eliminating the
+# port conflict on server restart. Nginx proxies /api/health to the backend,
+# so a 200 from nginx confirms both services are up.
+if [ "${NGINX_PORT}" = "443" ]; then
+  HEALTH_URL="https://localhost/api/health"
+else
+  HEALTH_URL="http://localhost:${NGINX_PORT}/api/health"
+fi
 
 # Docker-internal nginx URL used by the error-logger test (puppeteer inside the
 # backend container reaches nginx by service name). Omit the port for 443 since
