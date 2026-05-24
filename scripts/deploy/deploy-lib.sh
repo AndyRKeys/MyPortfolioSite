@@ -695,14 +695,12 @@ migrate_env_values() {
 cleanup_stale_compose_projects() {
   dsection "Phase 3d: cleaning up stale compose stacks"
 
-  # Project names this codebase has used historically. The currently-active
-  # COMPOSE_PROJECT_NAME is filtered out before any teardown so we never
-  # nuke the live stack.
-  # Names from before the compose unification (#300). Do NOT add the
-  # current dev/prod project names here — both dev and prod run on the
-  # same host and must coexist.
+  # Project names this codebase has used historically that are safe to tear
+  # down. ONLY include names that can never be an active prod or dev stack:
+  # - myportfoliosite-dev: old dev stack name before compose unification
+  # Do NOT include myportfoliosite — prod still uses that name until the
+  # #300 PR is merged and prod is migrated to portfolio_prod.
   local known_stale_projects=(
-    myportfoliosite
     myportfoliosite-dev
   )
 
