@@ -1,46 +1,48 @@
 /**
- * Global error logger — captures all console errors/warnings and sends to backend
- * Useful for debugging production issues without requiring manual console inspection
+ * Global error logger — captures uncaught JS errors, unhandled rejections,
+ * and CSP violations, forwarding them to the backend for debugging.
+ *
+ * Deliberately does NOT override console.error/warn — that pattern creates
+ * recursion risk (a failed fetch calls console.error → triggers the override
+ * → fires another fetch) and interferes with browser devtools. Use the
+ * window 'error' event for production-visible errors instead.
  */
 
 import { API_BASE } from './config.js';
 
-console.log('[error-logger] Initializing global error logger');
-
-// Track errors to avoid logging duplicates (same error multiple times)
+// Track seen keys to suppress duplicate reports.
 const seenErrors = new Set();
 const MAX_STORED_ERRORS = 100;
 
-// Send error to backend
+// Guard to prevent re-entrant calls (e.g., logToBackend itself throwing).
+let sending = false;
+
 async function logToBackend(errorData) {
+  if (sending) return;
+  sending = true;
   try {
-    console.log(`[error-logger] Sending ${errorData.type} to ${API_BASE}/debug/errors`);
-    const response = await fetch(`${API_BASE}/debug/errors`, {
+    await fetch(`${API_BASE}/debug/errors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(errorData),
     });
-
-    if (!response.ok) {
-      console.error(`[error-logger] Server responded with HTTP ${response.status}: ${response.statusText}`);
-      const text = await response.text();
-      if (text) console.error(`[error-logger] Response body: ${text}`);
-    } else {
-      console.log(`[error-logger] ${errorData.type} sent successfully`);
-    }
-  } catch (e) {
-    console.error('[error-logger] Fetch failed:', e.message);
+  } catch (_) {
+    // Swallow — no console.error here to avoid recursion.
+  } finally {
+    sending = false;
   }
 }
 
-// Capture uncaught JavaScript errors
-window.addEventListener('error', (event) => {
-  const errorKey = `${event.filename}:${event.lineno}:${event.message}`;
-  if (seenErrors.has(errorKey)) return;
-  seenErrors.add(errorKey);
+function dedupAndLog(key, payload) {
+  if (seenErrors.has(key)) return;
+  seenErrors.add(key);
   if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
+  logToBackend(payload);
+}
 
-  logToBackend({
+window.addEventListener('error', (event) => {
+  const key = `${event.filename}:${event.lineno}:${event.message}`;
+  dedupAndLog(key, {
     type: 'uncaught-error',
     timestamp: new Date().toISOString(),
     message: event.message,
@@ -52,14 +54,9 @@ window.addEventListener('error', (event) => {
   });
 });
 
-// Capture unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
-  const errorKey = `promise:${String(event.reason).slice(0, 100)}`;
-  if (seenErrors.has(errorKey)) return;
-  seenErrors.add(errorKey);
-  if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
-
-  logToBackend({
+  const key = `promise:${String(event.reason).slice(0, 100)}`;
+  dedupAndLog(key, {
     type: 'unhandled-rejection',
     timestamp: new Date().toISOString(),
     reason: String(event.reason),
@@ -68,66 +65,12 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
-// Intercept console.error and console.warn
-const originalError = console.error;
-const originalWarn = console.warn;
-
-console.error = function(...args) {
-  originalError.apply(console, args);
-
-  const message = args.map(arg => {
-    if (typeof arg === 'object') return JSON.stringify(arg);
-    return String(arg);
-  }).join(' ');
-
-  const errorKey = `console-error:${message.slice(0, 100)}`;
-  if (!seenErrors.has(errorKey)) {
-    seenErrors.add(errorKey);
-    if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
-
-    logToBackend({
-      type: 'console-error',
-      timestamp: new Date().toISOString(),
-      message: message,
-      url: window.location.href,
-      stack: new Error().stack,
-    });
-  }
-};
-
-console.warn = function(...args) {
-  originalWarn.apply(console, args);
-
-  const message = args.map(arg => {
-    if (typeof arg === 'object') return JSON.stringify(arg);
-    return String(arg);
-  }).join(' ');
-
-  const errorKey = `console-warn:${message.slice(0, 100)}`;
-  if (!seenErrors.has(errorKey)) {
-    seenErrors.add(errorKey);
-    if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
-
-    logToBackend({
-      type: 'console-warn',
-      timestamp: new Date().toISOString(),
-      message: message,
-      url: window.location.href,
-    });
-  }
-};
-
-// Capture CSP (Content-Security-Policy) violations
-// These occur when a resource is blocked by security policy (e.g., loading from disallowed domain)
+// CSP violations — ISP-injected inline scripts will trigger this. That is
+// expected behaviour (blocking 3rd-party injection is correct). The report
+// is forwarded so we have a server-side record when it occurs.
 window.addEventListener('securitypolicyviolation', (event) => {
-  const cspKey = `csp:${event.violatedDirective}:${event.blockedURI}`;
-  if (seenErrors.has(cspKey)) return;
-  seenErrors.add(cspKey);
-  if (seenErrors.size > MAX_STORED_ERRORS) seenErrors.clear();
-
-  console.warn(`CSP Violation: ${event.violatedDirective} blocked ${event.blockedURI}`);
-
-  logToBackend({
+  const key = `csp:${event.violatedDirective}:${event.blockedURI}`;
+  dedupAndLog(key, {
     type: 'csp-violation',
     timestamp: new Date().toISOString(),
     'violated-directive': event.violatedDirective,
