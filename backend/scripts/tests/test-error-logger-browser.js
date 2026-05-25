@@ -12,6 +12,7 @@
  * Contracts verified:
  *   1. Resource-load failures captured (#332) — capture-phase listener
  *   2. Runtime errors logged exactly once (no duplication from capture listener)
+ *   2b. Browser-extension errors filtered out, site errors still reported (#356)
  *   3. Reports buffered in localStorage when backend unreachable (#334)
  *   4. Buffer drained and emptied after backend returns (#334)
  *   5. No browser hang under error storm against failing backend (#331)
@@ -101,6 +102,32 @@ try {
   await sleep(600);
   const rt = captured.filter(r => r.type === 'uncaught-error');
   check('runtime error reported exactly once (no duplication)', rt.length === 1);
+
+  // ── Test 2b: browser-extension errors are filtered out ─────────────────────
+  // Extension content scripts run in the page context; their uncaught errors
+  // bubble to our handler with a chrome-/moz-/safari-extension:// filename.
+  // These must be dropped before reaching /debug/errors (#356). We dispatch a
+  // synthetic ErrorEvent (real extension throws can't be staged in Puppeteer),
+  // plus a control site error to prove genuine errors still get through.
+  console.log('\n📍 Test 2b — browser-extension errors filtered (#356)');
+  captured.length = 0;
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent('error', {
+      message: "Couldn't load fs",
+      filename: 'chrome-extension://abcdefghijklmnop/content.js',
+      lineno: 1, colno: 1,
+    }));
+    window.dispatchEvent(new ErrorEvent('error', {
+      message: 'genuine-site-error-356',
+      filename: window.location.href,
+      lineno: 2, colno: 3,
+    }));
+  });
+  await sleep(600);
+  const extReport  = captured.find(r => String(r.filename || '').startsWith('chrome-extension://'));
+  const siteReport = captured.find(r => String(r.message || '').includes('genuine-site-error-356'));
+  check('extension-origin error NOT reported', !extReport);
+  check('genuine site error still reported', !!siteReport);
 
   // ── Test 3: buffered when backend down ─────────────────────────────────────
   console.log('\n📍 Test 3 — reports buffered when backend unreachable (#334)');

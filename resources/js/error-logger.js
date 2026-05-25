@@ -58,6 +58,18 @@ function withCorrelation(payload) {
   return { ...payload, sessionId: SESSION_ID, requestId: getRecentRequestId() };
 }
 
+// ── Extension-noise filter (#356) ──────────────────────────────────────────
+// Browser extension content scripts run in the page's window context, so their
+// uncaught errors (e.g. require('fs')/require('zlib') in Node-targeting
+// extensions) bubble to our handlers. They are not site errors — discard them
+// before they reach the dedup/send pipeline so they never pollute /debug/errors
+// or contribute to alert thresholds (#333).
+const EXTENSION_URL = /^(chrome|moz|safari)-extension:\/\//;
+
+function isExtensionUrl(url) {
+  return typeof url === 'string' && EXTENSION_URL.test(url);
+}
+
 // ── Dedup / buffer / send ──────────────────────────────────────────────────
 // Suppress duplicate reports within a page view.
 const seenErrors = new Set();
@@ -150,6 +162,8 @@ function dedupAndLog(key, payload) {
 
 // Uncaught runtime errors (bubble phase). event.target is window here.
 window.addEventListener('error', (event) => {
+  // Skip errors thrown by browser extension content scripts (#356).
+  if (isExtensionUrl(event.filename)) return;
   const key = `${event.filename}:${event.lineno}:${event.message}`;
   dedupAndLog(key, withCorrelation({
     type: 'uncaught-error',
@@ -171,7 +185,8 @@ window.addEventListener('error', (event) => {
   const target = event.target;
   if (!target || !(target instanceof HTMLElement)) return; // runtime errors handled above
   const resourceUrl = target.src || target.href;
-  if (!resourceUrl) return;
+  // Skip missing URLs and extension-injected resources (#356).
+  if (!resourceUrl || isExtensionUrl(resourceUrl)) return;
   const tag = target.tagName.toLowerCase();
   dedupAndLog(`resource:${tag}:${resourceUrl}`, withCorrelation({
     type: 'resource-error',
