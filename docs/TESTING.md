@@ -86,17 +86,7 @@ docker compose exec backend npm run test:watch
 docker compose exec backend npm run test:coverage
 ```
 
-### Running without Docker (host-side)
-
-The Vitest suite mocks `pg` and `nodemailer`, so it does **not** need a running database or Docker. You can run it directly on the host with Node ≥ 18:
-
-```bash
-cd backend
-PUPPETEER_SKIP_DOWNLOAD=true npm install   # skip Chromium; not needed for Vitest
-npm test
-```
-
-This is the fastest feedback loop when iterating on backend logic. The full Docker stack is still the authoritative test environment — always do a dev-server deploy before raising a PR.
+> **Note:** The Vitest suite runs automatically inside the deployed container on every dev/prod deploy (see "Automatic tests during deploy" above) — that is the canonical path. The suite mocks `pg` and `nodemailer` so it needs no database, which is also what lets CI run it host-side (`cd backend && npm install && npm test`, see [CI](#ci)). Day-to-day verification is done by deploying to the dev server, not by running tests locally.
 
 ---
 
@@ -116,15 +106,13 @@ This is the fastest feedback loop when iterating on backend logic. The full Dock
 
 ### Running
 
+Because it is self-contained (no dev stack, DB, or network), this test runs wherever Node + Chromium are available — **CI** (issue #98) or **on the dev server** from the deployed checkout:
+
 ```bash
-# Requires Node + Chromium (Puppeteer)
-cd backend
-
-# First-time setup: install deps including Chromium
+# On the dev server, against the freshly deployed branch:
+cd ~/MyPortfolioSite-dev/backend
 npm install
-npx puppeteer browsers install chrome
-
-# Run the test
+npx puppeteer browsers install chrome   # first time only
 npm run test:error-logger:browser
 ```
 
@@ -137,9 +125,9 @@ The test prints a machine-parseable summary line at the end:
 
 - After any change to `resources/js/error-logger.js`
 - After any change to `backend/routes/debug.js` that alters the `/debug/errors` contract
-- As part of the PR test plan when either file is touched
+- As part of the PR verification when either file is touched (alongside the dev-server deploy)
 
-The existing `test:error-logger` and `test:error-logger:all-pages` scripts complement this test — they connect to a running dev server and verify the full end-to-end flow (nginx, auth, real DB). Run both when doing a full integration verification.
+The existing `test:error-logger` and `test:error-logger:all-pages` scripts complement this test — they connect to the running dev server and verify the full end-to-end flow (nginx, auth, real DB). This contract test isolates the frontend logic (buffering, capture-phase listener, recursion safety) that is awkward to exercise against a live server.
 
 ---
 
