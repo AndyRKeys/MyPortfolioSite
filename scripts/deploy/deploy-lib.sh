@@ -461,7 +461,19 @@ sync_env_from_template() {
       else
         printf '%s\n' "$line" >> "$tmp_env"
         new_keys+=("$key")
-        placeholder_keys+=("$key")
+        # Only flag as a placeholder requiring action if the template value
+        # matches a known placeholder pattern (e.g. "change-me", "your-").
+        # An empty template value (KEY=) means the key is optional —
+        # add it to .env silently and do not block the deploy (#352).
+        local is_ph=0
+        local pat
+        for pat in "${PLACEHOLDER_PATTERNS[@]}"; do
+          if [[ "$template_value" == *"$pat"* ]]; then
+            is_ph=1
+            break
+          fi
+        done
+        [ "$is_ph" = "1" ] && placeholder_keys+=("$key")
       fi
     else
       # Comment, blank line, section header — copy verbatim from template
@@ -496,11 +508,24 @@ sync_env_from_template() {
   dok "Rebuilt $ENV_FILE from template (backup: $backup)"
   dlog "  carried over: $carried_count keys"
   if [ "${#new_keys[@]}" -gt 0 ]; then
-    dwarn "  new keys (template default in place — review and set real values):"
+    # Split new keys into required-action (placeholder) vs optional (empty template value).
+    local required_keys=() optional_keys=()
     local k
     for k in "${new_keys[@]}"; do
-      dwarn "    + $k"
+      if printf '%s\n' "${placeholder_keys[@]:-}" | grep -qx "$k"; then
+        required_keys+=("$k")
+      else
+        optional_keys+=("$k")
+      fi
     done
+    if [ "${#required_keys[@]}" -gt 0 ]; then
+      dwarn "  new keys (template default in place — review and set real values):"
+      for k in "${required_keys[@]}"; do dwarn "    + $k"; done
+    fi
+    if [ "${#optional_keys[@]}" -gt 0 ]; then
+      dinfo "  new optional keys added (empty by default — configure only if needed):"
+      for k in "${optional_keys[@]}"; do dinfo "    + $k"; done
+    fi
   fi
   if [ "${#dropped_keys[@]}" -gt 0 ]; then
     dlog "  dropped keys (not in template — preserved only in backup):"
