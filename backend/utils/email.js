@@ -89,6 +89,40 @@ export async function sendContactEmail({ name, email, message }) {
   }
 }
 
+export async function sendErrorAlertEmail({ count, windowMinutes, topErrors, adminEmail }) {
+  if (!isEmailConfigured()) return;
+
+  const from = isOAuth2Configured()
+    ? process.env.OUTLOOK_EMAIL
+    : (process.env.SMTP_FROM || process.env.SMTP_USER);
+
+  const errorRows = topErrors.map(e =>
+    `<tr><td style="padding:4px 8px">${escapeHtml(e.type)}</td><td style="padding:4px 8px">${escapeHtml(e.message.slice(0, 120))}</td><td style="padding:4px 8px;text-align:right">${e.count}</td></tr>`
+  ).join('');
+
+  const html = `
+    <p><strong>${count} frontend errors</strong> received in the last ${windowMinutes} minutes on ${escapeHtml(process.env.SITE_HOST || 'the site')}.</p>
+    <table border="1" cellspacing="0" style="border-collapse:collapse;font-size:13px">
+      <thead><tr><th style="padding:4px 8px">Type</th><th style="padding:4px 8px">Message</th><th style="padding:4px 8px">Count</th></tr></thead>
+      <tbody>${errorRows}</tbody>
+    </table>
+    <p style="color:#666;font-size:12px">Check /debug/errors for the full log.</p>
+  `;
+  const subject = `[${process.env.SITE_HOST || 'portfolio'}] ${count} frontend errors in ${windowMinutes} min`;
+  const text = `${count} frontend errors in the last ${windowMinutes} minutes.\n\n${topErrors.map(e => `${e.type}: ${e.message} (×${e.count})`).join('\n')}`;
+
+  try {
+    if (isOAuth2Configured()) {
+      await sendViaGraph({ from, to: adminEmail, subject, text, html });
+    } else {
+      await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to: adminEmail, subject, text, html });
+    }
+    logger.info(`[email] Error alert sent — ${count} errors in ${windowMinutes} min`);
+  } catch (err) {
+    logger.error({ err }, '[email] Failed to send error alert email');
+  }
+}
+
 export async function sendMagicLink(to, token) {
   logger.info(`[email] sendMagicLink called for ${redactEmail(to)}`);
 
