@@ -18,7 +18,7 @@
  *
  * Usage:
  *   node test-error-logger-browser.js <base-url>
- *   npm run test:error-logger:browser -- https://nginx-dev:3001
+ *   npm run test:error-logger:browser -- https://nginx:3001
  */
 
 import puppeteer from 'puppeteer';

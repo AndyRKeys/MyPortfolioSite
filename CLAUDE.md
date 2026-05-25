@@ -88,6 +88,7 @@ npm test -- --reporter=verbose    # Verbose output
 
 # Smoke tests for a PR (regression runs automatically post-deploy; run PR-specific tests from Windows):
 .\scripts\tests\Test-PR148.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
+# Note: dev.andykeys.me resolves from Windows/external only. On the server itself use https://localhost:3001 -k
 ```
 
 ### Git Workflow
