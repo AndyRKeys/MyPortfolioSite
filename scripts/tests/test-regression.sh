@@ -208,6 +208,20 @@ check "POST /api/stats/visit?page=unknown returns 400" \
 check "Unknown route returns 404" \
   GET "$BASE_URL/api/does-not-exist" 404
 
+# CORS: a browser at the canonical site host omits the non-standard port from
+# the Origin header (e.g. https://dev.andykeys.me, not :3001). The backend must
+# allow it via its SITE_HOST check. This is the exact failure from #357 —
+# SITE_HOST was undefined in the container and every such origin was rejected
+# with a 500. Derive the host from BASE_URL and assert the POST is NOT rejected.
+CORS_HOST="${BASE_URL#*://}"   # strip scheme
+CORS_HOST="${CORS_HOST%%/*}"   # strip any path
+CORS_HOST="${CORS_HOST%%:*}"   # strip port → bare hostname
+check "POST /api/debug/errors with site-host Origin is not CORS-rejected" \
+  POST "$BASE_URL/api/debug/errors" 200 "received" \
+  -H "Origin: https://${CORS_HOST}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"smoke-test","message":"cors check"}'
+
 say ""
 
 # ── Auth gating (protected routes must reject anonymous requests) ─────────────────

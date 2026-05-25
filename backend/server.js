@@ -3,11 +3,11 @@ import { createApp } from './app.js';
 import { logger } from './utils/logger.js';
 import { pool } from './db/pool.js';
 import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
+import { validateEnvOrExit } from './utils/validateEnv.js';
 
-if (!process.env.JWT_SECRET) {
-  logger.fatal('[startup] JWT_SECRET environment variable is not set — refusing to start');
-  process.exit(1);
-}
+// Fail fast if any required env var is missing/empty — catches vars defined in
+// .env but not bridged into the container's compose `environment` block (#357).
+validateEnvOrExit(logger);
 
 const app  = createApp();
 const PORT = process.env.PORT || 3001;
