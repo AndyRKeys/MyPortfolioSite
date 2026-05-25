@@ -449,6 +449,7 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 - Use parameterized queries for SQL
 - Validate user input at system entry points only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
+- **Keep the CSP allowlist in lockstep.** Any change that adds or moves an external resource — a `<script>`/`<link>`/font/image source, an inline script or style, or a `fetch`/XHR to a new origin — must update `scripts/config/nginx-security-headers.conf` in the **same PR** and be verified to load in a browser. A missed entry is blocked **only in prod** (where the CSP is enforced) and breaks that feature silently; Vitest cannot catch it. Enforcement is per-resource (one violation blocks one resource, not the whole page), but a single directive line governs a whole *class* of resources — so a wrong or over-tightened line (e.g. dropping `'self'` from `script-src`) has site-wide blast radius. Treat edits to this file as high-risk. (Prior incidents: Nominatim geocoding, #330.)
 
 ## Hotfixes
 

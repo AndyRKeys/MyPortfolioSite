@@ -348,6 +348,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 | `resources/js/admin.js` | Mirrors admin/index.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
 | `docker-compose.yml` | Volume mounts, env vars, networking — errors break the entire dev environment | Test `docker compose up/down/reset` after changes |
 | `backend/db/schema.sql` | Idempotent, no migration tool — altering existing columns requires careful planning | Always use IF NOT EXISTS / IF NOT; test schema changes on a clean DB |
+| `scripts/config/nginx-security-headers.conf` (CSP) | One directive line governs a whole class of resources; a missing allowlist entry breaks a feature in prod only (enforced CSP) and is invisible to Vitest | When adding/moving any external resource (script, style, font, image, API origin) or inline script, update the allowlist in the same PR and verify it loads in a browser |
 
 ---
 

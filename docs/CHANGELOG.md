@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Added
+- CSP maintenance is now a standing dev-cycle rule (#339): adding or moving any external resource (script/style/font/image source, inline script, or a `fetch` to a new origin) must update `scripts/config/nginx-security-headers.conf` in the same PR. Documented in `docs/AI.md` (Security), `CLAUDE.md` (High-Risk Areas), and a new PR-template checklist item. Prevents prod-only CSP breakage (invisible to Vitest) like the prior Nominatim incident and #330.
+
 ### Changed
 - Unified bash deploy scripts (#300): `dev-deploy.sh` and `prod-deploy.sh` replaced by a single `deploy.sh --env dev|prod`. Both PS1 wrappers now follow the same pattern — `switch-branch.sh` handles all git updates before `deploy.sh` runs. Env-specific behaviour (Vitest, dev certs, UFW check, LAN IP detection, DDNS check, uploads dir, regression flags) is gated by feature flags set in the environment config block.
 - Project structure reorg (#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) giving clean URLs (`/blog/`, `/travel/` etc.); `resources/java/` renamed to `resources/js/`; `PROJECT_ASSESSMENT.md` and `ROADMAP.md` moved into `docs/`. No Nginx changes required — `try_files` + `index.html` handles directory routing. All internal links, JS redirects, and the magic link email URL updated to new paths.
