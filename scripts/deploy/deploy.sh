@@ -356,6 +356,7 @@ check_outlook_token "$BACKEND_SERVICE"
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_all_pages
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
 [ "$RUN_ERROR_LOGGER" = "1" ] && check_csp_violations
+[ "$RUN_ERROR_LOGGER" = "1" ] && check_admin_e2e_csp
 
 test_csp_reporting
 

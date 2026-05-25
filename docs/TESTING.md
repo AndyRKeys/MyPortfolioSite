@@ -100,6 +100,7 @@ Puppeteer scripts run automatically inside the backend container after every dev
 | `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 | `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
+| `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
 
 ### Contract test (`test-error-logger-browser.js`)
 
@@ -142,16 +143,34 @@ Machine-parseable summary:
 [csp-violations] status=OK pages=6 violations=0
 ```
 
+### Authenticated admin E2E CSP scan (`test-admin-e2e-csp.js`)
+
+Loads `/admin/` as an authenticated session (JWT minted from `JWT_SECRET` and injected into `localStorage.adminToken`) and drives the interactions that call external origins (#342):
+
+| # | Interaction | External origin |
+|---|---|---|
+| 1 | Admin page load — all static resources | self + CDNs |
+| 2 | Nominatim forward geocode (location search button) | `nominatim.openstreetmap.org` |
+| 3 | Nominatim reverse geocode (lat/lng → location name) | `nominatim.openstreetmap.org` |
+
+Any `securitypolicyviolation` event during these interactions fails the check. This is the Nominatim `connect-src` path that was the root cause of the original #330 breakage.
+
+Machine-parseable summary:
+```
+[admin-e2e-csp] status=OK interactions=3 violations=0
+```
+
 ### When to run
 
 - Automatically: every dev/prod deploy
 - Manually after any change to `resources/js/error-logger.js` or `backend/routes/debug.js`
 - Manually after adding or moving any external resource (script, style, font, image, API origin) — verifies the CSP allowlist update is correct
-- Run against the dev server before raising a PR that touches CSP or external resources:
+- Run the admin E2E scan after any change to the admin travel form or any new external fetch:
   ```bash
   cd ~/MyPortfolioSite-dev
-  docker compose -f docker-compose.yml exec -T backend \
-    npm run test:csp-violations -- https://nginx:3001
+  docker compose -f docker-compose.yml exec -T \
+    -e JWT_SECRET="$(grep JWT_SECRET .env | cut -d= -f2)" \
+    backend npm run test:admin-e2e-csp -- https://nginx:3001
   ```
 
 ---

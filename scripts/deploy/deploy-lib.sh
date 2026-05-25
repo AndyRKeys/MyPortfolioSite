@@ -1425,6 +1425,42 @@ check_csp_violations() {
   fi
 }
 
+# ── Authenticated Admin E2E CSP Test (#342) ───────────────────────────────────
+
+# Drives the admin panel as an authenticated session and triggers all
+# interactions that call external origins (Nominatim forward/reverse geocoding).
+# Mints a JWT from JWT_SECRET — same technique as the regression suite — and
+# injects it into localStorage.adminToken so the admin page is fully authed
+# without a passkey ceremony. Listens for securitypolicyviolation events and
+# fails if any first-party violation fires.
+# Warn-only — a failure is surfaced in the deploy report but does not roll back.
+check_admin_e2e_csp() {
+  dsection "Authenticated admin E2E CSP scan (#342)"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping admin E2E CSP scan"
+    dstatus admin-e2e-csp status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Running authenticated admin interactions to detect CSP violations..."
+
+  local test_output
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
+      -e JWT_SECRET="${JWT_SECRET:-}" \
+      "$BACKEND_SERVICE" \
+      npm run test:admin-e2e-csp -- "$base_url" 2>&1); then
+    dstatus admin-e2e-csp status=ok
+    dok "Admin E2E CSP scan passed — no violations on authenticated interactions ✓"
+  else
+    dstatus admin-e2e-csp status=failed
+    dwarn "Admin E2E CSP scan output:"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    dwarn "CSP violations detected in admin interactions — update nginx-security-headers.conf"
+  fi
+}
+
 # ── CSP Violation Test ────────────────────────────────────────────────────────
 
 test_csp_reporting() {
