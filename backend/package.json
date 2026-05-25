@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:error-logger": "node ./scripts/tests/test-error-logger.js",
-    "test:error-logger:all-pages": "node ./scripts/tests/test-error-logger-all-pages.js"
+    "test:error-logger:all-pages": "node ./scripts/tests/test-error-logger-all-pages.js",
+    "test:error-logger:browser": "node ./scripts/tests/test-error-logger-browser.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^7.4.0",

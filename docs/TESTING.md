@@ -86,6 +86,61 @@ docker compose exec backend npm run test:watch
 docker compose exec backend npm run test:coverage
 ```
 
+### Running without Docker (host-side)
+
+The Vitest suite mocks `pg` and `nodemailer`, so it does **not** need a running database or Docker. You can run it directly on the host with Node ≥ 18:
+
+```bash
+cd backend
+PUPPETEER_SKIP_DOWNLOAD=true npm install   # skip Chromium; not needed for Vitest
+npm test
+```
+
+This is the fastest feedback loop when iterating on backend logic. The full Docker stack is still the authoritative test environment — always do a dev-server deploy before raising a PR.
+
+---
+
+## Browser-Level Tests (frontend error-logger)
+
+`backend/scripts/tests/test-error-logger-browser.js` verifies the behavioural contracts of `resources/js/error-logger.js` in a real headless browser. Unlike the server-based `test-error-logger.js` (which requires a running dev stack), this test is **self-contained** — it spins up its own HTTP server and mock `/api/debug/errors` endpoint.
+
+### What it tests
+
+| # | Test | Related issue |
+|---|------|---------------|
+| 1 | Resource-load failures (broken `<script src>`) are captured via the capture-phase listener | #332 |
+| 2 | Runtime errors are logged exactly once — capture-phase listener does not duplicate them | #332 |
+| 3 | Reports are persisted to `localStorage` when the backend is unreachable | #334 |
+| 4 | Buffered reports are flushed and `localStorage` is cleared once the backend returns | #334 |
+| 5 | No browser hang when five errors fire against a failing backend | #331 |
+
+### Running
+
+```bash
+# Requires Node + Chromium (Puppeteer)
+cd backend
+
+# First-time setup: install deps including Chromium
+npm install
+npx puppeteer browsers install chrome
+
+# Run the test
+npm run test:error-logger:browser
+```
+
+The test prints a machine-parseable summary line at the end:
+```
+[error-logger-browser] status=OK passed=9 failed=0
+```
+
+### When to run
+
+- After any change to `resources/js/error-logger.js`
+- After any change to `backend/routes/debug.js` that alters the `/debug/errors` contract
+- As part of the PR test plan when either file is touched
+
+The existing `test:error-logger` and `test:error-logger:all-pages` scripts complement this test — they connect to a running dev server and verify the full end-to-end flow (nginx, auth, real DB). Run both when doing a full integration verification.
+
 ---
 
 ## Fallback: Local Testing (Windows)
