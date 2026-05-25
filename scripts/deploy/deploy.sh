@@ -399,14 +399,14 @@ dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
-  print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV — ROLLED BACK"
+  print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"
 elif [ "$REGRESSION_RC" -ne 0 ]; then
-  print_deploy_status "FAILED" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV — REGRESSION FAILED"
+  print_deploy_status "FAILED" "$DEPLOY_ENV"
 else
-  print_deploy_status "COMPLETE" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV"
+  print_deploy_status "COMPLETE" "$DEPLOY_ENV"
 fi
 dlog ""
 
