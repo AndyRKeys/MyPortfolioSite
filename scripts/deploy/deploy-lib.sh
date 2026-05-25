@@ -1391,6 +1391,39 @@ test_error_logger_contracts() {
   fi
 }
 
+# ── CSP Browser Violation Detection (#341) ────────────────────────────────────
+
+# Load every served page in a real browser and listen for securitypolicyviolation
+# events. Filters known ISP-injected noise and flags any blocked resource that
+# indicates a missing or stale CSP allowlist entry. Runs inside the backend
+# container (Chromium available) using NGINX_URL (docker-internal address) so
+# Puppeteer can reach nginx directly.
+# Warn-only — violations are surfaced loudly but do not roll back the deploy.
+check_csp_violations() {
+  dsection "Browser CSP violation scan (#341)"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping CSP violation scan"
+    dstatus csp-violations status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Loading all pages in headless browser to detect CSP violations..."
+
+  local test_output
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" \
+      npm run test:csp-violations -- "$base_url" 2>&1); then
+    dstatus csp-violations status=ok
+    dok "CSP violation scan passed — no first-party violations ✓"
+  else
+    dstatus csp-violations status=failed
+    dwarn "CSP violation scan output:"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    dwarn "CSP violations detected — update nginx-security-headers.conf and re-deploy"
+  fi
+}
+
 # ── CSP Violation Test ────────────────────────────────────────────────────────
 
 test_csp_reporting() {

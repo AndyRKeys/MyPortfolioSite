@@ -90,15 +90,16 @@ docker compose exec backend npm run test:coverage
 
 ---
 
-## Browser-Level Tests (frontend error-logger)
+## Browser-Level Tests
 
-Three Puppeteer scripts exercise `resources/js/error-logger.js` against the live deployed site. **All three run automatically inside the backend container after every dev/prod deploy** (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
+Puppeteer scripts run automatically inside the backend container after every dev/prod deploy (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
 
 | Script | npm script | What it verifies |
 |---|---|---|
 | `test-error-logger.js` | `test:error-logger` | Error logger initialises and reports on the `/api/debug/test-errors` page |
 | `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
+| `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
 
 ### Contract test (`test-error-logger-browser.js`)
 
@@ -132,10 +133,26 @@ docker compose -f docker-compose.yml -p portfolio_dev exec -T backend \
   npm run test:error-logger:browser -- https://nginx:3001
 ```
 
+### CSP violation scan (`test-csp-violations.js`)
+
+Loads every served page (`/`, `/blog/`, `/travel/`, `/login/`, `/admin/`, `/setup/`) in a real browser and listens for `securitypolicyviolation` events (#341). Reports any blocked resource with the directive, source, and remediation instruction. ISP-injected inline-script noise is expected; maintainers can record known-noise patterns in the `KNOWN_NOISE` array inside the script to suppress specific entries.
+
+Machine-parseable summary:
+```
+[csp-violations] status=OK pages=6 violations=0
+```
+
 ### When to run
 
 - Automatically: every dev/prod deploy
-- Manually after any change to `resources/js/error-logger.js`, or to `backend/routes/debug.js` if it alters the `/debug/errors` contract
+- Manually after any change to `resources/js/error-logger.js` or `backend/routes/debug.js`
+- Manually after adding or moving any external resource (script, style, font, image, API origin) — verifies the CSP allowlist update is correct
+- Run against the dev server before raising a PR that touches CSP or external resources:
+  ```bash
+  cd ~/MyPortfolioSite-dev
+  docker compose -f docker-compose.yml exec -T backend \
+    npm run test:csp-violations -- https://nginx:3001
+  ```
 
 ---
 
