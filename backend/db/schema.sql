@@ -175,3 +175,24 @@ CREATE INDEX IF NOT EXISTS idx_posts_type_published_date
 -- post_media is always queried by post_id
 CREATE INDEX IF NOT EXISTS idx_post_media_post_id
   ON post_media (post_id);
+
+-- ── Client error persistence (#333) ──────────────────────────────────────────
+-- Stores frontend error reports forwarded by error-logger.js via /debug/errors.
+-- Retention is bounded: a cron prune in deploy-lib.sh removes rows older than
+-- 30 days; the table never grows without limit.
+CREATE TABLE IF NOT EXISTS client_errors (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        VARCHAR(50) NOT NULL,
+  message     TEXT        NOT NULL,
+  url         TEXT,
+  filename    TEXT,
+  lineno      INTEGER,
+  colno       INTEGER,
+  stack       TEXT,
+  session_id  UUID,
+  request_id  UUID,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_errors_received_at
+  ON client_errors (received_at DESC);

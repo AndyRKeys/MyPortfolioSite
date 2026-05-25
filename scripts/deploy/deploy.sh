@@ -359,6 +359,11 @@ fi
 
 compose_up_with_rollback "$BACKEND_SERVICE"
 
+# ── Schema + maintenance ──────────────────────────────────────────────────────
+
+apply_schema
+prune_client_errors
+
 # ── Health check ──────────────────────────────────────────────────────────────
 
 wait_for_health "$BACKEND_SERVICE"

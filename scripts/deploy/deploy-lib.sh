@@ -1182,6 +1182,39 @@ check_disk_space() {
   fi
 }
 
+# ── Schema apply ─────────────────────────────────────────────────────────────
+# Applies schema.sql to the running postgres container. Safe to re-run — all
+# statements use IF NOT EXISTS / IF NOT. Called after compose up so the DB is
+# guaranteed to be healthy before we attempt the psql connection.
+
+apply_schema() {
+  dsection "Phase 5b: applying DB schema"
+  local postgres_service="${POSTGRES_SERVICE:-postgres}"
+
+  if ! docker compose -f "$COMPOSE_FILE" exec -T "$postgres_service" \
+      psql -U "${DB_USER:-postgres}" -d "${DB_NAME:-portfolio_prod}" \
+      -f /docker-entrypoint-initdb.d/01-schema.sql \
+      >> "$LOG_FILE" 2>&1; then
+    dwarn "Schema apply failed — DB may be missing new tables. Check $LOG_FILE."
+  else
+    dok "Schema applied successfully"
+  fi
+}
+
+# ── Client error prune ────────────────────────────────────────────────────────
+# Removes client_errors rows older than 30 days. Called post-deploy to bound
+# table growth without a separate cron job.
+
+prune_client_errors() {
+  local postgres_service="${POSTGRES_SERVICE:-postgres}"
+  local deleted
+  deleted=$(docker compose -f "$COMPOSE_FILE" exec -T "$postgres_service" \
+    psql -U "${DB_USER:-postgres}" -d "${DB_NAME:-portfolio_prod}" -tAc \
+    "DELETE FROM client_errors WHERE received_at < NOW() - INTERVAL '30 days'; SELECT ROW_COUNT();" \
+    2>/dev/null | tail -1 || echo "?")
+  dinfo "client_errors pruned — ${deleted} rows older than 30 days removed"
+}
+
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
