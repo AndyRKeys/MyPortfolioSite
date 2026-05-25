@@ -20,6 +20,26 @@
 
 set -euo pipefail
 
+# ── Sudo guard (#351) ─────────────────────────────────────────────────────────
+# Running as root (via sudo) sets $HOME=/root, so REPO_DIR resolves to
+# /root/MyPortfolioSite* — a fresh clone with a template .env — instead of
+# the real user's configured repo. try_root() handles the handful of commands
+# that genuinely need elevation; the script itself must not run as root.
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+  echo ""
+  echo "ERROR: do not run deploy.sh with sudo." >&2
+  echo "" >&2
+  echo "  Running as root sets \$HOME=/root, so REPO_DIR and .env point to a" >&2
+  echo "  fresh clone in /root/ instead of your configured repo." >&2
+  echo "" >&2
+  echo "  Run as your normal user — the script calls try_root internally" >&2
+  echo "  for any commands that need elevated privileges (UFW, certs, etc.):" >&2
+  echo "" >&2
+  echo "    bash ./scripts/deploy/deploy.sh --env ${1:-dev}" >&2
+  echo "" >&2
+  exit 1
+fi
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 DEPLOY_ENV=""
