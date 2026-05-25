@@ -138,14 +138,16 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
   - After the PR is merged to `dev` but before it is released to `main`: switch the label to `awaiting release`.
   - After the change is deployed to production (release PR merged to `main`): switch the label to `released`.
 - **Type labels** (add all that apply)
-  - `bug` / `feature` — based on the issue template or description.
+  - `bug` — defect or broken behaviour.
+  - `feature` — new capability or user-facing improvement. Use `feature`, not `enhancement`.
   - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
   - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
   - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
-  - `workflow`, `meta` — process, templates, automation, AI instructions.
+  - `workflow` — process, templates, automation, AI instructions, label/meta housekeeping. Use `workflow`, not `meta`.
   - `high priority` — issues explicitly called out as urgent or blocking.
   - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
   - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
+  - `refactor` — internal restructuring with no behaviour change.
 
 ### Deployment (From Windows)
 

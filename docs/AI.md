@@ -122,14 +122,37 @@ Always apply both a **state label** and any relevant **type labels**:
   - After the change is deployed to production (release PR merged to `main`): switch to `released`.
 
 - **Type labels** (add all that apply)
-  - `bug` / `feature` — based on the issue template or description.
-  - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `bug` — defect or broken behaviour.
+  - `feature` — new capability or user-facing improvement. Use `feature`, not `enhancement`.
+  - `security` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `auth` — authentication and session management specifically.
   - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
   - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
-  - `workflow`, `meta` — process, templates, automation, AI instructions.
+  - `workflow` — process, templates, automation, AI instructions, label/meta housekeeping. Use `workflow`, not `meta`.
   - `high priority` — issues explicitly called out as urgent or blocking.
   - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
   - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
+  - `refactor` — internal restructuring with no behaviour change.
+
+  **Label colours** (for reference — update via GitHub UI › Settings › Labels):
+
+  | Label | Colour |
+  |---|---|
+  | `in progress` | `#1A5037` (dark green) |
+  | `awaiting review` | `#F9C74F` (amber) |
+  | `awaiting release` | `#4DABF7` (light blue) |
+  | `released` | `#38B000` (green) |
+  | `high priority` | `#E63946` (strong red) |
+  | `bug` | `#D73A4A` |
+  | `feature` | `#0B7285` |
+  | `documentation` | `#0075CA` |
+  | `security` | `#8E24AA` |
+  | `auth` | `#3A86FF` |
+  | `ops` | `#5C6F82` |
+  | `UI` | `#FFAFCC` |
+  | `regression` | `#F77F00` |
+  | `refactor` | `#ADB5BD` |
+  | `workflow` | `#6C757D` |
 
 The AI is responsible for adding/removing these labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.
 
