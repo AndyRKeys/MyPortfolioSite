@@ -1827,18 +1827,34 @@ check_backup_health() {
     cron_found=1
   fi
 
+  local cron_entry="0 2 * * * ${REPO_DIR}/scripts/backup/db-backup.sh >> ${HOME}/backup.log 2>&1"
+
   if [ "$cron_found" = "1" ]; then
     dstatus backup-schedule status=ok
     dok "Backup schedule: cron/timer found ✓"
   else
-    dstatus backup-schedule status=warn
-    dwarn "No backup cron job or systemd timer found — automated backups may not be configured (#164)"
-    ok=0
+    local install_cron=0
+    if [ "${AUTO_YES:-0}" = "1" ]; then
+      install_cron=1
+    elif [ -t 0 ]; then
+      printf "\n[backup] No backup cron job found. Install one now? [Y/n] "
+      read -r answer
+      [[ "$answer" =~ ^[Yy]?$ ]] && install_cron=1
+    fi
+
+    if [ "$install_cron" = "1" ]; then
+      (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
+      dstatus backup-schedule status=installed
+      dok "Installed backup cron: ${cron_entry}"
+    else
+      dstatus backup-schedule status=warn
+      dwarn "No backup cron job found — add manually: crontab -e"
+      dwarn "  ${cron_entry}"
+      ok=0
+    fi
   fi
 
   # ── Check 2: backup directory exists (create if missing) (#352) ─────────
-  local cron_line="0 2 * * * \${HOME}/MyPortfolioSite/scripts/backup/db-backup.sh >> \${HOME}/backup.log 2>&1"
-
   # Sanity check: BACKUP_DIR must be under the current user's home. A path
   # like /home/ak/backups synced from a template with a hardcoded username
   # will fail mkdir for any other SSH user — catch it early with a clear fix.
@@ -1863,7 +1879,7 @@ check_backup_health() {
         dok "Created backup directory: ${backup_dir}"
         dinfo "Add the backup cron job if not already present:"
         dinfo "  crontab -e"
-        dinfo "  ${cron_line}"
+        dinfo "  ${cron_entry}"
       else
         dstatus backup-files status=warn dir="$backup_dir"
         dwarn "Could not create ${backup_dir} — permission denied."
@@ -1894,9 +1910,36 @@ check_backup_health() {
         ok=0
       fi
     else
-      dstatus backup-files status=warn dir="$backup_dir"
-      dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
-      ok=0
+      local run_backup=0
+      if [ "${AUTO_YES:-0}" = "1" ]; then
+        run_backup=1
+      elif [ -t 0 ]; then
+        printf "\n[backup] No backup files found. Run an initial backup now? [Y/n] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]?$ ]] && run_backup=1
+      fi
+
+      if [ "$run_backup" = "1" ]; then
+        dinfo "Running initial backup..."
+        local timestamp
+        timestamp=$(date +%Y%m%d-%H%M%S)
+        local db_backup="${backup_dir}/portfolio-${timestamp}.sql.gz"
+        if docker compose -f "$COMPOSE_FILE" exec -T postgres \
+            pg_dump -U "${DB_USER:-postgres}" "${DB_NAME:-portfolio}" \
+            2>/dev/null | gzip > "$db_backup" && [ -s "$db_backup" ]; then
+          dstatus backup-files status=ok dir="$backup_dir"
+          dok "Initial backup created: $(basename "$db_backup") ($(du -sh "$db_backup" | cut -f1))"
+        else
+          rm -f "$db_backup"
+          dstatus backup-files status=warn dir="$backup_dir"
+          dwarn "Initial backup failed — check containers are healthy and DB credentials are correct"
+          ok=0
+        fi
+      else
+        dstatus backup-files status=warn dir="$backup_dir"
+        dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
+        ok=0
+      fi
     fi
   fi
 
