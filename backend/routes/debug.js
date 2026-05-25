@@ -31,7 +31,7 @@ function sanitizeForLog(str, maxLen = 200) {
 router.post('/errors', debugRateLimit, (req, res) => {
   logger.debug('[debug/errors] Received frontend error report');
 
-  const { type, message, timestamp, url, filename, lineno, colno, stack } = req.body;
+  const { type, message, timestamp, url, filename, lineno, colno, stack, sessionId, requestId } = req.body;
 
   if (!type || !message) {
     // Sanitize the body before logging to prevent injection
@@ -45,6 +45,8 @@ router.post('/errors', debugRateLimit, (req, res) => {
   const messageLog = sanitizeForLog(message, 200);
   const urlLog = sanitizeForLog(url, 300);
   const filenameLog = filename ? sanitizeForLog(filename, 100) : null;
+  const sessionIdLog = sessionId ? sanitizeForLog(sessionId, 40) : null;
+  const requestIdLog = requestId ? sanitizeForLog(requestId, 40) : null;
 
   const stackLog = stack
     ? sanitizeForLog(stack, 300).split('\\n').slice(0, 3).join(' | ')
@@ -58,6 +60,8 @@ router.post('/errors', debugRateLimit, (req, res) => {
       colno,
       clientTimestamp: timestamp,
       stack: stackLog,
+      sessionId: sessionIdLog,
+      requestId: requestIdLog,
     },
     `[debug/errors] Frontend error — ${messageLog}`
   );

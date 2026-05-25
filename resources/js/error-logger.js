@@ -24,6 +24,41 @@ console.log('[error-logger] Initializing global error logger');
 
 const ENDPOINT = `${API_BASE}/debug/errors`;
 
+// ── Request-ID correlation (#336) ─────────────────────────────────────────
+// A stable ID for this page view — groups all errors from the same session
+// so a spike of related reports is easy to identify in the server log.
+const SESSION_ID = crypto.randomUUID();
+
+// Track the most recent X-Request-Id seen from any API response. When an
+// error fires shortly after an API call, this lets us correlate the frontend
+// report with the exact backend log line (req.id from pino-http).
+let _lastRequestId = null;
+let _lastRequestTime = 0;
+
+function getRecentRequestId() {
+  // Discard after 10 s — too stale to be meaningfully correlated.
+  return (Date.now() - _lastRequestTime < 10_000) ? _lastRequestId : null;
+}
+
+// Wrap window.fetch to harvest X-Request-Id from API responses.
+// Uses the original fetch for all actual network I/O — no behaviour change.
+const _originalFetch = window.fetch.bind(window);
+window.fetch = async function (...args) {
+  const response = await _originalFetch(...args);
+  const rid = response.headers.get('X-Request-Id');
+  if (rid) {
+    _lastRequestId = rid;
+    _lastRequestTime = Date.now();
+  }
+  return response;
+};
+
+// Attach correlation fields to every outgoing payload.
+function withCorrelation(payload) {
+  return { ...payload, sessionId: SESSION_ID, requestId: getRecentRequestId() };
+}
+
+// ── Dedup / buffer / send ──────────────────────────────────────────────────
 // Suppress duplicate reports within a page view.
 const seenErrors = new Set();
 const MAX_STORED_ERRORS = 100;
@@ -116,7 +151,7 @@ function dedupAndLog(key, payload) {
 // Uncaught runtime errors (bubble phase). event.target is window here.
 window.addEventListener('error', (event) => {
   const key = `${event.filename}:${event.lineno}:${event.message}`;
-  dedupAndLog(key, {
+  dedupAndLog(key, withCorrelation({
     type: 'uncaught-error',
     timestamp: new Date().toISOString(),
     message: event.message,
@@ -125,7 +160,7 @@ window.addEventListener('error', (event) => {
     colno: event.colno,
     stack: event.error?.stack || 'no stack trace',
     url: window.location.href,
-  });
+  }));
 });
 
 // Resource-load failures (script/img/link/css that 404 or fail to fetch) fire
@@ -138,25 +173,25 @@ window.addEventListener('error', (event) => {
   const resourceUrl = target.src || target.href;
   if (!resourceUrl) return;
   const tag = target.tagName.toLowerCase();
-  dedupAndLog(`resource:${tag}:${resourceUrl}`, {
+  dedupAndLog(`resource:${tag}:${resourceUrl}`, withCorrelation({
     type: 'resource-error',
     timestamp: new Date().toISOString(),
     // message + filename map onto the fields /debug/errors already logs.
     message: `Failed to load <${tag}>: ${resourceUrl}`,
     filename: resourceUrl,
     url: window.location.href,
-  });
+  }));
 }, true); // capture: true — required for non-bubbling resource errors
 
 window.addEventListener('unhandledrejection', (event) => {
   const key = `promise:${String(event.reason).slice(0, 100)}`;
-  dedupAndLog(key, {
+  dedupAndLog(key, withCorrelation({
     type: 'unhandled-rejection',
     timestamp: new Date().toISOString(),
     reason: String(event.reason),
     stack: event.reason?.stack || 'no stack trace',
     url: window.location.href,
-  });
+  }));
 });
 
 // CSP violations — ISP-injected inline scripts will trigger this. That is
@@ -164,7 +199,7 @@ window.addEventListener('unhandledrejection', (event) => {
 // is forwarded so we have a server-side record when it occurs.
 window.addEventListener('securitypolicyviolation', (event) => {
   const key = `csp:${event.violatedDirective}:${event.blockedURI}`;
-  dedupAndLog(key, {
+  dedupAndLog(key, withCorrelation({
     type: 'csp-violation',
     timestamp: new Date().toISOString(),
     'violated-directive': event.violatedDirective,
@@ -173,7 +208,7 @@ window.addEventListener('securitypolicyviolation', (event) => {
     'source-file': event.sourceFile,
     'line-number': event.lineNumber,
     'column-number': event.columnNumber,
-  });
+  }));
 });
 
 // console.error/warn overrides — capture caught errors devs log explicitly
@@ -186,24 +221,24 @@ const _origWarn = console.warn;
 console.error = function (...args) {
   _origError.apply(console, args);
   const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-  dedupAndLog(`console-error:${message.slice(0, 100)}`, {
+  dedupAndLog(`console-error:${message.slice(0, 100)}`, withCorrelation({
     type: 'console-error',
     timestamp: new Date().toISOString(),
     message,
     url: window.location.href,
     stack: new Error().stack,
-  });
+  }));
 };
 
 console.warn = function (...args) {
   _origWarn.apply(console, args);
   const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-  dedupAndLog(`console-warn:${message.slice(0, 100)}`, {
+  dedupAndLog(`console-warn:${message.slice(0, 100)}`, withCorrelation({
     type: 'console-warn',
     timestamp: new Date().toISOString(),
     message,
     url: window.location.href,
-  });
+  }));
 };
 
 // Drain any reports buffered from a previous page view where the backend was

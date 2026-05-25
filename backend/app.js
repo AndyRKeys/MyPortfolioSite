@@ -8,6 +8,7 @@
 import express  from 'express';
 import cors     from 'cors';
 import path     from 'path';
+import crypto   from 'crypto';
 import { fileURLToPath } from 'url';
 import pinoHttp from 'pino-http';
 
@@ -35,11 +36,22 @@ export function createApp() {
   // status/latency. Secret redaction is configured in utils/logger.js.
   // Health check polls every 10s — demote to trace so they don't flood
   // info-level logs; visible only when LOG_LEVEL=trace.
+  // Assign a UUID to every request (#336). pino-http exposes it as req.id
+  // in the log line; the middleware below echoes it as X-Request-Id so the
+  // frontend can include it in error reports for correlation.
   app.use(pinoHttp({
     logger,
+    genReqId: () => crypto.randomUUID(),
     customLogLevel: (req, res) =>
       req.url === '/health' ? 'trace' : res.statusCode >= 500 ? 'error' : 'info',
   }));
+
+  // Expose the request ID to the frontend so error-logger.js can include it
+  // in /debug/errors reports, correlating client errors with backend log lines.
+  app.use((req, res, next) => {
+    res.setHeader('X-Request-Id', req.id);
+    next();
+  });
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
 
