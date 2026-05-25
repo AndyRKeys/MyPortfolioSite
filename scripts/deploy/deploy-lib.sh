@@ -1838,7 +1838,16 @@ check_backup_health() {
 
   # ── Check 2: backup directory exists (create if missing) (#352) ─────────
   local cron_line="0 2 * * * \${HOME}/MyPortfolioSite/scripts/backup/db-backup.sh >> \${HOME}/backup.log 2>&1"
-  if [ ! -d "$backup_dir" ]; then
+
+  # Sanity check: BACKUP_DIR must be under the current user's home. A path
+  # like /home/ak/backups synced from a template with a hardcoded username
+  # will fail mkdir for any other SSH user — catch it early with a clear fix.
+  if [[ "$backup_dir" == /home/* ]] && [[ "$backup_dir" != "$HOME"* ]]; then
+    dstatus backup-files status=warn dir="$backup_dir"
+    dwarn "BACKUP_DIR (${backup_dir}) belongs to a different user (running as: $(whoami))."
+    dwarn "Update BACKUP_DIR in .env — suggested value: ${HOME}/backups"
+    ok=0
+  elif [ ! -d "$backup_dir" ]; then
     local create=0
     if [ "${AUTO_YES:-0}" = "1" ]; then
       create=1
@@ -1858,8 +1867,7 @@ check_backup_health() {
       else
         dstatus backup-files status=warn dir="$backup_dir"
         dwarn "Could not create ${backup_dir} — permission denied."
-        dwarn "BACKUP_DIR in .env may point to another user's home (running as: $(whoami))."
-        dwarn "Set BACKUP_DIR to a path under \$HOME, e.g. ${HOME}/backups"
+        dwarn "Set BACKUP_DIR to a writable path in .env, e.g. ${HOME}/backups"
         ok=0
       fi
     else
