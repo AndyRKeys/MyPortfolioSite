@@ -1,6 +1,6 @@
 # Infrastructure Overview
 
-_Last updated: 2026-05-10 — verified against live server post-migration_
+_Last updated: 2026-05-25 — verified against live server post-migration and basic health monitoring setup_
 
 This document describes the host-level infrastructure for MyPortfolioSite on Ubuntu Server and points to environment-specific guides.
 
@@ -10,6 +10,8 @@ The same physical server hosts both environments:
 - **Prod environment** — `main` branch, public site, HTTPS on the configured domain (see `PROD_ENVIRONMENT.md`).
 
 Docker is installed via the official Docker CE apt packages on the server. Docker via snap is **not** supported; see `DOCKER_MIGRATION.md` for the migration story and helper scripts.
+
+A separate Raspberry Pi running Home Assistant OS (HAOS) provides host-level **health monitoring** for the Ubuntu server via the Glances integration (see [Server health monitoring](#server-health-monitoring-with-home-assistant)).
 
 ---
 
@@ -135,6 +137,88 @@ bash ~/MyPortfolioSite/scripts/backup/db-restore.sh \
 
 ---
 
+## Server health monitoring with Home Assistant
+
+> **Status:** Glances is installed on `ak-home-server` and the Home Assistant Glances integration is connected. The dashboard and automation alerts below are **not yet configured** — see #370 to track completion.
+
+A separate Raspberry Pi running Home Assistant OS (HAOS) monitors `ak-home-server` using the **Glances** integration. When fully configured this will provide a lightweight health dashboard (CPU, memory, disk, uptime, Docker load) and basic alerts when the host goes offline or reboots unexpectedly.
+
+### Glances on ak-home-server
+
+On the Ubuntu server, install Glances and configure the systemd service via the helper script in this repo:
+
+```bash
+cd ~/MyPortfolioSite
+sudo apt update
+sudo apt install glances
+sudo bash scripts/ops/setup-glances-monitoring.sh
+```
+
+This script:
+
+- Detects the `glances` binary on the host.
+- Writes `/etc/systemd/system/glances.service` with `glances -w` in web server mode.
+- Reloads systemd, enables the service, and restarts it so it runs at boot.
+
+Once this is done, Glances should be reachable on `http://<ak-home-server-ip>:61208` from the HAOS Pi.
+
+### Home Assistant integration
+
+On the HAOS Raspberry Pi:
+
+1. Add the Glances integration (Settings → Devices & services → Add integration → **Glances**).
+2. Point it at the Ubuntu server LAN IP and Glances port (e.g. `http://ak-home-server:61208`).
+3. Confirm that sensors for CPU, memory, disk usage, and uptime appear (for example: `sensor.ak_home_server_cpu_use_percent`, `sensor.ak_home_server_memory_use_percent`, `sensor.ak_home_server_uptime`).
+
+**Not yet done (#370):** Create a dedicated **Server Health** dashboard in Home Assistant with:
+
+- An entities card for key metrics (CPU, memory, disk, uptime, Docker container count where available).
+- A history-graph card for CPU and memory over 24 hours.
+- Optional gauge(s) for temperature if exposed by Glances.
+
+### Example Home Assistant automations
+
+> **Not yet configured (#370).** These examples live in Home Assistant’s `automations.yaml`, not in this repo, and serve as the spec for what needs to be set up.
+
+**Alert if ak-home-server is offline for 5+ minutes:**
+
+```yaml
+alias: "ak-home-server offline alert"
+mode: single
+trigger:
+  - platform: state
+    entity_id: sensor.ak_home_server_uptime
+    to: "unavailable"
+    for: "00:05:00"  # offline for 5 minutes
+condition: []
+action:
+  - service: notify.mobile_app_your_phone  # replace with your notifier
+    data:
+      title: "ak-home-server offline"
+      message: "Glances sensors are unavailable. The server might be down or unreachable."
+```
+
+**Alert on unexpected reboot (uptime reset):**
+
+```yaml
+alias: "ak-home-server rebooted"
+mode: single
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.ak_home_server_uptime
+    below: 600  # uptime less than 10 minutes
+condition: []
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "ak-home-server rebooted"
+      message: "ak-home-server uptime just reset. Check PSU and Docker stack if this was not planned."
+```
+
+These automations are a complement to (not a replacement for) investigating the suspected PSU issue in #323.
+
+---
+
 ## Generic troubleshooting
 
 These checks apply regardless of environment:
@@ -186,3 +270,4 @@ For more detailed, environment-specific troubleshooting, see:
 - `PROD_ENVIRONMENT.md` — production environment setup and operations.
 - `DOCKER_MIGRATION.md` — migrating from snap-based Docker to Docker CE.
 - `DEPLOYMENT_LESSONS_LEARNED.md` — lessons from the first production deployment (pre-flight checks, phase-based deploy, troubleshooting patterns).
+- `MONITORING.md` (future) — optional dedicated doc for monitoring and alerting patterns once more checks are added.
