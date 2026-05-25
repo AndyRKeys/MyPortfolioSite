@@ -86,6 +86,57 @@ docker compose exec backend npm run test:watch
 docker compose exec backend npm run test:coverage
 ```
 
+> **Note:** The Vitest suite runs automatically inside the deployed container on every dev/prod deploy (see "Automatic tests during deploy" above) — that is the canonical path. The suite mocks `pg` and `nodemailer` so it needs no database, which is also what lets CI run it host-side (`cd backend && npm install && npm test`, see [CI](#ci)). Day-to-day verification is done by deploying to the dev server, not by running tests locally.
+
+---
+
+## Browser-Level Tests (frontend error-logger)
+
+Three Puppeteer scripts exercise `resources/js/error-logger.js` against the live deployed site. **All three run automatically inside the backend container after every dev/prod deploy** (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
+
+| Script | npm script | What it verifies |
+|---|---|---|
+| `test-error-logger.js` | `test:error-logger` | Error logger initialises and reports on the `/api/debug/test-errors` page |
+| `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
+| `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
+
+### Contract test (`test-error-logger-browser.js`)
+
+Uses Puppeteer request interception to capture POSTs to `/api/debug/errors` and simulate the backend being up/down — so buffering can be exercised without actually taking the backend down. Verifies the *deployed* `error-logger.js`:
+
+| # | Contract | Related issue |
+|---|------|---------------|
+| 1 | Resource-load failures (broken `<script src>`) captured via the capture-phase listener | #332 |
+| 2 | Runtime errors logged exactly once — capture-phase listener does not duplicate them | #332 |
+| 3 | Reports persisted to `localStorage` when the backend is unreachable | #334 |
+| 4 | Buffered reports flushed and `localStorage` cleared once the backend returns | #334 |
+| 5 | No browser hang when five errors fire against a failing backend | #331 |
+
+It prints a machine-parseable summary line collected into the deploy report:
+```
+[error-logger-browser] status=OK passed=8 failed=0
+```
+
+### Failure policy
+
+The error-logger tests are **warn-only** — a failure is surfaced loudly inline in the deploy report but does **not** roll the deploy back (unlike Vitest, which does). This avoids a frontend timing flake blocking a deploy. Treat a `status=failed` line as a must-fix even though the deploy proceeded.
+
+### Running manually
+
+These tests need a base URL (the running site). Run them on the dev server from the deployed checkout, or against any reachable instance:
+
+```bash
+# Dev: NGINX_SERVICE=nginx, NGINX_PORT=3001 → docker-internal URL https://nginx:3001
+cd ~/MyPortfolioSite-dev
+docker compose -f docker-compose.yml -p portfolio_dev exec -T backend \
+  npm run test:error-logger:browser -- https://nginx:3001
+```
+
+### When to run
+
+- Automatically: every dev/prod deploy
+- Manually after any change to `resources/js/error-logger.js`, or to `backend/routes/debug.js` if it alters the `/debug/errors` contract
+
 ---
 
 ## Fallback: Local Testing (Windows)

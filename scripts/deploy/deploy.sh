@@ -352,6 +352,7 @@ check_outlook_token "$BACKEND_SERVICE"
 # ── Post-deployment tests ─────────────────────────────────────────────────────
 
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_all_pages
+[ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
 
 test_csp_reporting
 

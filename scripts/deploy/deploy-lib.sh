@@ -1357,6 +1357,40 @@ test_error_logger_all_pages() {
   fi
 }
 
+# ── Error Logger Contract Test ──────────────────────────────────────────────────
+
+# Verify the deployed error-logger.js behavioural contracts against the live
+# site: resource-load capture (#332), no runtime-error duplication, localStorage
+# buffering + drain when the backend is unreachable (#334), and recursion safety
+# under an error storm (#331). Uses Puppeteer request interception to simulate
+# the backend being up/down without actually taking it down.
+#
+# Warn-only (matches test_error_logger_all_pages) — a frontend contract
+# regression is surfaced loudly inline but does not roll back the deploy.
+test_error_logger_contracts() {
+  dsection "Testing error logger behavioural contracts"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping error logger contract test"
+    dstatus error-logger-contracts status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Running contract test (capture, buffering, recursion safety)..."
+
+  local test_output
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:browser -- "$base_url" 2>&1); then
+    dstatus error-logger-contracts status=ok
+    dok "Error logger contract test passed ✓"
+  else
+    dstatus error-logger-contracts status=failed
+    dwarn "Error logger contract test output:"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    dwarn "Error logger contract test failed — output above"
+  fi
+}
+
 # ── CSP Violation Test ────────────────────────────────────────────────────────
 
 test_csp_reporting() {
