@@ -209,20 +209,8 @@ _log_cmd() {
 # Normalise the wildly different summary formats each test runner prints into a
 # consistent "tests / passed / failed" triple, so the deploy report shows the
 # three test suites (backend / frontend / regression) in a comparable shape.
-
-# Parse a vitest run's summary. Echoes "<total> <passed> <failed>".
-# Handles both "Tests  94 passed (94)" and "Tests  2 failed | 92 passed (94)".
-# Trailing `|| true` on every pipeline is required: a non-matching grep (e.g.
-# no "failed" on the all-pass path) returns non-zero and would abort the deploy
-# under `set -euo pipefail`.
-_vitest_counts() {
-  local out="$1" tline passed failed total
-  tline=$(printf '%s\n'  "$out"   | grep -E '^[[:space:]]*Tests[[:space:]]' | tail -1 || true)
-  passed=$(printf '%s'   "$tline" | grep -oE '[0-9]+ passed' | head -1 | grep -oE '[0-9]+' || true)
-  failed=$(printf '%s'   "$tline" | grep -oE '[0-9]+ failed' | head -1 | grep -oE '[0-9]+' || true)
-  total=$(printf '%s'    "$tline" | grep -oE '\([0-9]+\)'    | head -1 | grep -oE '[0-9]+' || true)
-  echo "${total:-0} ${passed:-0} ${failed:-0}"
-}
+# Backend (vitest) counts come from its json reporter (see run_deploy_tests),
+# not from scraping the pretty summary, which drifts across environments.
 
 # Extract a numeric `key=N` value from a single summary line. Echoes the number
 # (or nothing if absent). Anchored on a leading space/start so `passed` doesn't
@@ -1398,12 +1386,26 @@ run_deploy_tests() {
   dsection "Phase 7: Backend tests — Vitest (unit + integration)"
   dinfo "Executing npm test inside $service_name container..."
 
-  # Capture so we can parse the summary; re-emit to the log/stdout afterwards.
-  # `if`-capture keeps set -e from aborting before we record the exit code.
-  local out rc total passed failed
-  if out=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1); then rc=0; else rc=$?; fi
+  # Run with the default reporter (human-readable log) AND the json reporter
+  # (authoritative counts written to a file inside the container). Scraping the
+  # pretty "Tests N passed (N)" summary proved fragile across environments — the
+  # json report is immune to ANSI/format drift. `if`-capture keeps set -e from
+  # aborting before we record the exit code.
+  local report_path='/tmp/vitest-deploy-report.json'
+  local out rc total passed failed counts
+  if out=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" \
+            npm test -- --reporter=default --reporter=json \
+            --outputFile.json="$report_path" 2>&1); then rc=0; else rc=$?; fi
   printf '%s\n' "$out" | _log_cmd
-  read -r total passed failed < <(_vitest_counts "$out") || true
+
+  # Read counts back from the json report in the same (persistent) container.
+  # Falls back to "0 0 0" if the file is missing/unreadable so a parse failure
+  # never aborts the deploy on its own.
+  counts=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" node -e \
+    'try{const r=require(process.argv[1]);process.stdout.write(`${r.numTotalTests||0} ${r.numPassedTests||0} ${r.numFailedTests||0}`)}catch(e){process.stdout.write("0 0 0")}' \
+    "$report_path" 2>/dev/null || true)
+  read -r total passed failed <<<"${counts:-0 0 0}" || true
+  total=${total:-0}; passed=${passed:-0}; failed=${failed:-0}
 
   if [ "$rc" -eq 0 ]; then
     dstatus vitest suite=backend status=ok tests="$total" passed="$passed" failed="$failed"
