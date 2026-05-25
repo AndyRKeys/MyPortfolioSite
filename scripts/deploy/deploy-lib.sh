@@ -1811,7 +1811,33 @@ check_backup_health() {
     ok=0
   fi
 
-  # ── Check 2: recent backup files exist ──────────────────────────────────
+  # ── Check 2: backup directory exists (create if missing) (#352) ─────────
+  local cron_line="0 2 * * * \${HOME}/MyPortfolioSite/scripts/backup/db-backup.sh >> \${HOME}/backup.log 2>&1"
+  if [ ! -d "$backup_dir" ]; then
+    local create=0
+    if [ "${AUTO_YES:-0}" = "1" ]; then
+      create=1
+    elif [ -t 0 ]; then
+      printf "\n[backup] Backup directory %s does not exist. Create it now? [Y/n] " "$backup_dir"
+      read -r answer
+      [[ "$answer" =~ ^[Yy]?$ ]] && create=1
+    fi
+
+    if [ "$create" = "1" ]; then
+      mkdir -p "$backup_dir"
+      dstatus backup-files status=created dir="$backup_dir"
+      dok "Created backup directory: ${backup_dir}"
+      dinfo "Add the backup cron job if not already present:"
+      dinfo "  crontab -e"
+      dinfo "  ${cron_line}"
+    else
+      dstatus backup-files status=warn dir="$backup_dir"
+      dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
+      ok=0
+    fi
+  fi
+
+  # ── Check 3: recent backup files exist ───────────────────────────────────
   if [ -d "$backup_dir" ]; then
     local recent
     recent=$(find "$backup_dir" -maxdepth 2 -name "*.sql*" -o -name "*.dump" -o -name "*.tar*" \
@@ -1832,10 +1858,6 @@ check_backup_health() {
       dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
       ok=0
     fi
-  else
-    dstatus backup-files status=warn dir="$backup_dir"
-    dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
-    ok=0
   fi
 
   if [ "$ok" = "0" ]; then
