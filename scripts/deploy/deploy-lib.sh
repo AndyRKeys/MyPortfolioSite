@@ -1849,12 +1849,19 @@ check_backup_health() {
     fi
 
     if [ "$create" = "1" ]; then
-      mkdir -p "$backup_dir"
-      dstatus backup-files status=created dir="$backup_dir"
-      dok "Created backup directory: ${backup_dir}"
-      dinfo "Add the backup cron job if not already present:"
-      dinfo "  crontab -e"
-      dinfo "  ${cron_line}"
+      if mkdir -p "$backup_dir" 2>/dev/null; then
+        dstatus backup-files status=created dir="$backup_dir"
+        dok "Created backup directory: ${backup_dir}"
+        dinfo "Add the backup cron job if not already present:"
+        dinfo "  crontab -e"
+        dinfo "  ${cron_line}"
+      else
+        dstatus backup-files status=warn dir="$backup_dir"
+        dwarn "Could not create ${backup_dir} — permission denied."
+        dwarn "BACKUP_DIR in .env may point to another user's home (running as: $(whoami))."
+        dwarn "Set BACKUP_DIR to a path under \$HOME, e.g. ${HOME}/backups"
+        ok=0
+      fi
     else
       dstatus backup-files status=warn dir="$backup_dir"
       dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
