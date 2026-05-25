@@ -5,6 +5,7 @@
 # Usage: .\scripts\deploy\dev-deploy.ps1 [-Hostname <name>] [-Branch <branch>] [-SkipRegression $true] [-Quiet $true]
 param(
     [string]$Hostname = 'ak-home-server',
+    [string]$RemoteHome = '/home/ak',
     [string]$Branch = '',
     [bool]$SkipRegression = $false,
     [bool]$Quiet = $true,
@@ -31,15 +32,15 @@ if ($DryRun)         { $flags += '--dry-run' }
 if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
+$RepoUrl  = 'https://github.com/AndyRKeys/MyPortfolioSite.git'
+$DevRepo  = "$RemoteHome/MyPortfolioSite-dev"
+
 $remoteCommand = @"
-DEV_REPO=`$HOME/MyPortfolioSite-dev
-REPO_URL=https://github.com/AndyRKeys/MyPortfolioSite.git
-BRANCH="$Branch"
-if [ ! -d "`$DEV_REPO/.git" ]; then
-    git clone "`$REPO_URL" "`$DEV_REPO"
+if [ ! -d "$DevRepo/.git" ]; then
+    git clone "$RepoUrl" "$DevRepo"
 fi
-bash "`$DEV_REPO/scripts/deploy/switch-branch.sh" "`$BRANCH" "`$DEV_REPO"
-bash "`$DEV_REPO/scripts/deploy/deploy.sh" --env dev "`$BRANCH" $flagStr
+bash "$DevRepo/scripts/deploy/switch-branch.sh" "$Branch" "$DevRepo"
+bash "$DevRepo/scripts/deploy/deploy.sh" --env dev "$Branch" $flagStr
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings

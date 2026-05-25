@@ -10,6 +10,7 @@
 # Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Rollback <sha>] [-SkipRegression $true] [-Quiet $true]
 param(
     [string]$Hostname = 'ak-home-server',
+    [string]$RemoteHome = '/home/ak',
     [string]$Rollback = '',
     [bool]$SkipRegression = $false,
     [bool]$Quiet = $false,
@@ -31,14 +32,15 @@ if ($DryRun)         { $flags += '--dry-run' }
 if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
+$RepoUrl  = 'https://github.com/AndyRKeys/MyPortfolioSite.git'
+$ProdRepo = "$RemoteHome/MyPortfolioSite"
+
 $remoteCommand = @"
-PROD_REPO=`$HOME/MyPortfolioSite
-REPO_URL=https://github.com/AndyRKeys/MyPortfolioSite.git
-if [ ! -d "`$PROD_REPO/.git" ]; then
-    git clone "`$REPO_URL" "`$PROD_REPO"
+if [ ! -d "$ProdRepo/.git" ]; then
+    git clone "$RepoUrl" "$ProdRepo"
 fi
-bash "`$PROD_REPO/scripts/deploy/switch-branch.sh" "main" "`$PROD_REPO"
-bash "`$PROD_REPO/scripts/deploy/deploy.sh" --env prod $flagStr
+bash "$ProdRepo/scripts/deploy/switch-branch.sh" "main" "$ProdRepo"
+bash "$ProdRepo/scripts/deploy/deploy.sh" --env prod $flagStr
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
