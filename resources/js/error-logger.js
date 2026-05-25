@@ -81,3 +81,36 @@ window.addEventListener('securitypolicyviolation', (event) => {
     'column-number': event.columnNumber,
   });
 });
+
+// console.error/warn overrides — capture caught errors that developers
+// explicitly log (e.g. inside try/catch blocks). These never reach window.onerror
+// so without this override they would be invisible in prod logs.
+//
+// Safe because logToBackend now swallows its own errors silently (no internal
+// console.error call) and the `sending` guard prevents re-entrant calls, so
+// there is no recursion path even if the backend is unreachable.
+const _origError = console.error;
+const _origWarn  = console.warn;
+
+console.error = function (...args) {
+  _origError.apply(console, args);
+  const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  dedupAndLog(`console-error:${message.slice(0, 100)}`, {
+    type: 'console-error',
+    timestamp: new Date().toISOString(),
+    message,
+    url: window.location.href,
+    stack: new Error().stack,
+  });
+};
+
+console.warn = function (...args) {
+  _origWarn.apply(console, args);
+  const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  dedupAndLog(`console-warn:${message.slice(0, 100)}`, {
+    type: 'console-warn',
+    timestamp: new Date().toISOString(),
+    message,
+    url: window.location.href,
+  });
+};
