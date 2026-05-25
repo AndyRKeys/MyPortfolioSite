@@ -140,7 +140,8 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 - **Type labels** (add all that apply)
   - `bug` — defect or broken behaviour.
   - `feature` — new capability or user-facing improvement. Use `feature`, not `enhancement`.
-  - `security`, `auth` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `security` — auth, WebAuthn, JWT, token, crypto, or sensitive data handling changes.
+  - `auth` — authentication and session management specifically.
   - `ops` — deployment scripts, Docker/Compose, CI/test pipeline, server/infra changes.
   - `documentation` — docs-only or docs-heavy work (CHANGELOG, SECURITY, AI/CLAUDE, TESTING, RUNBOOK, etc.).
   - `workflow` — process, templates, automation, AI instructions, label/meta housekeeping. Use `workflow`, not `meta`.
@@ -149,6 +150,8 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
   - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
   - `refactor` — internal restructuring with no behaviour change.
   - `tech-debt` — code or config that works but needs improvement.
+- **Utility labels** (not AI-managed — apply as needed)
+  - `duplicate`, `invalid`, `wontfix`, `good first issue`, `help wanted`
 
 ### Deployment (From Windows)
 

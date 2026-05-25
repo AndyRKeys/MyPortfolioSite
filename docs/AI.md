@@ -133,29 +133,42 @@ Always apply both a **state label** and any relevant **type labels**:
   - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
   - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
   - `refactor` — internal restructuring with no behaviour change.
+  - `tech-debt` — code or config that works but needs improvement.
+
+- **Utility labels** (applied as needed — not AI-managed lifecycle labels)
+  - `duplicate` — issue already tracked elsewhere; close with a link to the original.
+  - `invalid` — off-topic, spam, or not reproducible.
+  - `wontfix` — valid issue, deliberately not being addressed.
+  - `good first issue` — suitable for a first contribution.
+  - `help wanted` — owner is open to external contributions on this.
 
   **Label colours** (for reference — update via GitHub UI › Settings › Labels):
 
-  | Label | Colour |
-  |---|---|
-  | `in progress` | `#1A5037` (dark green) |
-  | `awaiting review` | `#F9C74F` (amber) |
-  | `awaiting release` | `#4DABF7` (light blue) |
-  | `released` | `#38B000` (green) |
-  | `high priority` | `#E63946` (strong red) |
-  | `bug` | `#D73A4A` |
-  | `feature` | `#0B7285` |
-  | `documentation` | `#0075CA` |
-  | `security` | `#8E24AA` |
-  | `auth` | `#3A86FF` |
-  | `ops` | `#5C6F82` |
-  | `UI` | `#FFAFCC` |
-  | `regression` | `#F77F00` |
-  | `refactor` | `#ADB5BD` |
-  | `tech-debt` | `#B5838D` |
-  | `workflow` | `#6C757D` |
+  | Label | Colour | Description |
+  |---|---|---|
+  | `in progress` | `#1A5037` | Actively being worked on |
+  | `awaiting review` | `#F9C74F` | PR open, pending review |
+  | `awaiting release` | `#4DABF7` | Merged to dev, not yet in production |
+  | `released` | `#38B000` | Deployed to production |
+  | `high priority` | `#E63946` | Urgent or blocking |
+  | `bug` | `#D73A4A` | Defect or broken behaviour |
+  | `feature` | `#0B7285` | New capability or user-facing improvement |
+  | `documentation` | `#0075CA` | Docs-only or docs-heavy work |
+  | `security` | `#8E24AA` | Auth, JWT, crypto, or sensitive data handling |
+  | `auth` | `#3A86FF` | Authentication and session management |
+  | `ops` | `#5C6F82` | Deployment, Docker, CI/CD, server/infra |
+  | `UI` | `#FFAFCC` | Layout, styling, or interaction changes |
+  | `regression` | `#F77F00` | Re-break of previously fixed behaviour |
+  | `refactor` | `#ADB5BD` | Internal restructuring, no behaviour change |
+  | `tech-debt` | `#B5838D` | Works but needs improvement |
+  | `workflow` | `#6C757D` | Process, templates, automation, housekeeping |
 
-The AI is responsible for adding/removing these labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.
+  **Labels to delete from GitHub** (Settings › Labels — 26 labels to remove):
+  `accessibility`, `architecture`, `automation`, `backend`, `backlog`, `chore`, `ci`, `dependencies`, `deployment`, `dev-experience`, `docs`, `docker`, `enhancement`, `housekeeping`, `infrastructure`, `in testing`, `invalid` *(if keeping)*, `investigation`, `javascript`, `low priority`, `meta`, `question`, `refactoring`, `reliability`, `technical-debt`, `to test`
+
+  > Note: `duplicate`, `invalid`, `wontfix`, `good first issue`, `help wanted` are kept as utility labels (not lifecycle labels — the AI does not manage these).
+
+The AI is responsible for adding/removing state and type labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.
 
 ### 2. Planning
 Before writing code:
