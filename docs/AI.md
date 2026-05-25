@@ -152,6 +152,7 @@ Always apply both a **state label** and any relevant **type labels**:
   | `UI` | `#FFAFCC` |
   | `regression` | `#F77F00` |
   | `refactor` | `#ADB5BD` |
+  | `tech-debt` | `#B5838D` |
   | `workflow` | `#6C757D` |
 
 The AI is responsible for adding/removing these labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.

@@ -148,6 +148,7 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
   - `regression` — re-breaks of previously fixed behaviour, or bugs primarily caught by regression tests.
   - `UI` — CSS/HTML/JS changes that primarily affect layout, styling, or interaction.
   - `refactor` — internal restructuring with no behaviour change.
+  - `tech-debt` — code or config that works but needs improvement.
 
 ### Deployment (From Windows)
 
