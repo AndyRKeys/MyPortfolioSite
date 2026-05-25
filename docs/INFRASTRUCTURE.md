@@ -143,16 +143,22 @@ A separate Raspberry Pi running Home Assistant OS (HAOS) monitors `ak-home-serve
 
 ### Glances on ak-home-server
 
-On the Ubuntu server:
+On the Ubuntu server, install Glances and configure the systemd service via the helper script in this repo:
 
 ```bash
+cd ~/MyPortfolioSite
 sudo apt update
 sudo apt install glances
-# Run in web mode during initial setup
-glances -w
+sudo bash scripts/ops/setup-glances-monitoring.sh
 ```
 
-Once verified, configure Glances as a systemd service in web mode (port `61208` by default) so it starts at boot and is reachable from the HAOS Pi.
+This script:
+
+- Detects the `glances` binary on the host.
+- Writes `/etc/systemd/system/glances.service` with `glances -w` in web server mode.
+- Reloads systemd, enables the service, and restarts it so it runs at boot.
+
+Once this is done, Glances should be reachable on `http://<ak-home-server-ip>:61208` from the HAOS Pi.
 
 ### Home Assistant integration
 
