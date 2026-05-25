@@ -205,6 +205,18 @@ _log_cmd() {
   fi
 }
 
+# ── Test-output parsing helpers ───────────────────────────────────────────────
+# Normalise the wildly different summary formats each test runner prints into a
+# consistent "tests / passed / failed" triple, so the deploy report shows the
+# three test suites (backend / frontend / regression) in a comparable shape.
+# Backend (vitest) counts come from its json reporter (see run_deploy_tests),
+# not from scraping the pretty summary, which drifts across environments.
+
+# Extract a numeric `key=N` value from a single summary line. Echoes the number
+# (or nothing if absent). Anchored on a leading space/start so `passed` doesn't
+# also match e.g. `skipped`. `|| true` keeps a no-match from aborting under set -e.
+_kv_num() { printf '%s' "$1" | grep -oE "(^| )$2=[0-9]+" | head -1 | grep -oE '[0-9]+' || true; }
+
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
 require_tools() {
@@ -1369,17 +1381,38 @@ wait_for_health() {
 # Runs after health check so tests execute against the live deployed service.
 # Non-zero exit triggers rollback — same path as a failed health check.
 run_deploy_tests() {
-  local service_name="$1"   # e.g. backend-dev or backend
+  local service_name="$1"   # e.g. backend or backend-dev
 
-  dsection "Phase 7: running backend test suite"
+  dsection "Phase 7: Backend tests — Vitest (unit + integration)"
   dinfo "Executing npm test inside $service_name container..."
 
-  if docker compose -f "$COMPOSE_FILE" exec -T "$service_name" npm test 2>&1 | _log_cmd; then
-    dstatus vitest status=ok service="$service_name"
-    dok "All tests passed ✓"
+  # Run with the default reporter (human-readable log) AND the json reporter
+  # (authoritative counts written to a file inside the container). Scraping the
+  # pretty "Tests N passed (N)" summary proved fragile across environments — the
+  # json report is immune to ANSI/format drift. `if`-capture keeps set -e from
+  # aborting before we record the exit code.
+  local report_path='/tmp/vitest-deploy-report.json'
+  local out rc total passed failed counts
+  if out=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" \
+            npm test -- --reporter=default --reporter=json \
+            --outputFile.json="$report_path" 2>&1); then rc=0; else rc=$?; fi
+  printf '%s\n' "$out" | _log_cmd
+
+  # Read counts back from the json report in the same (persistent) container.
+  # Falls back to "0 0 0" if the file is missing/unreadable so a parse failure
+  # never aborts the deploy on its own.
+  counts=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" node -e \
+    'try{const r=require(process.argv[1]);process.stdout.write(`${r.numTotalTests||0} ${r.numPassedTests||0} ${r.numFailedTests||0}`)}catch(e){process.stdout.write("0 0 0")}' \
+    "$report_path" 2>/dev/null || true)
+  read -r total passed failed <<<"${counts:-0 0 0}" || true
+  total=${total:-0}; passed=${passed:-0}; failed=${failed:-0}
+
+  if [ "$rc" -eq 0 ]; then
+    dstatus vitest suite=backend status=ok tests="$total" passed="$passed" failed="$failed"
+    dok "Backend tests passed — ${passed}/${total} ✓"
   else
-    dstatus vitest status=failed service="$service_name"
-    dfail "Test suite failed — initiating rollback"
+    dstatus vitest suite=backend status=failed tests="$total" passed="$passed" failed="$failed"
+    dfail "Backend tests failed (${failed} failed of ${total}) — initiating rollback"
     _do_rollback "test suite failed post-deploy"
     ddie "Deploy failed: tests did not pass. See log at $LOG_FILE"
   fi
@@ -1388,14 +1421,14 @@ run_deploy_tests() {
 # ── Error Logger Test ──────────────────────────────────────────────────────────
 
 test_error_logger_all_pages() {
-  dsection "Testing error logger across all site pages"
+  dsection "Frontend tests — error-logger present on all pages (browser)"
 
   # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx:3001)
   # so that puppeteer, running inside the backend container, can reach nginx.
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping error logger test"
-    dstatus error-logger status=skipped reason=no-nginx-url
+    dstatus error-logger suite=frontend status=skipped reason=no-nginx-url
     return
   fi
 
@@ -1404,15 +1437,18 @@ test_error_logger_all_pages() {
 
   # Run comprehensive test inside the backend container — capture output and
   # surface it inline so failures are visible without SSHing to read the log.
-  local test_output
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then
-    dstatus error-logger status=ok
-    dok "Error logger site-wide test passed ✓"
+  local test_output rc total passed failed
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[error-logger-all-pages\]' | tail -1 || true)
+  passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed); total=$(_kv_num "$sline" total)
+  if [ "$rc" -eq 0 ]; then
+    dstatus error-logger suite=frontend status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dok "Frontend error-logger pages test passed — ${passed:-0}/${total:-0} ✓"
   else
-    dstatus error-logger status=failed
+    dstatus error-logger suite=frontend status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
     dwarn "Error logger test output:"
     echo "$test_output" | tee -a "$LOG_FILE"
-    dwarn "Error logger site-wide test failed — output above"
+    dwarn "Frontend error-logger pages test failed — output above"
   fi
 }
 
@@ -1427,26 +1463,30 @@ test_error_logger_all_pages() {
 # Warn-only (matches test_error_logger_all_pages) — a frontend contract
 # regression is surfaced loudly inline but does not roll back the deploy.
 test_error_logger_contracts() {
-  dsection "Testing error logger behavioural contracts"
+  dsection "Frontend tests — error-logger behavioural contracts (browser)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping error logger contract test"
-    dstatus error-logger-contracts status=skipped reason=no-nginx-url
+    dstatus error-logger-contracts suite=frontend status=skipped reason=no-nginx-url
     return
   fi
 
   dinfo "Running contract test (capture, buffering, recursion safety)..."
 
-  local test_output
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:browser -- "$base_url" 2>&1); then
-    dstatus error-logger-contracts status=ok
-    dok "Error logger contract test passed ✓"
+  local test_output rc total passed failed
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:browser -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[error-logger-browser\]' | tail -1 || true)
+  passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed)
+  total=$(( ${passed:-0} + ${failed:-0} ))
+  if [ "$rc" -eq 0 ]; then
+    dstatus error-logger-contracts suite=frontend status=ok tests="$total" passed="${passed:-0}" failed="${failed:-0}"
+    dok "Frontend error-logger contracts passed — ${passed:-0}/${total} ✓"
   else
-    dstatus error-logger-contracts status=failed
+    dstatus error-logger-contracts suite=frontend status=failed tests="$total" passed="${passed:-0}" failed="${failed:-0}"
     dwarn "Error logger contract test output:"
     echo "$test_output" | tee -a "$LOG_FILE"
-    dwarn "Error logger contract test failed — output above"
+    dwarn "Frontend error-logger contracts failed — output above"
   fi
 }
 
@@ -1459,24 +1499,29 @@ test_error_logger_contracts() {
 # Puppeteer can reach nginx directly.
 # Warn-only — violations are surfaced loudly but do not roll back the deploy.
 check_csp_violations() {
-  dsection "Browser CSP violation scan (#341)"
+  dsection "Frontend scans — CSP violations across pages (#341)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping CSP violation scan"
-    dstatus csp-violations status=skipped reason=no-nginx-url
+    dstatus csp-violations suite=frontend status=skipped reason=no-nginx-url
     return
   fi
 
   dinfo "Loading all pages in headless browser to detect CSP violations..."
 
-  local test_output
+  # Scan metric is pages/violations (a violation isn't a 1:1 test), so report
+  # those native counts rather than forcing pass/fail semantics.
+  local test_output rc pages violations
   if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" \
-      npm run test:csp-violations -- "$base_url" 2>&1); then
-    dstatus csp-violations status=ok
-    dok "CSP violation scan passed — no first-party violations ✓"
+      npm run test:csp-violations -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[csp-violations\]' | tail -1 || true)
+  pages=$(_kv_num "$sline" pages); violations=$(_kv_num "$sline" violations)
+  if [ "$rc" -eq 0 ]; then
+    dstatus csp-violations suite=frontend status=ok pages="${pages:-0}" violations="${violations:-0}"
+    dok "CSP scan passed — ${pages:-0} pages, no first-party violations ✓"
   else
-    dstatus csp-violations status=failed
+    dstatus csp-violations suite=frontend status=failed pages="${pages:-0}" violations="${violations:-0}"
     dwarn "CSP violation scan output:"
     echo "$test_output" | tee -a "$LOG_FILE"
     dwarn "CSP violations detected — update nginx-security-headers.conf and re-deploy"
@@ -1493,26 +1538,30 @@ check_csp_violations() {
 # fails if any first-party violation fires.
 # Warn-only — a failure is surfaced in the deploy report but does not roll back.
 check_admin_e2e_csp() {
-  dsection "Authenticated admin E2E CSP scan (#342)"
+  dsection "Frontend scans — authenticated admin E2E CSP (#342)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping admin E2E CSP scan"
-    dstatus admin-e2e-csp status=skipped reason=no-nginx-url
+    dstatus admin-e2e-csp suite=frontend status=skipped reason=no-nginx-url
     return
   fi
 
   dinfo "Running authenticated admin interactions to detect CSP violations..."
 
-  local test_output
+  # Scan metric is interactions/violations — report those native counts.
+  local test_output rc interactions violations
   if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
       -e JWT_SECRET="${JWT_SECRET:-}" \
       "$BACKEND_SERVICE" \
-      npm run test:admin-e2e-csp -- "$base_url" 2>&1); then
-    dstatus admin-e2e-csp status=ok
-    dok "Admin E2E CSP scan passed — no violations on authenticated interactions ✓"
+      npm run test:admin-e2e-csp -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[admin-e2e-csp\]' | tail -1 || true)
+  interactions=$(_kv_num "$sline" interactions); violations=$(_kv_num "$sline" violations)
+  if [ "$rc" -eq 0 ]; then
+    dstatus admin-e2e-csp suite=frontend status=ok interactions="${interactions:-0}" violations="${violations:-0}"
+    dok "Admin E2E CSP scan passed — ${interactions:-0} interactions, no violations ✓"
   else
-    dstatus admin-e2e-csp status=failed
+    dstatus admin-e2e-csp suite=frontend status=failed interactions="${interactions:-0}" violations="${violations:-0}"
     dwarn "Admin E2E CSP scan output:"
     echo "$test_output" | tee -a "$LOG_FILE"
     dwarn "CSP violations detected in admin interactions — update nginx-security-headers.conf"
@@ -1689,9 +1738,11 @@ print_deploy_report() {
   echo "╠${border}╣"
   # Only this run's lines (log is append-only across deploys), and only
   # checkpoint lines anchored at column 0 — so prose / commit-message text
-  # that happens to contain "[deploy:" is never matched.
+  # that happens to contain "[deploy:" is never matched. The regression suite's
+  # own [regression] line is summarised into a normalised [deploy:regression]
+  # checkpoint by run_regression_tests, so we match only [deploy:*] here.
   tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
-    | grep -E '^\[deploy:|^\[regression\]' \
+    | grep -E '^\[deploy:' \
     | sed 's/\x1b\[[0-9;]*m//g' \
     | sed 's/ ts=[^ ]*$//' \
     | while IFS= read -r line; do
@@ -1812,24 +1863,39 @@ run_regression_tests() {
     return 0
   fi
 
-  dsection "Regression smoke tests"
+  dsection "Regression tests — HTTP smoke suite (live site)"
 
+  # Capture so we can parse the [regression] summary and emit a normalised
+  # suite=regression status line alongside the script's own output.
+  local reg_out=""
   if [ "${DEPLOY_ENV:-}" = "dev" ]; then
-    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    reg_out=$(bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
       --base-url "https://${SITE_HOST}:${NGINX_PORT}" \
       --resolve "${SITE_HOST}:${NGINX_PORT}:${LAN_IP}" \
       --compose-file "$COMPOSE_FILE" \
       --service "$BACKEND_SERVICE" \
       --insecure \
       --reset-rate-limits \
-      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+      2>&1) || REGRESSION_RC=1
   elif [ -n "${DOMAIN:-}" ]; then
-    bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
+    reg_out=$(bash "${REPO_DIR}/scripts/tests/test-regression.sh" \
       --base-url "https://${DOMAIN}" \
       --resolve "${DOMAIN}:443:127.0.0.1" \
       --compose-file "$COMPOSE_FILE" \
       --service "$BACKEND_SERVICE" \
-      2>&1 | tee -a "$LOG_FILE" || REGRESSION_RC=1
+      2>&1) || REGRESSION_RC=1
+  fi
+
+  printf '%s\n' "$reg_out" | _log_cmd
+
+  # Normalised summary line, consistent with the backend/frontend suites.
+  local sline passed failed total
+  sline=$(printf '%s\n' "$reg_out" | grep -E '^\[regression\]' | tail -1 || true)
+  passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed); total=$(_kv_num "$sline" total)
+  if [ "$REGRESSION_RC" -eq 0 ]; then
+    dstatus regression suite=regression status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+  else
+    dstatus regression suite=regression status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
   fi
 
   if [ "$REGRESSION_RC" -ne 0 ]; then
