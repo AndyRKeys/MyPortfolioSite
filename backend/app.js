@@ -54,16 +54,18 @@ export function createApp() {
   });
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
-
-  // Extract host+port from ALLOWED_ORIGIN for flexible protocol matching
-  const allowedOriginHostPort = ALLOWED_ORIGIN.replace(/^https?:\/\//, '');
+  // SITE_HOST covers requests where the browser omits the non-standard port
+  // (e.g. origin=https://dev.andykeys.me when FRONTEND_URL=https://dev.andykeys.me:3001)
+  const SITE_HOST = process.env.SITE_HOST || '';
 
   app.use(cors({
     origin: (origin, cb) => {
       if (!origin || origin === ALLOWED_ORIGIN ||
           /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-          // Docker internal: allow nginx service names for dev/test (nginx-dev, nginx-local, etc.)
-          /^https?:\/\/nginx-(dev|local)(:\d+)?$/.test(origin)) {
+          // Docker internal: allow nginx service name for dev/test
+          /^https?:\/\/nginx(:\d+)?$/.test(origin) ||
+          // SITE_HOST: allow any port on the configured hostname (handles port-less origins)
+          (SITE_HOST && origin && (() => { try { return new URL(origin).hostname === SITE_HOST; } catch { return false; } })())) {
         cb(null, true);
       } else {
         cb(new Error(`CORS: origin ${origin} not allowed`));
