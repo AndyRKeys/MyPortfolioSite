@@ -461,7 +461,19 @@ sync_env_from_template() {
       else
         printf '%s\n' "$line" >> "$tmp_env"
         new_keys+=("$key")
-        placeholder_keys+=("$key")
+        # Only flag as a placeholder requiring action if the template value
+        # matches a known placeholder pattern (e.g. "change-me", "your-").
+        # An empty template value (KEY=) means the key is optional —
+        # add it to .env silently and do not block the deploy (#352).
+        local is_ph=0
+        local pat
+        for pat in "${PLACEHOLDER_PATTERNS[@]}"; do
+          if [[ "$template_value" == *"$pat"* ]]; then
+            is_ph=1
+            break
+          fi
+        done
+        [ "$is_ph" = "1" ] && placeholder_keys+=("$key")
       fi
     else
       # Comment, blank line, section header — copy verbatim from template
@@ -496,11 +508,24 @@ sync_env_from_template() {
   dok "Rebuilt $ENV_FILE from template (backup: $backup)"
   dlog "  carried over: $carried_count keys"
   if [ "${#new_keys[@]}" -gt 0 ]; then
-    dwarn "  new keys (template default in place — review and set real values):"
+    # Split new keys into required-action (placeholder) vs optional (empty template value).
+    local required_keys=() optional_keys=()
     local k
     for k in "${new_keys[@]}"; do
-      dwarn "    + $k"
+      if printf '%s\n' "${placeholder_keys[@]:-}" | grep -qx "$k"; then
+        required_keys+=("$k")
+      else
+        optional_keys+=("$k")
+      fi
     done
+    if [ "${#required_keys[@]}" -gt 0 ]; then
+      dwarn "  new keys (template default in place — review and set real values):"
+      for k in "${required_keys[@]}"; do dwarn "    + $k"; done
+    fi
+    if [ "${#optional_keys[@]}" -gt 0 ]; then
+      dinfo "  new optional keys added (empty by default — configure only if needed):"
+      for k in "${optional_keys[@]}"; do dinfo "    + $k"; done
+    fi
   fi
   if [ "${#dropped_keys[@]}" -gt 0 ]; then
     dlog "  dropped keys (not in template — preserved only in backup):"
@@ -1802,16 +1827,73 @@ check_backup_health() {
     cron_found=1
   fi
 
+  local cron_entry="0 2 * * * ${REPO_DIR}/scripts/backup/db-backup.sh >> ${HOME}/backup.log 2>&1"
+
   if [ "$cron_found" = "1" ]; then
     dstatus backup-schedule status=ok
     dok "Backup schedule: cron/timer found ✓"
   else
-    dstatus backup-schedule status=warn
-    dwarn "No backup cron job or systemd timer found — automated backups may not be configured (#164)"
-    ok=0
+    local install_cron=0
+    if [ "${AUTO_YES:-0}" = "1" ]; then
+      install_cron=1
+    elif [ -t 0 ]; then
+      printf "\n[backup] No backup cron job found. Install one now? [Y/n] "
+      read -r answer
+      [[ "$answer" =~ ^[Yy]?$ ]] && install_cron=1
+    fi
+
+    if [ "$install_cron" = "1" ]; then
+      (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
+      dstatus backup-schedule status=installed
+      dok "Installed backup cron: ${cron_entry}"
+    else
+      dstatus backup-schedule status=warn
+      dwarn "No backup cron job found — add manually: crontab -e"
+      dwarn "  ${cron_entry}"
+      ok=0
+    fi
   fi
 
-  # ── Check 2: recent backup files exist ──────────────────────────────────
+  # ── Check 2: backup directory exists (create if missing) (#352) ─────────
+  # Sanity check: BACKUP_DIR must be under the current user's home. A path
+  # like /home/ak/backups synced from a template with a hardcoded username
+  # will fail mkdir for any other SSH user — catch it early with a clear fix.
+  if [[ "$backup_dir" == /home/* ]] && [[ "$backup_dir" != "$HOME"* ]]; then
+    dstatus backup-files status=warn dir="$backup_dir"
+    dwarn "BACKUP_DIR (${backup_dir}) belongs to a different user (running as: $(whoami))."
+    dwarn "Update BACKUP_DIR in .env — suggested value: ${HOME}/backups"
+    ok=0
+  elif [ ! -d "$backup_dir" ]; then
+    local create=0
+    if [ "${AUTO_YES:-0}" = "1" ]; then
+      create=1
+    elif [ -t 0 ]; then
+      printf "\n[backup] Backup directory %s does not exist. Create it now? [Y/n] " "$backup_dir"
+      read -r answer
+      [[ "$answer" =~ ^[Yy]?$ ]] && create=1
+    fi
+
+    if [ "$create" = "1" ]; then
+      if mkdir -p "$backup_dir" 2>/dev/null; then
+        dstatus backup-files status=created dir="$backup_dir"
+        dok "Created backup directory: ${backup_dir}"
+        dinfo "Add the backup cron job if not already present:"
+        dinfo "  crontab -e"
+        dinfo "  ${cron_entry}"
+      else
+        dstatus backup-files status=warn dir="$backup_dir"
+        dwarn "Could not create ${backup_dir} — permission denied."
+        dwarn "Set BACKUP_DIR to a writable path in .env, e.g. ${HOME}/backups"
+        ok=0
+      fi
+    else
+      dstatus backup-files status=warn dir="$backup_dir"
+      dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
+      ok=0
+    fi
+  fi
+
+  # ── Check 3: recent backup files exist ───────────────────────────────────
   if [ -d "$backup_dir" ]; then
     local recent
     recent=$(find "$backup_dir" -maxdepth 2 -name "*.sql*" -o -name "*.dump" -o -name "*.tar*" \
@@ -1828,14 +1910,37 @@ check_backup_health() {
         ok=0
       fi
     else
-      dstatus backup-files status=warn dir="$backup_dir"
-      dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
-      ok=0
+      local run_backup=0
+      if [ "${AUTO_YES:-0}" = "1" ]; then
+        run_backup=1
+      elif [ -t 0 ]; then
+        printf "\n[backup] No backup files found. Run an initial backup now? [Y/n] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]?$ ]] && run_backup=1
+      fi
+
+      if [ "$run_backup" = "1" ]; then
+        dinfo "Running initial backup..."
+        local timestamp
+        timestamp=$(date +%Y%m%d-%H%M%S)
+        local db_backup="${backup_dir}/portfolio-${timestamp}.sql.gz"
+        if docker compose -f "$COMPOSE_FILE" exec -T postgres \
+            pg_dump -U "${DB_USER:-postgres}" "${DB_NAME:-portfolio}" \
+            2>/dev/null | gzip > "$db_backup" && [ -s "$db_backup" ]; then
+          dstatus backup-files status=ok dir="$backup_dir"
+          dok "Initial backup created: $(basename "$db_backup") ($(du -sh "$db_backup" | cut -f1))"
+        else
+          rm -f "$db_backup"
+          dstatus backup-files status=warn dir="$backup_dir"
+          dwarn "Initial backup failed — check containers are healthy and DB credentials are correct"
+          ok=0
+        fi
+      else
+        dstatus backup-files status=warn dir="$backup_dir"
+        dwarn "No backup files found in ${backup_dir} — backups may never have run (#164)"
+        ok=0
+      fi
     fi
-  else
-    dstatus backup-files status=warn dir="$backup_dir"
-    dwarn "Backup directory ${backup_dir} does not exist — backups not configured (#164)"
-    ok=0
   fi
 
   if [ "$ok" = "0" ]; then
