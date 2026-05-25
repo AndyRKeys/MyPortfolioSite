@@ -5,7 +5,7 @@
 set -e
 
 REPO_DIR="$HOME/MyPortfolioSite"
-BACKUP_DIR="$HOME/backups"
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/prod}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 mkdir -p "$BACKUP_DIR"
