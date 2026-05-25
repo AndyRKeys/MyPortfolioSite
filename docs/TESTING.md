@@ -221,7 +221,7 @@ bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
 
 ### Deploy report
 
-Every deploy ends with a structured report block that collects all `[deploy:*]` and `[regression]` checkpoint lines:
+Every deploy ends with a structured report block that collects all `[deploy:*]` checkpoint lines. The three test suites report in a consistent shape — each tagged with `suite=backend|frontend|regression` and normalised `tests/passed/failed` counts (CSP scans keep their native `pages`/`interactions`/`violations` metrics, since a violation isn't a 1:1 test):
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════╗
@@ -231,11 +231,17 @@ Every deploy ends with a structured report block that collects all `[deploy:*]` 
 ║  [deploy:git] status=updated branch=feat/x pre=abc1234 sha=def5678         ║
 ║  [deploy:compose] status=ok service=backend                                ║
 ║  [deploy:health] status=ok url=https://dev.andykeys.me:3001/api/h… attem… ║
-║  [deploy:vitest] status=ok service=backend                                 ║
+║  [deploy:vitest] suite=backend status=ok tests=94 passed=94 failed=0       ║
+║  [deploy:error-logger] suite=frontend status=ok tests=4 passed=4 failed=0  ║
+║  [deploy:error-logger-contracts] suite=frontend status=ok tests=10 pas…    ║
+║  [deploy:csp-violations] suite=frontend status=ok pages=6 violations=0     ║
+║  [deploy:admin-e2e-csp] suite=frontend status=ok interactions=3 violat…    ║
+║  [deploy:regression] suite=regression status=ok tests=13 passed=13 fai…    ║
 ║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
-║  [regression] status=OK passed=12 failed=0 skipped=0 total=12              ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 ```
+
+The suites are grouped under labelled section headers in the verbose log: **Backend tests — Vitest**, **Frontend tests — error-logger (browser)**, **Frontend scans — CSP**, and **Regression tests — HTTP smoke suite**. The regression script still prints its own detailed `[regression]` line to the full log; the report summarises it as a normalised `[deploy:regression]` checkpoint.
 
 This block is the canonical answer to "what happened?" — paste it into PR comments or AI prompts. Full verbose output is still written to the log file.
 

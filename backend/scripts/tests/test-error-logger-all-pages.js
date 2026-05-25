@@ -99,7 +99,14 @@ async function run() {
       console.log(`❌ Failed: ${results.failed.length}`);
       results.failed.forEach((r) => console.log(`   • ${r}`));
     }
-    console.log(`${'='.repeat(50)}\n`);
+    console.log(`${'='.repeat(50)}`);
+    // Machine-readable summary — parsed by the deploy report (matches the
+    // [error-logger-browser]/[regression] line shape for consistent output).
+    const status = results.failed.length > 0 ? 'FAIL' : 'OK';
+    console.log(
+      `[error-logger-all-pages] status=${status} passed=${results.passed.length} ` +
+      `failed=${results.failed.length} total=${PAGES.length}\n`,
+    );
     process.exit(results.failed.length > 0 ? 1 : 0);
   }
 }
