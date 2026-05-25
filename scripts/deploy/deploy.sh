@@ -326,7 +326,7 @@ if [ "$DRY_RUN" = "1" ]; then
   dinfo "  service:      $BACKEND_SERVICE"
   dinfo "  health URL:   $HEALTH_URL"
   [ "$RUN_VITEST"        = "1" ] && dinfo "  vitest:        would run after health check"
-  [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest"
+  [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest (incl. CSP violation scan)"
   [ "$SKIP_REGRESSION"   = "0" ] && dinfo "  regression:    would run smoke tests"
   [ "$RUN_BACKUP_CHECK"  = "1" ] && dinfo "  backup check:  would warn if backups absent/stale"
   dinfo ""
@@ -353,6 +353,7 @@ check_outlook_token "$BACKEND_SERVICE"
 
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_all_pages
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
+[ "$RUN_ERROR_LOGGER" = "1" ] && check_csp_violations
 
 test_csp_reporting
 
