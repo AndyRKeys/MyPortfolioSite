@@ -133,7 +133,7 @@ router.post('/errors', debugRateLimit, async (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports.
  */
-router.post('/csp-violations', debugRateLimit, (req, res) => {
+router.post('/csp-violations', debugRateLimit, async (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 
