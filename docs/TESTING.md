@@ -34,8 +34,9 @@ This approach catches integration issues that unit tests cannot (database state,
 
 Dev and prod deploy scripts now run automated checks as part of every deployment to the server:
 
+- **Backend startup env validation** (#357) — on boot the backend asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty via `validateEnvOrExit()` in `backend/utils/validateEnv.js`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container; the backend then logs each missing var and exits 1, so the deploy fails fast (and rolls back) instead of serving traffic with broken config. This closes the gap that let `SITE_HOST` reach the container undefined.
 - **Backend Vitest suite** runs inside the already-deployed container (`backend` on both dev and prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
-- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
+- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass. This includes a **CORS origin check** (#357): a `POST /api/debug/errors` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must not be CORS-rejected — catching the case where `SITE_HOST` is missing/wrong in the container and every site-host origin returns 500.
 
 You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
