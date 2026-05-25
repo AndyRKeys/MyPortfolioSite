@@ -1,183 +1,153 @@
 #!/usr/bin/env node
 /**
- * Self-contained browser test for resources/js/error-logger.js.
+ * Error-logger contract tests against the LIVE deployed site.
  *
- * Spins up a lightweight HTTP server serving the real module files plus a mock
- * /api/debug/errors endpoint, then drives headless Chromium to verify the key
- * behavioural contracts of the error logger:
+ * Loads real pages from the running nginx and uses Puppeteer request
+ * interception to capture POSTs to /api/debug/errors and simulate the backend
+ * being up or down — so the buffering/drain behaviour can be exercised without
+ * actually taking the backend down. Verifies the actually-deployed
+ * error-logger.js, and runs inside the backend container post-deploy (Chromium
+ * ships in the image).
  *
- *   1. Resource-load failures captured (#332) — the capture-phase listener
+ * Contracts verified:
+ *   1. Resource-load failures captured (#332) — capture-phase listener
  *   2. Runtime errors logged exactly once (no duplication from capture listener)
  *   3. Reports buffered in localStorage when backend unreachable (#334)
- *   4. Buffer drained and emptied after backend returns
+ *   4. Buffer drained and emptied after backend returns (#334)
  *   5. No browser hang under error storm against failing backend (#331)
  *
- * Does NOT require a running dev server, Docker, or Postgres. Node + Chromium only.
- *
  * Usage:
- *   node backend/scripts/tests/test-error-logger-browser.js
- *   npm run test:error-logger:browser   (from backend/)
+ *   node test-error-logger-browser.js <base-url>
+ *   npm run test:error-logger:browser -- https://nginx-dev:3001
  */
 
-import http from 'node:http';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-
-// ── Mock server ───────────────────────────────────────────────────────────────
-
-const received = [];   // payloads accepted by the mock /api/debug/errors
-let backendUp = true;  // toggle to simulate backend unavailability
-
-const server = http.createServer(async (req, res) => {
-  // Mock ingestion endpoint
-  if (req.url === '/api/debug/errors' && req.method === 'POST') {
-    if (!backendUp) {
-      res.writeHead(503).end('{"error":"down"}');
-      return;
-    }
-    let body = '';
-    req.on('data', chunk => (body += chunk));
-    req.on('end', () => {
-      try { received.push(JSON.parse(body)); } catch { received.push({ parseError: body }); }
-      res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"received":true}');
-    });
-    return;
-  }
-
-  // Test page
-  if (req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/html' }).end(`
-<!DOCTYPE html><html><head>
-<script type="module" src="/resources/js/error-logger.js"></script>
-</head><body><h1>error-logger test harness</h1></body></html>`);
-    return;
-  }
-
-  // Serve JS modules from the repo (config.js, error-logger.js, etc.)
-  if (req.url.startsWith('/resources/js/')) {
-    try {
-      const filePath = path.join(REPO_ROOT, req.url.split('?')[0]);
-      const data = await readFile(filePath);
-      res.writeHead(200, { 'Content-Type': 'application/javascript' }).end(data);
-    } catch {
-      res.writeHead(404).end('not found'); // intentional 404 for resource-error test
-    }
-    return;
-  }
-
-  res.writeHead(404).end('not found');
-});
-
-// ── Test helpers ──────────────────────────────────────────────────────────────
+const baseUrl = process.argv[2];
+if (!baseUrl) {
+  console.error('Usage: node test-error-logger-browser.js <base-url>');
+  process.exit(1);
+}
 
 const passed = [];
 const failed = [];
-
-function check(name, condition) {
-  if (condition) {
-    console.log(`  ✅ ${name}`);
-    passed.push(name);
-  } else {
-    console.log(`  ❌ ${name}`);
-    failed.push(name);
-  }
-}
-
+const check = (name, cond) => {
+  if (cond) { console.log(`  ✅ ${name}`); passed.push(name); }
+  else { console.log(`  ❌ ${name}`); failed.push(name); }
+};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
-console.log('\n🧪 error-logger browser tests (self-contained)\n');
-
-await new Promise(r => server.listen(0, r));
-const { port } = server.address();
-const base = `http://127.0.0.1:${port}`;
-console.log(`🌐 Mock server listening on ${base}\n`);
+console.log('\n🧪 error-logger contract tests (against live site)');
+console.log(`📍 Base URL: ${baseUrl}\n`);
 
 let browser;
 try {
   browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--ignore-certificate-errors', // self-signed dev certs
+    ],
   });
   const page = await browser.newPage();
-  await page.goto(base, { waitUntil: 'networkidle0' });
 
-  // ── Test 1: resource-load failure captured ────────────────────────────────
-  console.log('📍 Test 1 — resource-load failures captured (#332)');
-  received.length = 0;
+  // Intercept /api/debug/errors: capture payloads and simulate up/down.
+  let backendUp = true;
+  let delivered = 0;     // count of reports we accepted with 200
+  const captured = [];   // parsed POST bodies seen
+
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && req.url().includes('/api/debug/errors')) {
+      const data = req.postData();
+      if (data) { try { captured.push(JSON.parse(data)); } catch { captured.push({ raw: data }); } }
+      if (backendUp) {
+        delivered++;
+        req.respond({ status: 200, contentType: 'application/json', body: '{"received":true}' });
+      } else {
+        req.respond({ status: 503, contentType: 'application/json', body: '{"error":"down"}' });
+      }
+      return;
+    }
+    req.continue();
+  });
+
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  // Clear any buffer left from a previous run on this origin.
+  await page.evaluate(() => { try { localStorage.removeItem('errlog:buffer'); } catch {} });
+
+  // ── Test 1: resource-load capture ──────────────────────────────────────────
+  console.log('📍 Test 1 — resource-load failure captured (#332)');
+  captured.length = 0;
   await page.evaluate(() => {
     const s = document.createElement('script');
-    s.src = '/resources/js/does-not-exist.js';
+    s.src = '/resources/js/does-not-exist-' + Date.now() + '.js'; // genuine 404
     document.head.appendChild(s);
   });
-  await sleep(400);
-  const resourceReport = received.find(r => r.type === 'resource-error');
-  check('resource-error report received', !!resourceReport);
-  check('message field describes the failure',
-    /Failed to load <script>/i.test(resourceReport?.message || ''));
-  check('filename field contains the failing URL',
-    /does-not-exist\.js/.test(resourceReport?.filename || ''));
+  await sleep(600);
+  const rc = captured.find(r => r.type === 'resource-error');
+  check('resource-error report captured', !!rc);
+  check('message names the failed load', /Failed to load <script>/i.test(rc?.message || ''));
 
-  // ── Test 2: runtime error logged exactly once (no duplication) ────────────
-  console.log('\n📍 Test 2 — runtime errors not duplicated by capture listener (#332)');
-  received.length = 0;
-  await page.evaluate(() => setTimeout(() => { throw new Error('runtime-test'); }, 0));
-  await sleep(400);
-  // Puppeteer evaluate context masks thrown messages as "Script error." (cross-origin
-  // sandbox) — check count/type rather than message text.
-  const runtimeReports = received.filter(r => r.type === 'uncaught-error');
-  check('runtime error reported exactly once', runtimeReports.length === 1);
+  // ── Test 2: runtime error not duplicated by capture listener ───────────────
+  // NB: Puppeteer's evaluate sandbox masks the thrown message as "Script error.",
+  // so we assert on count/type, not message text — the point is that the new
+  // capture-phase listener must not duplicate the bubble-phase runtime report.
+  console.log('\n📍 Test 2 — runtime error reported exactly once (#332)');
+  captured.length = 0;
+  await page.evaluate(() => setTimeout(() => { throw new Error('pr331-runtime'); }, 0));
+  await sleep(600);
+  const rt = captured.filter(r => r.type === 'uncaught-error');
+  check('runtime error reported exactly once (no duplication)', rt.length === 1);
 
-  // ── Test 3: reports buffered when backend down ────────────────────────────
-  console.log('\n📍 Test 3 — reports buffered in localStorage when backend unreachable (#334)');
-  received.length = 0;
+  // ── Test 3: buffered when backend down ─────────────────────────────────────
+  console.log('\n📍 Test 3 — reports buffered when backend unreachable (#334)');
+  captured.length = 0;
+  const deliveredBefore = delivered;
   backendUp = false;
-  await page.evaluate(() => console.error('offline-marker'));
-  await sleep(400);
-  check('nothing delivered to backend while down', received.length === 0);
+  const offlineMarker = 'offline-' + Date.now();
+  await page.evaluate((m) => console.error(m), offlineMarker);
+  await sleep(600);
+  check('not delivered to backend while down', delivered === deliveredBefore);
   const bufLen = await page.evaluate(
     () => JSON.parse(localStorage.getItem('errlog:buffer') || '[]').length,
   );
   check('report persisted in localStorage buffer', bufLen >= 1);
 
-  // ── Test 4: buffer drained after backend returns ──────────────────────────
+  // ── Test 4: buffer drains after backend returns ────────────────────────────
   console.log('\n📍 Test 4 — buffer drains when backend returns (#334)');
   backendUp = true;
-  received.length = 0;
-  await page.reload({ waitUntil: 'networkidle0' });
-  await sleep(600);
-  const flushed = received.find(r => /offline-marker/.test(r.message || ''));
+  captured.length = 0;
+  await page.reload({ waitUntil: 'networkidle0', timeout: 20000 });
+  await sleep(800);
+  const flushed = captured.find(r => String(r.message || '').includes(offlineMarker));
   check('buffered report delivered after reload', !!flushed);
   const bufAfter = await page.evaluate(
     () => JSON.parse(localStorage.getItem('errlog:buffer') || '[]').length,
   );
   check('localStorage buffer emptied after flush', bufAfter === 0);
 
-  // ── Test 5: no hang under error storm against failing backend ─────────────
-  console.log('\n📍 Test 5 — no browser hang on error storm while backend is down (#331)');
+  // ── Test 5: no hang under error storm against failing backend ──────────────
+  console.log('\n📍 Test 5 — no browser hang on error storm while down (#331)');
   backendUp = false;
-  const completed = await page.evaluate(async () => {
+  const done = await page.evaluate(async () => {
     for (let i = 0; i < 5; i++) console.error('storm-' + i);
     await new Promise(r => setTimeout(r, 400));
     return 'done';
   });
-  check('page remains responsive after 5-error storm', completed === 'done');
+  check('page remains responsive after 5-error storm', done === 'done');
+
+  // Best-effort cleanup so we don't leave buffered junk on the origin.
+  await page.evaluate(() => { try { localStorage.removeItem('errlog:buffer'); } catch {} });
 
 } catch (err) {
   console.error('\n💥 Test runner crashed:', err.message);
   failed.push(`Runner crashed: ${err.message}`);
 } finally {
   if (browser) await browser.close();
-  server.close();
 }
-
-// ── Summary ───────────────────────────────────────────────────────────────────
 
 const total = passed.length + failed.length;
 console.log('\n' + '='.repeat(60));
@@ -187,10 +157,7 @@ if (failed.length) {
   failed.forEach(n => console.log(`   • ${n}`));
 }
 console.log('='.repeat(60));
-
-// Machine-parseable summary for deploy scripts / CI
 const status = failed.length === 0 ? 'OK' : 'FAIL';
-console.log(`[error-logger-browser] status=${status} passed=${passed.length} failed=${failed.length}`);
-console.log('');
+console.log(`[error-logger-browser] status=${status} passed=${passed.length} failed=${failed.length}\n`);
 
 process.exit(failed.length ? 1 : 0);

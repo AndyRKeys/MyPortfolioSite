@@ -92,42 +92,50 @@ docker compose exec backend npm run test:coverage
 
 ## Browser-Level Tests (frontend error-logger)
 
-`backend/scripts/tests/test-error-logger-browser.js` verifies the behavioural contracts of `resources/js/error-logger.js` in a real headless browser. Unlike the server-based `test-error-logger.js` (which requires a running dev stack), this test is **self-contained** — it spins up its own HTTP server and mock `/api/debug/errors` endpoint.
+Three Puppeteer scripts exercise `resources/js/error-logger.js` against the live deployed site. **All three run automatically inside the backend container after every dev/prod deploy** (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
 
-### What it tests
+| Script | npm script | What it verifies |
+|---|---|---|
+| `test-error-logger.js` | `test:error-logger` | Error logger initialises and reports on the `/api/debug/test-errors` page |
+| `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
+| `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 
-| # | Test | Related issue |
+### Contract test (`test-error-logger-browser.js`)
+
+Uses Puppeteer request interception to capture POSTs to `/api/debug/errors` and simulate the backend being up/down — so buffering can be exercised without actually taking the backend down. Verifies the *deployed* `error-logger.js`:
+
+| # | Contract | Related issue |
 |---|------|---------------|
-| 1 | Resource-load failures (broken `<script src>`) are captured via the capture-phase listener | #332 |
-| 2 | Runtime errors are logged exactly once — capture-phase listener does not duplicate them | #332 |
-| 3 | Reports are persisted to `localStorage` when the backend is unreachable | #334 |
-| 4 | Buffered reports are flushed and `localStorage` is cleared once the backend returns | #334 |
+| 1 | Resource-load failures (broken `<script src>`) captured via the capture-phase listener | #332 |
+| 2 | Runtime errors logged exactly once — capture-phase listener does not duplicate them | #332 |
+| 3 | Reports persisted to `localStorage` when the backend is unreachable | #334 |
+| 4 | Buffered reports flushed and `localStorage` cleared once the backend returns | #334 |
 | 5 | No browser hang when five errors fire against a failing backend | #331 |
 
-### Running
+It prints a machine-parseable summary line collected into the deploy report:
+```
+[error-logger-browser] status=OK passed=8 failed=0
+```
 
-Because it is self-contained (no dev stack, DB, or network), this test runs wherever Node + Chromium are available — **CI** (issue #98) or **on the dev server** from the deployed checkout:
+### Failure policy
+
+The error-logger tests are **warn-only** — a failure is surfaced loudly inline in the deploy report but does **not** roll the deploy back (unlike Vitest, which does). This avoids a frontend timing flake blocking a deploy. Treat a `status=failed` line as a must-fix even though the deploy proceeded.
+
+### Running manually
+
+These tests need a base URL (the running site). Run them on the dev server from the deployed checkout, or against any reachable instance:
 
 ```bash
-# On the dev server, against the freshly deployed branch:
-cd ~/MyPortfolioSite-dev/backend
-npm install
-npx puppeteer browsers install chrome   # first time only
-npm run test:error-logger:browser
-```
-
-The test prints a machine-parseable summary line at the end:
-```
-[error-logger-browser] status=OK passed=9 failed=0
+# Dev: NGINX_SERVICE=nginx, NGINX_PORT=3001 → docker-internal URL https://nginx:3001
+cd ~/MyPortfolioSite-dev
+docker compose -f docker-compose.yml -p portfolio_dev exec -T backend \
+  npm run test:error-logger:browser -- https://nginx:3001
 ```
 
 ### When to run
 
-- After any change to `resources/js/error-logger.js`
-- After any change to `backend/routes/debug.js` that alters the `/debug/errors` contract
-- As part of the PR verification when either file is touched (alongside the dev-server deploy)
-
-The existing `test:error-logger` and `test:error-logger:all-pages` scripts complement this test — they connect to the running dev server and verify the full end-to-end flow (nginx, auth, real DB). This contract test isolates the frontend logic (buffering, capture-phase listener, recursion safety) that is awkward to exercise against a live server.
+- Automatically: every dev/prod deploy
+- Manually after any change to `resources/js/error-logger.js`, or to `backend/routes/debug.js` if it alters the `/debug/errors` contract
 
 ---
 

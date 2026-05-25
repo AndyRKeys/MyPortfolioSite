@@ -17,6 +17,11 @@
 
 import { API_BASE } from './config.js';
 
+// Load signal — a plain console.log (console.log is not overridden, so no
+// recursion). The post-deploy error-logger test greps for this line to confirm
+// the module initialised on every page.
+console.log('[error-logger] Initializing global error logger');
+
 const ENDPOINT = `${API_BASE}/debug/errors`;
 
 // Suppress duplicate reports within a page view.
