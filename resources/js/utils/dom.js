@@ -85,11 +85,14 @@ export function buildPostCard(type, data) {
     tCard.attr('data-memory-id', data.id);
 
     var media = $('<div class="media"></div>');
-    if (data.mediaUrl) {
+    // Same root-relative guard as buildPublicTravelCard (#266).
+    var safeMediaUrl = (data.mediaUrl && !data.mediaUrl.startsWith('/') && !data.mediaUrl.startsWith('http'))
+        ? '/' + data.mediaUrl : data.mediaUrl;
+    if (safeMediaUrl) {
         if (data.mediaType && data.mediaType.indexOf('video') === 0) {
-            $('<video controls></video>').attr('src', data.mediaUrl).appendTo(media);
+            $('<video controls></video>').attr('src', safeMediaUrl).appendTo(media);
         } else {
-            var img = $('<img alt="Travel snapshot">').attr('src', data.mediaUrl);
+            var img = $('<img alt="Travel snapshot">').attr('src', safeMediaUrl);
             img.on('error', function () { $(this).attr('src', placeholder); });
             media.append(img);
         }
@@ -131,6 +134,12 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     var extraCount = allMedia ? allMedia.length - 1 : 0;
 
     var placeholder = '/resources/img/placeholder-transparent.png';
+    // Ensure media URLs from the API are root-relative. A bare relative path
+    // (e.g. "resources/img/...") would be resolved relative to the current page
+    // path ("/travel/") causing a 404 before the error-fallback fires (#266).
+    if (mediaUrl && !mediaUrl.startsWith('/') && !mediaUrl.startsWith('http')) {
+        mediaUrl = '/' + mediaUrl;
+    }
     if (mediaUrl) {
         var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         if (mediaType && mediaType.indexOf('video') === 0) {
