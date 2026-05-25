@@ -10,7 +10,6 @@
 # Usage: .\scripts\deploy\prod-deploy.ps1 [-Hostname <name>] [-Rollback <sha>] [-SkipRegression $true] [-Quiet $true]
 param(
     [string]$Hostname = 'ak-home-server',
-    [string]$RemoteHome = '/home/ak',
     [string]$Rollback = '',
     [bool]$SkipRegression = $false,
     [bool]$Quiet = $false,
@@ -32,8 +31,11 @@ if ($DryRun)         { $flags += '--dry-run' }
 if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
-$RepoUrl  = 'https://github.com/AndyRKeys/MyPortfolioSite.git'
-$ProdRepo = "$RemoteHome/MyPortfolioSite"
+# Resolve the remote home directory for the SSH user so paths in the
+# printed command are exact — avoids the opaque $HOME bash variable.
+$RemoteHome = (ssh $Hostname 'echo $HOME').Trim()
+$RepoUrl    = 'https://github.com/AndyRKeys/MyPortfolioSite.git'
+$ProdRepo   = "$RemoteHome/MyPortfolioSite"
 
 $remoteCommand = @"
 if [ ! -d "$ProdRepo/.git" ]; then
