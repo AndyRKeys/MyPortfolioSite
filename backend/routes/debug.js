@@ -1,42 +1,20 @@
 import { Router } from 'express';
 import { logger } from '../utils/logger.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
 // ── Environment checks ────────────────────────────────────────────────────────
-// Debug endpoints are only enabled in dev environments.
-// Production should not expose error logs or test endpoints.
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-// Simple in-memory rate limiter for POST endpoints (errors, csp-violations).
-// Prevents log flooding from unauthenticated clients.
-// Key: IP address, value: { count, resetTime }
-const rateLimitStore = new Map();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 60 seconds
-const RATE_LIMIT_MAX = 50; // 50 errors per minute per IP
-
-function getRateLimitKey(req) {
-  return req.ip || req.connection.remoteAddress;
-}
-
-function checkRateLimit(req) {
-  const key = getRateLimitKey(req);
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    return true;
-  }
-
-  if (entry.count < RATE_LIMIT_MAX) {
-    entry.count++;
-    return true;
-  }
-
-  return false;
-}
+// DB-backed rate limiter — survives container restarts, shared across replicas.
+// Same middleware used by the contact route (#337).
+const debugRateLimit = createRateLimiter({
+  limit: 50,
+  windowMs: 60 * 1000,
+  message: 'Rate limited',
+});
 
 // ── Sanitize log output ───────────────────────────────────────────────────────
 // Prevent log injection by truncating/escaping user input before logging.
@@ -50,12 +28,7 @@ function sanitizeForLog(str, maxLen = 200) {
  * Logs them server-side for debugging
  * Rate-limited to prevent log flooding; available on dev and production
  */
-router.post('/errors', (req, res) => {
-  // Rate limit check
-  if (!checkRateLimit(req)) {
-    return res.status(429).json({ received: false, error: 'Rate limited' });
-  }
-
+router.post('/errors', debugRateLimit, (req, res) => {
   logger.debug('[debug/errors] Received frontend error report');
 
   const { type, message, timestamp, url, filename, lineno, colno, stack } = req.body;
@@ -97,12 +70,7 @@ router.post('/errors', (req, res) => {
  * Browser sends these when a resource violates Content-Security-Policy
  * Rate-limited to prevent log flooding; available on dev and production
  */
-router.post('/csp-violations', (req, res) => {
-  // Rate limit check
-  if (!checkRateLimit(req)) {
-    return res.status(429).json({ received: false, error: 'Rate limited' });
-  }
-
+router.post('/csp-violations', debugRateLimit, (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 
