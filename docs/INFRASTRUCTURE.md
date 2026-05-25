@@ -139,7 +139,9 @@ bash ~/MyPortfolioSite/scripts/backup/db-restore.sh \
 
 ## Server health monitoring with Home Assistant
 
-A separate Raspberry Pi running Home Assistant OS (HAOS) monitors `ak-home-server` using the **Glances** integration. This provides a lightweight health dashboard (CPU, memory, disk, uptime, Docker load) and basic alerts when the host goes offline or reboots unexpectedly.
+> **Status:** Glances is installed on `ak-home-server` and the Home Assistant Glances integration is connected. The dashboard and automation alerts below are **not yet configured** — see #370 to track completion.
+
+A separate Raspberry Pi running Home Assistant OS (HAOS) monitors `ak-home-server` using the **Glances** integration. When fully configured this will provide a lightweight health dashboard (CPU, memory, disk, uptime, Docker load) and basic alerts when the host goes offline or reboots unexpectedly.
 
 ### Glances on ak-home-server
 
@@ -168,7 +170,7 @@ On the HAOS Raspberry Pi:
 2. Point it at the Ubuntu server LAN IP and Glances port (e.g. `http://ak-home-server:61208`).
 3. Confirm that sensors for CPU, memory, disk usage, and uptime appear (for example: `sensor.ak_home_server_cpu_use_percent`, `sensor.ak_home_server_memory_use_percent`, `sensor.ak_home_server_uptime`).
 
-Create a dedicated **Server Health** dashboard in Home Assistant with:
+**Not yet done (#370):** Create a dedicated **Server Health** dashboard in Home Assistant with:
 
 - An entities card for key metrics (CPU, memory, disk, uptime, Docker container count where available).
 - A history-graph card for CPU and memory over 24 hours.
@@ -176,7 +178,7 @@ Create a dedicated **Server Health** dashboard in Home Assistant with:
 
 ### Example Home Assistant automations
 
-These examples live in Home Assistant’s `automations.yaml`, not in this repo, but are shown here for reference.
+> **Not yet configured (#370).** These examples live in Home Assistant’s `automations.yaml`, not in this repo, and serve as the spec for what needs to be set up.
 
 **Alert if ak-home-server is offline for 5+ minutes:**
 
