@@ -83,6 +83,17 @@ try {
 
     const page = await browser.newPage();
 
+    // Intercept debug/errors POSTs so headless-Chromium noise doesn't write
+    // to the live client_errors table and trigger false alert emails.
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && req.url().includes('/api/debug/errors')) {
+        req.respond({ status: 200, contentType: 'application/json', body: '{"received":true}' });
+        return;
+      }
+      req.continue();
+    });
+
     // Capture securitypolicyviolation events from the page context.
     await page.evaluateOnNewDocument(() => {
       window.__cspViolations = [];

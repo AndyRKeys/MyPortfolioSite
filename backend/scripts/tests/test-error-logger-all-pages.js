@@ -28,6 +28,19 @@ async function testPage(page, path) {
   const loggerLogs = [];
   const pageErrors = [];
 
+  // Intercept debug/errors POSTs so headless-Chromium noise (e.g. "Couldn't
+  // load fs/zlib") doesn't write to the live client_errors table and trigger
+  // false alert emails. This test only checks that the logger initialises; it
+  // does not need real network delivery.
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && req.url().includes('/api/debug/errors')) {
+      req.respond({ status: 200, contentType: 'application/json', body: '{"received":true}' });
+      return;
+    }
+    req.continue();
+  });
+
   page.on('console', (msg) => {
     if (msg.text().includes('[error-logger]')) loggerLogs.push(msg.text());
   });
