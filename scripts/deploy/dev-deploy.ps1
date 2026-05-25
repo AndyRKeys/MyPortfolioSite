@@ -45,5 +45,8 @@ bash "`$DEV_REPO/scripts/deploy/deploy.sh" --env dev "`$BRANCH" $flagStr
 # Strip CRLF — bash on the server rejects Windows line endings
 $remoteCommand = $remoteCommand -replace "`r`n", "`n"
 
+Write-Host "Executing remote command on $Hostname" -ForegroundColor Yellow
+Write-Host $remoteCommand -ForegroundColor Yellow
+
 ssh $Hostname $remoteCommand
 exit $LASTEXITCODE
