@@ -36,7 +36,7 @@ Dev and prod deploy scripts now run automated checks as part of every deployment
 
 - **Backend startup env validation** (#357) — on boot the backend asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty via `validateEnvOrExit()` in `backend/utils/validateEnv.js`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container; the backend then logs each missing var and exits 1, so the deploy fails fast (and rolls back) instead of serving traffic with broken config. This closes the gap that let `SITE_HOST` reach the container undefined.
 - **Backend Vitest suite** runs inside the already-deployed container (`backend` on both dev and prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
-- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass. This includes a **CORS origin check** (#357): a `POST /api/debug/errors` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must not be CORS-rejected — catching the case where `SITE_HOST` is missing/wrong in the container and every site-host origin returns 500.
+- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass. This includes a **CORS origin check** (#357): a `GET /api/health` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must not be CORS-rejected — catching the case where `SITE_HOST` is missing/wrong in the container and every site-host origin returns 500. The health endpoint is used (not `POST /api/debug/errors`) so the smoke test does not write to the `client_errors` table and trigger false alert emails.
 
 You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
@@ -102,6 +102,8 @@ Puppeteer scripts run automatically inside the backend container after every dev
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 | `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
 | `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
+
+> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
 
 ### Contract test (`test-error-logger-browser.js`)
 
