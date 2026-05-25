@@ -1,33 +1,101 @@
 /**
- * Global error logger — captures uncaught JS errors, unhandled rejections,
- * and CSP violations, forwarding them to the backend for debugging.
+ * Global error logger — forwards client-side problems to /debug/errors so
+ * prod issues are diagnosable without manual devtools inspection.
  *
- * Deliberately does NOT override console.error/warn — that pattern creates
- * recursion risk (a failed fetch calls console.error → triggers the override
- * → fires another fetch) and interferes with browser devtools. Use the
- * window 'error' event for production-visible errors instead.
+ * Captures:
+ *   - uncaught JS errors            (window 'error', bubble phase)
+ *   - resource-load failures        (window 'error', capture phase — #332)
+ *   - unhandled promise rejections  (window 'unhandledrejection')
+ *   - CSP violations                (securitypolicyviolation)
+ *   - explicit console.error/warn   (caught errors devs log by hand)
+ *
+ * Delivery is resilient (#334): failed sends are buffered in localStorage
+ * (bounded) and flushed on load + after each successful send. logToBackend
+ * swallows its own errors silently and a `sending` guard prevents re-entrant
+ * fetch storms, so there is no recursion path even with the backend down.
  */
 
 import { API_BASE } from './config.js';
 
-// Track seen keys to suppress duplicate reports.
+const ENDPOINT = `${API_BASE}/debug/errors`;
+
+// Suppress duplicate reports within a page view.
 const seenErrors = new Set();
 const MAX_STORED_ERRORS = 100;
 
-// Guard to prevent re-entrant calls (e.g., logToBackend itself throwing).
+// Persisted buffer for reports that fail to send (e.g. backend unreachable).
+// Bounded so it can never grow without limit.
+const BUFFER_KEY = 'errlog:buffer';
+const BUFFER_MAX = 20;
+
 let sending = false;
 
-async function logToBackend(errorData) {
-  if (sending) return;
-  sending = true;
+function readBuffer() {
   try {
-    await fetch(`${API_BASE}/debug/errors`, {
+    return JSON.parse(localStorage.getItem(BUFFER_KEY) || '[]');
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeBuffer(items) {
+  try {
+    localStorage.setItem(BUFFER_KEY, JSON.stringify(items.slice(-BUFFER_MAX)));
+  } catch (_) {
+    // localStorage full or disabled — drop silently.
+  }
+}
+
+function buffer(payload) {
+  const items = readBuffer();
+  items.push(payload);
+  writeBuffer(items);
+}
+
+// Single fetch attempt. Returns true only on a 2xx response. keepalive lets
+// the report survive page unload/navigation.
+async function send(payload) {
+  try {
+    const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(errorData),
+      body: JSON.stringify(payload),
+      keepalive: true,
     });
+    return res.ok;
   } catch (_) {
-    // Swallow — no console.error here to avoid recursion.
+    return false;
+  }
+}
+
+// Best-effort drain of the persisted buffer. Entries that still fail are
+// re-buffered for the next attempt. Uses send() directly (not logToBackend)
+// so it bypasses the dedup/guard machinery.
+async function flushBuffer() {
+  const items = readBuffer();
+  if (!items.length) return;
+  const remaining = [];
+  for (const item of items) {
+    if (!(await send(item))) remaining.push(item);
+  }
+  writeBuffer(remaining);
+}
+
+async function logToBackend(payload) {
+  // A send is already in flight — buffer rather than drop (#334). The guard
+  // still prevents concurrent fetch storms from cascading errors.
+  if (sending) {
+    buffer(payload);
+    return;
+  }
+  sending = true;
+  try {
+    if (await send(payload)) {
+      // Connectivity is good — opportunistically drain any backlog.
+      await flushBuffer();
+    } else {
+      buffer(payload);
+    }
   } finally {
     sending = false;
   }
@@ -40,6 +108,7 @@ function dedupAndLog(key, payload) {
   logToBackend(payload);
 }
 
+// Uncaught runtime errors (bubble phase). event.target is window here.
 window.addEventListener('error', (event) => {
   const key = `${event.filename}:${event.lineno}:${event.message}`;
   dedupAndLog(key, {
@@ -53,6 +122,26 @@ window.addEventListener('error', (event) => {
     url: window.location.href,
   });
 });
+
+// Resource-load failures (script/img/link/css that 404 or fail to fetch) fire
+// an 'error' event ON THE ELEMENT and do NOT bubble, so they are only visible
+// in the capture phase — the bubble listener above never sees them. This is
+// the exact class of failure behind #330. (#332)
+window.addEventListener('error', (event) => {
+  const target = event.target;
+  if (!target || !(target instanceof HTMLElement)) return; // runtime errors handled above
+  const resourceUrl = target.src || target.href;
+  if (!resourceUrl) return;
+  const tag = target.tagName.toLowerCase();
+  dedupAndLog(`resource:${tag}:${resourceUrl}`, {
+    type: 'resource-error',
+    timestamp: new Date().toISOString(),
+    // message + filename map onto the fields /debug/errors already logs.
+    message: `Failed to load <${tag}>: ${resourceUrl}`,
+    filename: resourceUrl,
+    url: window.location.href,
+  });
+}, true); // capture: true — required for non-bubbling resource errors
 
 window.addEventListener('unhandledrejection', (event) => {
   const key = `promise:${String(event.reason).slice(0, 100)}`;
@@ -82,15 +171,12 @@ window.addEventListener('securitypolicyviolation', (event) => {
   });
 });
 
-// console.error/warn overrides — capture caught errors that developers
-// explicitly log (e.g. inside try/catch blocks). These never reach window.onerror
-// so without this override they would be invisible in prod logs.
-//
-// Safe because logToBackend now swallows its own errors silently (no internal
-// console.error call) and the `sending` guard prevents re-entrant calls, so
-// there is no recursion path even if the backend is unreachable.
+// console.error/warn overrides — capture caught errors devs log explicitly
+// (e.g. inside try/catch). These never reach window.onerror, so without the
+// override they would be invisible in prod. Safe because send() swallows its
+// own failures and the `sending` guard blocks re-entrancy.
 const _origError = console.error;
-const _origWarn  = console.warn;
+const _origWarn = console.warn;
 
 console.error = function (...args) {
   _origError.apply(console, args);
@@ -114,3 +200,7 @@ console.warn = function (...args) {
     url: window.location.href,
   });
 };
+
+// Drain any reports buffered from a previous page view where the backend was
+// unreachable. (#334)
+flushBuffer();
