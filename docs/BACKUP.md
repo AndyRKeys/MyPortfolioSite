@@ -93,7 +93,7 @@ docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml exec -T postgres pg_
   -d portfolio_prod --clean --if-exists < ~/backups/YYYY-MM-DD/portfolio_prod.dump
 
 # Dev
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.dev-server.yml exec -T postgres-dev pg_restore \
+docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml exec -T postgres pg_restore \
   -d portfolio_dev --clean --if-exists < ~/backups/YYYY-MM-DD/portfolio_dev.dump
 ```
 

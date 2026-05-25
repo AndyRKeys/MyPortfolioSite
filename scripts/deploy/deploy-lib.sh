@@ -36,7 +36,7 @@
 #   SITE_HOST      — canonical hostname (dev/prod) used by run_regression_tests + cert generation
 #   DOMAIN         — prod public domain used by run_regression_tests
 #   BACKEND_SERVICE — compose service name for the backend container
-#   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx-dev:3001)
+#   NGINX_URL      — docker-internal nginx base URL for error-logger tests (e.g. https://nginx:3001)
 #   NGINX_PORT     — external nginx port; read from .env (3001 dev, 443 prod)
 #   CERT_MODE      — read from .env: self-signed | letsencrypt. Drives HEALTH_INSECURE,
 #                    cert auto-generation, and DDNS-sync checks.
@@ -78,9 +78,9 @@ _redact_sensitive() {
   text=$(echo "$text" | sed -E 's|/root|/home/[USER]|g')
   # Redact URLs with IPs
   text=$(echo "$text" | sed -E 's|https?://\[REDACTED_IP\]:[0-9]+|[REDACTED_URL]|g')
-  # Redact container/service names (myportfoliosite-dev-*, backend-dev, etc.)
+  # Redact container names (myportfoliosite-*, portfolio_dev-*, portfolio_prod-*, etc.)
   text=$(echo "$text" | sed -E 's/myportfoliosite(-dev)?-[a-z0-9_-]+/[REDACTED_CONTAINER]/g')
-  # Redact service names in docker compose output (backend-dev, nginx-dev, postgres-dev)
+  # Redact old split-compose service names if they appear in archived logs
   text=$(echo "$text" | sed -E 's/(backend|nginx|postgres)-(dev|prod|local)(-[0-9])?/[REDACTED_SERVICE]/g')
   # Redact hostnames (modnar3, user machines, etc.) — but keep localhost
   text=$(echo "$text" | sed -E 's|/home/[a-z_][a-z0-9_-]*@[a-z0-9.-]+|/home/[USER]@[REDACTED_HOST]|g')
@@ -1185,7 +1185,7 @@ check_disk_space() {
 # ── Compose and rollback ───────────────────────────────────────────────────────
 
 compose_up_with_rollback() {
-  local service_name="$1"   # e.g. backend-dev or backend
+  local service_name="$1"   # e.g. backend
 
   dsection "Phase 5: building and starting services"
   # Warn about any containers from this compose project that are no longer
@@ -1357,7 +1357,7 @@ run_deploy_tests() {
 test_error_logger_all_pages() {
   dsection "Testing error logger across all site pages"
 
-  # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx-dev:3001)
+  # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx:3001)
   # so that puppeteer, running inside the backend container, can reach nginx.
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then

@@ -80,7 +80,7 @@ export function buildPostCard(type, data) {
     }
 
     // type === 'travel'
-    var placeholder = './resources/img/placeholder-transparent.png';
+    var placeholder = '/resources/img/placeholder-transparent.png';
     var tCard = $('<article class="travel-card box draft-card"></article>');
     tCard.attr('data-memory-id', data.id);
 
@@ -130,7 +130,7 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     var mediaType = firstMedia ? firstMedia.type : null;
     var extraCount = allMedia ? allMedia.length - 1 : 0;
 
-    var placeholder = './resources/img/placeholder-transparent.png';
+    var placeholder = '/resources/img/placeholder-transparent.png';
     if (mediaUrl) {
         var mediaWrap = $('<div class="media-thumb-wrap"></div>');
         if (mediaType && mediaType.indexOf('video') === 0) {

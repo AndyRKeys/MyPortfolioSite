@@ -2,6 +2,12 @@
 # migrate-from-snap-docker.sh — Guided and partially automated migration
 # from Snap Docker to the official Docker CE packages on Ubuntu Server.
 #
+# !! ARCHIVED — this migration has already been completed. !!
+# References to docker-compose.dev-server.yml and docker-compose.prod.yml
+# in this script reflect the pre-unification compose layout and are no
+# longer accurate. The live setup uses a single docker-compose.yml for
+# both dev and prod. Do not run this script again.
+#
 # This script:
 # - Logs relevant state using docker-migration-inventory.sh.
 # - Discovers and backs up dev/prod env files using docker-env-discovery.sh and docker-env-backup.sh.
