@@ -50,8 +50,9 @@ if (!JWT_SECRET) {
   process.exit(0); // skip rather than fail — missing env is a config issue
 }
 
-// Mint a short-lived JWT. userId 'e2e-test' matches the regression suite pattern.
-const testToken = jwt.sign({ userId: 'e2e-test' }, JWT_SECRET, { expiresIn: '1h' });
+// Mint a short-lived JWT. 5m is ample for the test; limits exposure if the
+// token ever appeared in logs. userId 'e2e-test' matches the regression suite.
+const testToken = jwt.sign({ userId: 'e2e-test' }, JWT_SECRET, { expiresIn: '5m' });
 
 // ISP-injected inline-script noise filter — same policy as test-csp-violations.js.
 // Empty by default: all violations flagged. Add known-noise entries if needed.
@@ -209,14 +210,23 @@ try {
     console.warn(`  ⚠️  Reverse geocode interaction skipped: ${err.message}`);
   }
 
-  // Best-effort cleanup — remove the test token so it doesn't pollute the origin.
-  await page.evaluate(() => { try { localStorage.removeItem('adminToken'); } catch {} });
-
 } catch (err) {
   console.error('\n💥 Test runner crashed:', err.message);
   violations.push({ blockedURI: err.message, violatedDirective: 'crash' });
 } finally {
-  if (browser) await browser.close();
+  // Always remove the test token — runs even on crash so the credential
+  // doesn't persist in the browser origin after the test exits.
+  if (browser) {
+    try {
+      const pages = await browser.pages();
+      for (const p of pages) {
+        await p.evaluate(() => {
+          try { localStorage.removeItem('adminToken'); } catch {}
+        });
+      }
+    } catch {}
+    await browser.close();
+  }
 }
 
 const totalViolations = violations.length;
