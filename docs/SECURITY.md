@@ -108,11 +108,17 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 
 ## Rate Limiting
 
-The contact form (`POST /api/contact`) is rate-limited using the `rate_limits` table:
-- DB-backed (survives process restarts)
-- Window and limit thresholds are in code comments (not public for spam prevention)
+The following routes are rate-limited using the `rate_limits` table (DB-backed — survives container restarts):
 
-See `backend/routes/contact.js` for implementation details.
+| Route | Limit | Middleware |
+|---|---|---|
+| `POST /api/contact` | Thresholds in code (not public) | `createRateLimiter` |
+| `POST /api/debug/errors` | 50 req/min/IP | `createRateLimiter` |
+| `POST /api/debug/csp-violations` | 50 req/min/IP | `createRateLimiter` |
+| `POST /api/auth/email/send` | 5 req/hr/IP | `createRateLimiter` |
+| Passkey register/login | 10 req/hr/IP | `createRateLimiter` |
+
+The debug endpoints were previously in-memory only (reset on container restart); migrated to DB-backed in #337.
 
 Other routes have no rate limiting. This is a known trade-off for a low-traffic personal site.
 
