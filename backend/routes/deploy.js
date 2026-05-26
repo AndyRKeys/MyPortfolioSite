@@ -8,11 +8,8 @@ import { spawnStream, spawnPromise } from '../utils/shell.js';
 const router   = Router();
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
-// DEPLOY_ENV must be 'dev' or 'prod' — controls which pipeline runs and which log to read
-const DEPLOY_ENV = process.env.DEPLOY_ENV || 'prod';
-if (!process.env.DEPLOY_ENV) {
-  console.warn('[deploy] WARNING: DEPLOY_ENV not set in .env — defaulting to "prod". Add DEPLOY_ENV=dev or DEPLOY_ENV=prod.');
-}
+// DEPLOY_ENV ('dev'|'prod') is required — validated at startup by validateEnv.js
+const DEPLOY_ENV = process.env.DEPLOY_ENV;
 // deploy.sh writes to $HOME/<env>-deploy.log
 const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, `${DEPLOY_ENV}-deploy.log`);
 

@@ -14,9 +14,10 @@
 
 // Vars the app genuinely reads at runtime. Keep in sync with usage in
 // app.js (CORS/FRONTEND_URL/SITE_HOST), db/pool.js (DB_*), auth.js
-// (JWT_SECRET, WEBAUTHN_*, ADMIN_EMAIL), and server.js (PORT).
+// (JWT_SECRET, WEBAUTHN_*, ADMIN_EMAIL), server.js (PORT), routes/deploy.js (DEPLOY_ENV).
 export const REQUIRED_ENV = [
   'PORT',
+  'DEPLOY_ENV',
   'DB_HOST',
   'DB_PORT',
   'DB_NAME',
