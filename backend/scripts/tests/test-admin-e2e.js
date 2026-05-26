@@ -128,8 +128,6 @@ console.log('\n🧪 Admin E2E test suite');
 console.log(`📍 Base URL: ${baseUrl}\n`);
 
 let browser;
-let createdPostId   = null;
-let createdTravelId = null;
 
 try {
   browser = await puppeteer.launch({
@@ -221,18 +219,17 @@ try {
     await page.$eval('#post-date', el => { el.value = '2026-01-01'; });
     await page.$eval('#post-body', el => { el.value = 'E2E test content — safe to delete.'; });
 
-    const saveRes = page.waitForResponse(
-      r => r.url().includes('/api/posts') && r.request().method() === 'POST',
-      { timeout: 10000 },
-    );
     await page.click('#post-save-btn');
-    const res = await saveRes;
-    const body = await res.json().catch(() => ({}));
-    createdPostId = body.id ?? body.post?.id ?? null;
-
-    await waitForText(page, '#post-message', 'saved', 5000);
-    const inList = await listContains(page, '#posts-admin-list', TEST_TITLE);
-    interact('Create blog post — appears in list', inList);
+    // Wait for the success message AND the list to contain the new post.
+    // loadAll() runs after the save so both happen sequentially — 15s covers both.
+    await waitForText(page, '#post-message', 'Draft saved', 15000);
+    await page.waitForFunction(
+      (title) => Array.from(document.querySelectorAll('#posts-admin-list strong'))
+        .some(el => el.textContent.trim() === title),
+      { timeout: 10000 },
+      TEST_TITLE,
+    );
+    interact('Create blog post — appears in list', true);
   } catch (e) {
     interact('Create blog post', false, e.message);
   }
@@ -257,7 +254,6 @@ try {
       { timeout: 5000 },
       TEST_TITLE,
     );
-    createdPostId = null; // cleanup no longer needed
     interact('Delete blog post — removed from list', true);
   } catch (e) {
     interact('Delete blog post', false, e.message);
@@ -272,18 +268,16 @@ try {
     await page.$eval('#travel-date', el => { el.value = '2026-01-01'; });
     await page.$eval('#travel-notes', el => { el.value = 'E2E test memory — safe to delete.'; });
 
-    const saveRes = page.waitForResponse(
-      r => r.url().includes('/api/travel') && r.request().method() === 'POST',
-      { timeout: 10000 },
-    );
     await page.click('#travel-save-btn');
-    const res = await saveRes;
-    const body = await res.json().catch(() => ({}));
-    createdTravelId = body.id ?? body.memory?.id ?? null;
-
-    await waitForText(page, '#travel-message', 'saved', 5000);
-    const inList = await listContains(page, '#saved-memories-list', TEST_TRAVEL);
-    interact('Create travel memory — appears in list', inList);
+    // Same pattern as posts: wait for message then list — 15s covers save + loadAll.
+    await waitForText(page, '#travel-message', 'Draft saved', 15000);
+    await page.waitForFunction(
+      (title) => Array.from(document.querySelectorAll('#saved-memories-list strong'))
+        .some(el => el.textContent.trim() === title),
+      { timeout: 10000 },
+      TEST_TRAVEL,
+    );
+    interact('Create travel memory — appears in list', true);
   } catch (e) {
     interact('Create travel memory', false, e.message);
   }
@@ -307,7 +301,6 @@ try {
       { timeout: 5000 },
       TEST_TRAVEL,
     );
-    createdTravelId = null;
     interact('Delete travel memory — removed from list', true);
   } catch (e) {
     interact('Delete travel memory', false, e.message);
@@ -338,47 +331,33 @@ try {
   console.error('\n💥 Test runner crashed:', err.message);
   failures.push('runner crash: ' + err.message);
 } finally {
-  // ── Cleanup: remove any test data that wasn't deleted by the tests ───────
-  if (createdPostId || createdTravelId) {
-    console.log('\n🧹 Cleaning up leftover test data...');
-    const cleanPage = browser ? await browser.newPage().catch(() => null) : null;
-    if (cleanPage) {
-      await cleanPage.setRequestInterception(true);
-      cleanPage.on('request', req => req.continue());
-      await cleanPage.evaluate(token => localStorage.setItem('adminToken', token), testToken);
+  // ── Cleanup: delete any [E2E] test data the tests didn't clean up ─────────
+  // Uses the API directly with the test token — no browser page needed.
+  // Best-effort: failures here don't affect the test result.
+  try {
+    const headers = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
+    const https = await import('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
 
-      if (createdPostId) {
-        try {
-          await cleanPage.goto(
-            `${baseUrl}/api/posts/${createdPostId}`,
-            { waitUntil: 'domcontentloaded', timeout: 5000 },
-          );
-          // Use fetch from the page context so the auth header is available via the stored token
-          await cleanPage.evaluate(async (id) => {
-            const token = localStorage.getItem('adminToken');
-            await fetch(`/api/posts/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-          }, createdPostId);
-          console.log(`  cleaned up post ${createdPostId}`);
-        } catch { /* best effort */ }
-      }
+    const checkAndDelete = async (listUrl, deleteBase) => {
+      try {
+        const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
+        if (!fetch) return; // node-fetch not available — skip best-effort cleanup
+        const r = await fetch(listUrl, { headers, agent });
+        if (!r.ok) return;
+        const items = await r.json();
+        for (const item of items) {
+          if (item.title?.startsWith(TEST_PREFIX)) {
+            await fetch(`${deleteBase}/${item.id}`, { method: 'DELETE', headers, agent });
+            console.log(`  cleaned up: ${item.title}`);
+          }
+        }
+      } catch { /* best effort */ }
+    };
 
-      if (createdTravelId) {
-        try {
-          await cleanPage.evaluate(async (id) => {
-            const token = localStorage.getItem('adminToken');
-            await fetch(`/api/travel/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-          }, createdTravelId);
-          console.log(`  cleaned up travel memory ${createdTravelId}`);
-        } catch { /* best effort */ }
-      }
-    }
-  }
+    await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
+    await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
+  } catch { /* best effort */ }
 
   if (browser) {
     try {

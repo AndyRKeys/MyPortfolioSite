@@ -1755,7 +1755,7 @@ print_deploy_status() {
 # Call as the very last step of a deploy script (after regression tests).
 print_deploy_report() {
   local label="${1:-unknown}"
-  local width=72  # inner content width (between ║  and  ║)
+  local width=90  # inner content width (between ║  and  ║)
   local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
   local _title _title_pad
   _title="Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
