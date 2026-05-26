@@ -112,7 +112,7 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { title, location, notes, mediaItems, lat, lng, post_date, publish } = req.body;
+    const { title, location, notes, media_items, lat, lng, post_date, publish } = req.body;
     // title guaranteed present by validate()
 
     const latVal     = lat  != null ? parseFloat(lat)  : null;
@@ -126,7 +126,7 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
     let postId = null;
 
     while (!postId && i <= 100) {
-      const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
+      const firstMedia = media_items && media_items.length ? media_items[0] : null;
       const insert = await client.query(
         `INSERT INTO posts
            (post_type, title, slug, body_markdown, post_date, published_at,
@@ -149,8 +149,8 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
 
     if (!postId) throw new Error('Could not generate unique slug after 100 attempts');
 
-    if (mediaItems && mediaItems.length) {
-      await replaceMedia(client, postId, mediaItems);
+    if (media_items && media_items.length) {
+      await replaceMedia(client, postId, media_items);
     }
 
     await client.query('COMMIT');
@@ -173,7 +173,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { title, location, notes, mediaItems, lat, lng, post_date, publish } = req.body;
+    const { title, location, notes, media_items, lat, lng, post_date, publish } = req.body;
     // title guaranteed present by validate()
 
     const existing = await client.query(
@@ -190,7 +190,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
     if (publish && !published_at) published_at = new Date();
     if (publish === false) published_at = null;
 
-    const firstMedia = mediaItems && mediaItems.length ? mediaItems[0] : null;
+    const firstMedia = media_items && media_items.length ? media_items[0] : null;
     await client.query(
       `UPDATE posts SET
          title=$1, body_markdown=$2, post_date=$3, published_at=$4,
@@ -203,8 +203,8 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
        latVal, lngVal, req.params.id]
     );
 
-    if (mediaItems !== undefined) {
-      await replaceMedia(client, req.params.id, mediaItems);
+    if (media_items !== undefined) {
+      await replaceMedia(client, req.params.id, media_items);
     }
 
     await client.query('COMMIT');

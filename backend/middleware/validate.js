@@ -73,11 +73,11 @@ export const CreateTravelSchema = z.object({
   lat:        latLng,
   lng:        latLng,
   publish:    z.boolean().optional(),
-  mediaItems: z.array(mediaItem).optional().default([]),
+  media_items: z.array(mediaItem).optional().default([]),
 });
 
 export const UpdateTravelSchema = CreateTravelSchema.extend({
-  mediaItems: z.array(mediaItem).optional(),
+  media_items: z.array(mediaItem).optional(),
 });
 
 // ── Contact schema ────────────────────────────────────────────────────────────

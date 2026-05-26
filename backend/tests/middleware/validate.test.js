@@ -157,10 +157,10 @@ describe('CreateTravelSchema', () => {
     expect(req.body.lng).toBeNull();
   });
 
-  it('defaults mediaItems to empty array', () => {
+  it('defaults media_items to empty array', () => {
     const { req, nextCalled } = runValidate(CreateTravelSchema, { title: 'Paris' });
     expect(nextCalled).toBe(true);
-    expect(req.body.mediaItems).toEqual([]);
+    expect(req.body.media_items).toEqual([]);
   });
 });
 

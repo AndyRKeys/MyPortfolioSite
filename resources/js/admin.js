@@ -283,7 +283,7 @@ async function toggleTravelPublish(memory) {
                 lat: memory.lat,
                 lng: memory.lng,
                 publish: !memory.published_at,
-                // mediaItems undefined → backend leaves existing post_media untouched
+                // media_items undefined → backend leaves existing post_media untouched
             }),
         });
         if (!res.ok) throw new Error();
@@ -574,7 +574,7 @@ function initTravelForm() {
                 location: $('#travel-location').val().trim(),
                 notes: $('#travel-notes').val().trim(),
                 post_date: $('#travel-date').val() || null,
-                mediaItems,
+                media_items: mediaItems,
                 lat: $('#travel-lat').val(),
                 lng: $('#travel-lng').val(),
                 publish,
