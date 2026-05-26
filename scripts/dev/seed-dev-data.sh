@@ -150,7 +150,7 @@ echo "Seeding blog posts..."
 # ╔═══ DECISION 1 — PORTFOLIO INTRO — CHOOSE ONE, delete the other ════════════════════╗
 # Both are the “why I built this / vanilla JS / Node+Postgres” opener.
 # ── 1A  [#203]  "Building a Personal Portfolio in 2026" (2026-05-01) ──
-# seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/posts" <<'JSON'
+# seed_item "Blog: Building a Personal Portfolio in 2026 (published)" "/api/posts" <<'JSON'
 # {
 #   "title": "Building a Personal Portfolio in 2026",
 #   "body_markdown": "# Building a Personal Portfolio in 2026\n\nWhen I decided to create a new portfolio site, I wanted something that reflected my values: **simplicity, performance, and security**.\n\n## Why vanilla JavaScript?\n\nNo frameworks. No build step. Just HTML, CSS, and JavaScript—served directly by Nginx. This approach keeps the site lightning-fast and easy to understand. Frontend logic lives in self-contained ES modules: `script.js`, `blog.js`, `travel.js`, `admin.js`.\n\n## The backend\n\nNode.js with Express handles the API. PostgreSQL stores the data. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
@@ -159,7 +159,7 @@ echo "Seeding blog posts..."
 # }
 # JSON
 # ── 1B  [.sh]   "Building a Portfolio with Node and Postgres" (2026-04-10) ──
-seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/posts" <<'JSON'
+seed_item "Blog: Building a Portfolio with Node and Postgres (published)" "/api/posts" <<'JSON'
 {
   "title": "Building a Portfolio with Node and Postgres",
   "body_markdown": "## Getting started\n\nEvery developer needs a portfolio. Mine started as a simple static site and grew into a full-stack project with a Node.js backend, PostgreSQL database, and passkey authentication.\n\n## The stack\n\n- **Frontend**: Vanilla HTML/CSS/JS — no framework\n- **Backend**: Node.js with Express\n- **Database**: PostgreSQL\n- **Auth**: WebAuthn passkeys\n- **Hosting**: Raspberry Pi 3\n\n## Why a Pi?\n\nRunning on a Pi keeps costs near zero, teaches real server management, and is a great conversation starter.\n\n## What I learned\n\nSchema design matters early. I went through two migrations in the first month — posts started as two separate tables before I unified them. Every query is parameterised—no SQL injection vulnerabilities here. Authentication uses WebAuthn (passkeys) and JWT tokens, because passwords are outdated.\n\n## What's next?\n\nThe site is a living project. As I build new features, I'll document the journey here. From security hardening to infrastructure decisions, every step is intentional.",
@@ -171,14 +171,14 @@ JSON
 
 # ╔═══ DECISION 2 — PASSWORDLESS AUTH — CHOOSE ONE ═════════════════════════════╗
 # ── 2A  [#203]  "Authentication Without Passwords: WebAuthn & JWT" (2026-05-02) ──
-# seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/posts" <<'JSON'
+# seed_item "Blog: Authentication Without Passwords: WebAuthn & JWT (published)" "/api/posts" <<'JSON'
 # {
 #   "title": "Authentication Without Passwords: WebAuthn & JWT",
 #   ...
 # }
 # JSON
 # ── 2B  [.sh]   "Why I Chose Passkeys Over Passwords" (2026-04-18) ──
-seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JSON'
+seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/api/posts" <<'JSON'
 {
   "title": "Why I Chose Passkeys Over Passwords",
   "body_markdown": "## The problem with passwords\n\nPasswords are the worst authentication method we collectively agreed to use. They get reused, leaked, phished, and forgotten.\n\n## Enter WebAuthn\n\nWebAuthn lets users authenticate with device biometrics or a PIN. No password stored server-side — just a public key and a challenge-response.\n\n## The implementation\n\nI used `@simplewebauthn/server` on the Node backend and `@simplewebauthn/browser` on the frontend. The hardest part was managing the challenge session between registration start and finish without a session store.\n\n## The result\n\nLog in with Touch ID or Windows Hello. No passwords, no reset emails, no breaches.",
@@ -188,7 +188,7 @@ seed_item "Blog: Why I Chose Passkeys Over Passwords (published)" "/posts" <<'JS
 JSON
 # ╚═══ END DECISION 2 ════════════════════════════════════════════════════════════════════════════╝
 
-seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <<'JSON'
+seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/api/posts" <<'JSON'
 {
   "title": "Markdown Rendering Without a Build Step",
   "body_markdown": "## The constraint\n\nI wanted Markdown in blog posts but refused to add a build pipeline. Everything had to work with a plain `<script>` tag.\n\n## The solution\n\n`marked.js` loads as an ES module from a CDN. The blog post page fetches the raw Markdown from the API and renders it client-side.\n\n## The trade-off\n\nClient-side rendering means the content is not in the initial HTML, so search engine indexing is degraded. Acceptable for a personal portfolio — if it were a public blog I'd add server-side rendering.",
@@ -197,7 +197,7 @@ seed_item "Blog: Markdown Rendering Without a Build Step (published)" "/posts" <
 }
 JSON
 
-seed_item "Blog: Building a Travel Memory Archive (published)" "/posts" <<'JSON'
+seed_item "Blog: Building a Travel Memory Archive (published)" "/api/posts" <<'JSON'
 {
   "title": "Building a Travel Memory Archive",
   "body_markdown": "# Building a Travel Memory Archive\n\nTravel creates memories. A simple blog post can't capture the feeling of a place. So I built a travel feature that combines location, photos, timeline, and an interactive map.\n\n## What you can do\n\n- **Add a trip** — title, date, location (auto-geocoded), notes, and photos\n- **Coordinate steppers** — adjust latitude/longitude with tiny buttons (0.000001 degree precision)\n- **Geocode confirmation map** — see your marker on Leaflet before publishing\n- **Timeline view** — sorted by date, with a visual timeline on the blog page\n- **Lightbox gallery** — click photos to expand, swipe to navigate\n\n## Technical highlights\n\n- Leaflet.js for the interactive map (open-source, lightweight)\n- Custom coordinate stepper UI — hold the button to keep adjusting\n- Multi-file upload with validation (photos, videos)\n- Separate storage from blog posts (both use the same `posts` table with a `post_type` column)\n\n## Why it matters\n\nTravel memories deserve more than a text dump. This feature celebrates the places you've been and the moments you've captured.",
@@ -206,7 +206,7 @@ seed_item "Blog: Building a Travel Memory Archive (published)" "/posts" <<'JSON'
 }
 JSON
 
-seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)" "/posts" <<'JSON'
+seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)" "/api/posts" <<'JSON'
 {
   "title": "The Admin Dashboard: CRUD for a One-Person Team",
   "body_markdown": "# The Admin Dashboard: CRUD for a One-Person Team\n\nManaging a blog, travel memories, CV uploads, and deployments from one interface—that's the admin dashboard. At 18KB of JavaScript, it's monolithic, but it works.\n\n## Features\n\n- **Blog posts** — create, edit, publish, draft, or delete\n- **Travel memories** — same CRUD, plus geocoding and photo upload\n- **CV manager** — upload a PDF, auto-scanned for private info (phone numbers, postcodes, emails)\n- **Deployment console** — deploy latest code, rollback to a previous commit, view logs\n- **Site stats** — visitor counts by page\n- **Passkey management** — add/remove signing devices\n- **Private notes** — saved to browser localStorage (not sent to server)\n\n## Why it's monolithic\n\nThree factors drive the size: multiple post types with different form layouts, form state across edit/create/publish/draft flows, and deployment controls with real-time polling. Refactoring into smaller modules would help — that's a future improvement.\n\n## Security\n\nOnly authenticated users can access the dashboard. JWT is required. CV uploads are validated server-side before storage.",
@@ -215,7 +215,7 @@ seed_item "Blog: The Admin Dashboard — CRUD for a One-Person Team (published)"
 }
 JSON
 
-seed_item "Blog: Security First — CSP and Hardening (published)" "/posts" <<'JSON'
+seed_item "Blog: Security First — CSP and Hardening (published)" "/api/posts" <<'JSON'
 {
   "title": "Security First: Content Security Policy and Hardening",
   "body_markdown": "# Security First: Content Security Policy and Hardening\n\nA portfolio that handles authentication and uploads needs serious security. Here's what I implemented.\n\n## Content Security Policy (CSP)\n\nCSP tells the browser what resources are allowed to load. Mine is strict:\n\n```\ndefault-src 'self'\nscript-src 'self' https://unpkg.com https://cdn.jsdelivr.net\nstyle-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com\nfont-src 'self' https://fonts.gstatic.com\nimg-src 'self' data: https://*.tile.openstreetmap.org\nconnect-src 'self' http://localhost:8080\nframe-ancestors 'none'\n```\n\n- No inline scripts (all extracted to external files)\n- Only whitelisted CDNs for libraries\n- No framing (prevents clickjacking)\n- Strict referrer policy\n\n## Other headers\n\n- **X-Content-Type-Options: nosniff** — prevent MIME-type sniffing\n- **X-Frame-Options: DENY** — no clickjacking\n- **Referrer-Policy: strict-origin-when-cross-origin** — privacy-conscious\n\n## Input validation\n\nEvery form input is validated server-side. No trusting the client. SQL queries use parameterised statements—no concatenation, ever.\n\n## File uploads\n\nCV files are scanned for phone numbers, UK postcodes, and email addresses. If found, the upload is rejected with a message asking the user to redact.\n\n## What's left\n\nNo system is 100% secure. But these measures stop the most common attacks.",
@@ -224,7 +224,7 @@ seed_item "Blog: Security First — CSP and Hardening (published)" "/posts" <<'J
 }
 JSON
 
-seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" <<'JSON'
+seed_item "Blog: One Source of Truth for Security Headers (published)" "/api/posts" <<'JSON'
 {
   "title": "One Source of Truth for Security Headers",
   "body_markdown": "## Three configs, three policies\n\nLocal, dev, and prod each had their own nginx config — and each had drifted to a slightly different Content-Security-Policy. Dev was missing the CDN that serves the WebAuthn library, which silently blocked passkeys. Classic copy-paste divergence.\n\n## The consolidation\n\nAll CSP and security headers now live in a single `nginx-security-headers.conf` snippet that every environment includes. One place to change, no drift.\n\n## A nasty sub-bug\n\nThe CSP had been written across multiple lines for readability. nginx bakes literal newlines into the header value, which truncates it on the wire — so the policy silently evaluated to almost nothing. Reformatting to a single line fixed it. Readability now lives in the comment block above the directive instead.\n\n## Plus: self-hosted error tracking\n\nWhile in there I added a lightweight error logger — uncaught errors, promise rejections, and CSP violations get POSTed to a backend route and logged to the container. No external service, full visibility.\n\n## Lesson\n\nDuplicated configuration is a bug waiting for the moment you forget one copy.",
@@ -233,7 +233,7 @@ seed_item "Blog: One Source of Truth for Security Headers (published)" "/posts" 
 }
 JSON
 
-seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published)" "/posts" <<'JSON'
+seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published)" "/api/posts" <<'JSON'
 {
   "title": "Docker & Nginx: Local Dev That Mirrors Production",
   "body_markdown": "# Docker & Nginx: Local Dev That Mirrors Production\n\nWhat works locally might not work in production. So I containerised everything—backend, database, reverse proxy—in Docker Compose.\n\n## The setup\n\n`docker-compose.yml` defines three services:\n- **postgres** — PostgreSQL database\n- **backend** — Node.js/Express app on port 8080 (internal)\n- **nginx** — reverse proxy on port 80/443 (localhost) or 3001 (dev server)\n\n## Why Nginx?\n\nThe backend shouldn't serve static files. Nginx does that. It serves HTML/CSS/JS from the repo root, proxies `/api/*` to the backend (stripping the prefix), enforces security headers, and handles HTTPS in production.\n\n## Local vs. production\n\n**Local** (`nginx-local.conf.template`): HTTP only, `connect-src 'self' http://localhost:8080`.\n\n**Production** (`nginx-portfolio.conf.template`): HTTPS with Let's Encrypt certs, `connect-src 'self' http://127.0.0.1:8080`, larger upload limit (25MB for multer).\n\n## The .env file\n\nSecrets stay out of git. `.env` (not in repo) defines `DATABASE_URL`, `JWT_SECRET`, and `SMTP_*`. Docker Compose reads from `.env` automatically.",
@@ -242,7 +242,7 @@ seed_item "Blog: Docker & Nginx — Local Dev That Mirrors Production (published
 }
 JSON
 
-seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
+seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/api/posts" <<'JSON'
 {
   "title": "A LAN-Only HTTPS Dev Environment",
   "body_markdown": "## Why dev needs HTTPS\n\nWebAuthn passkeys only work over a secure context. A plain-HTTP dev server can't exercise the single most important auth flow on the site, so dev needed real HTTPS — not just localhost.\n\n## The setup\n\nA second Docker Compose stack runs on the Ubuntu box, LAN-only on port 3001, behind nginx with a self-signed certificate. A deploy script handles cert generation, env validation, health checks, and automatic rollback to the last-good commit if a deploy fails.\n\n## Self-signed, but real\n\nThe browser still warns about the self-signed cert, but the connection is genuinely TLS — enough for passkeys to work and for the dev environment to mirror prod's security model.\n\n## Takeaway\n\nDev should be as close to prod as you can afford. The closer it is, the fewer surprises ship.",
@@ -251,7 +251,7 @@ seed_item "Blog: A LAN-Only HTTPS Dev Environment (published)" "/posts" <<'JSON'
 }
 JSON
 
-seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" "/posts" <<'JSON'
+seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" "/api/posts" <<'JSON'
 {
   "title": "CI/CD and Deployment: From Dev to Raspberry Pi",
   "body_markdown": "# CI/CD and Deployment: From Dev to Raspberry Pi\n\nThe site lives on a Raspberry Pi. Updating it shouldn't require SSH and manual commands. So I built a deployment system.\n\n## The pipeline\n\n1. **Git push** to `dev` or `main` on GitHub\n2. **Admin dashboard** shows deployment status (commits ahead, last deployed SHA)\n3. **Deploy button** pulls latest code, rebuilds Docker images, restarts services\n4. **Health check** polls `/api/health` until the backend is ready\n5. **Rollback** can revert to any previous commit in 30 seconds\n\n## How it works\n\n- `scripts/deploy/prod-deploy.sh` — SSH into the Pi, pull latest, rebuild, health-check\n- `scripts/config/nginx-portfolio.conf.template` — rendered with envsubst before deploying\n- PM2 (on Pi) or Docker Compose (locally) keeps services running\n\n## Why this matters\n\nZero-downtime updates. Rollback on failure. No manual intervention. The site stays live.\n\n## What's next?\n\nMoving the Pi to an Ubuntu Server gaming PC. Same deployment script, bigger hardware.",
@@ -260,7 +260,7 @@ seed_item "Blog: CI/CD and Deployment — From Dev to Raspberry Pi (published)" 
 }
 JSON
 
-seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/posts" <<'JSON'
+seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (published)" "/api/posts" <<'JSON'
 {
   "title": "Migrating Infrastructure: Raspberry Pi to Ubuntu Server",
   "body_markdown": "# Migrating Infrastructure: Raspberry Pi to Ubuntu Server\n\nThe Raspberry Pi served well for a hobby project. But with better hardware comes better possibilities: faster builds, more RAM, room to grow.\n\n## The challenge\n- **Dual environment** — run the `dev` branch on the new server alongside production\n- **Same playbook** — the deployment script should work on both machines\n\n## The solution\n\n**Two compose stacks:**\n- `docker-compose.yml` — production (port 80/443)\n- `docker-compose.yml` — development (port 3001, LAN-only)\n\nEach has its own PostgreSQL database (`portfolio_prod` vs `portfolio_dev`) and nginx instance (`nginx` port 443 vs port 3001). Both use the same `docker-compose.yml` with identical service names (`backend`, `postgres`, `nginx`) — environment isolation comes from `COMPOSE_PROJECT_NAME` and `.env` overrides, not service renaming.\n\n## LAN-only access\n\nThe dev server is only reachable on the local network. UFW firewall rules restrict access.\n\n## Benefits\n\n- Test new features on real hardware before merging to `main`\n- Two separate databases (can't accidentally corrupt production)\n- Deployment script handles both environments\n- Easy to add more instances (staging, etc.) later",
@@ -269,7 +269,7 @@ seed_item "Blog: Migrating Infrastructure — Raspberry Pi to Ubuntu Server (pub
 }
 JSON
 
-seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (published)" "/posts" <<'JSON'
+seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (published)" "/api/posts" <<'JSON'
 {
   "title": "The WebAuthn Gotcha — Passkeys Need a Real Hostname",
   "body_markdown": "## The error\n\n`'rp.id' cannot be used with the current origin`\n\nThis appeared the moment I tried to register a passkey on the new dev server, and only there — localhost and prod were fine.\n\n## The cause\n\nThe dev setup used the server's LAN IP as the WebAuthn Relying Party ID. The WebAuthn spec rejects IP-address RP IDs outright: an IP has no registrable domain, so the browser refuses before the ceremony even starts. The dev config could never have worked.\n\n## The fix\n\nGive dev a real hostname (e.g. `dev.example.com`) pointed at the LAN IP via a hosts-file entry or LAN DNS. The RP ID, the origin, and the certificate SAN all have to agree on that hostname. I also added deploy-time validation that rejects an IP in the RP ID with an actionable message, so this can't silently regress.\n\n## Lesson\n\nWhen a spec says \"domain name,\" it means it. An IP literal is not a shortcut.",
@@ -279,7 +279,7 @@ seed_item "Blog: The WebAuthn Gotcha — Passkeys Need a Real Hostname (publishe
 JSON
 
 # ── Drafts ──
-seed_item "Blog: Draft — AI-Assisted Development Workflow" "/posts" <<'JSON'
+seed_item "Blog: Draft — AI-Assisted Development Workflow" "/api/posts" <<'JSON'
 {
   "title": "AI-Assisted Development Workflow",
   "body_markdown": "## Work in progress\n\nThis post covers how I use Claude as a pair programmer — creating GitHub issues, writing implementation plans, and raising PRs for review.\n\n## Key points\n\n- AI creates issues and plans before writing code\n- All PRs include a detailed test plan\n- Human reviews every merge to dev\n\n_TODO: add more detail on the branching strategy_",
@@ -288,7 +288,7 @@ seed_item "Blog: Draft — AI-Assisted Development Workflow" "/posts" <<'JSON'
 }
 JSON
 
-seed_item "Blog: Draft — Lessons from Building Auth from Scratch" "/posts" <<'JSON'
+seed_item "Blog: Draft — Lessons from Building Auth from Scratch" "/api/posts" <<'JSON'
 {
   "title": "Lessons from Building Auth from Scratch",
   "body_markdown": "## Why not just use Auth0?\n\nCost and control. For a personal project, a managed auth service is overkill.\n\n## What I built\n\n- Magic link email login (nodemailer + signed tokens)\n- WebAuthn passkey registration and authentication\n- JWT session tokens with short expiry\n\n_TODO: expand section on challenge storage_",
@@ -297,7 +297,7 @@ seed_item "Blog: Draft — Lessons from Building Auth from Scratch" "/posts" <<'
 }
 JSON
 
-seed_item "Blog: Draft — Rate Limiting Without Redis" "/posts" <<'JSON'
+seed_item "Blog: Draft — Rate Limiting Without Redis" "/api/posts" <<'JSON'
 {
   "title": "Rate Limiting Without Redis",
   "body_markdown": "## The requirement\n\nPrevent spam on the contact form without adding infrastructure.\n\n## The approach\n\nA `rate_limits` table in Postgres with one row per IP. An upsert increments the counter within the current time window and resets it when the window expires.\n\n_TODO: add code snippet_",
@@ -306,7 +306,7 @@ seed_item "Blog: Draft — Rate Limiting Without Redis" "/posts" <<'JSON'
 }
 JSON
 
-seed_item "Blog: Migrating Email to Outlook OAuth2 (published)" "/posts" <<'JSON'
+seed_item "Blog: Migrating Email to Outlook OAuth2 (published)" "/api/posts" <<'JSON'
 {
   "title": "Migrating Email to Outlook OAuth2",
   "body_markdown": "# Migrating Email to Outlook OAuth2\n\nMicrosoft disabled SMTP basic authentication on Outlook accounts. Overnight, the magic-link login and contact form stopped sending: `535 5.7.139 Authentication unsuccessful, basic authentication is disabled`. Time to move to OAuth2.\n\n## The wrong turns\n\nThe migration was a tour of every way OAuth2 can go sideways:\n\n- **Wrong Azure section.** I started in *Expose an API* (for apps that *are* an API). Email sending needs *API permissions* instead.\n- **Wrong scope.** The first token script requested `https://outlook.office365.com/.default` — Azure rejected it with `invalid_scope`. The correct scope is `https://graph.microsoft.com/Mail.Send`.\n- **Wrong endpoint.** A personal `outlook.com` account can't use the `/common/` token endpoint — it needs `/consumers/`.\n- **Wrong transport.** `nodemailer`'s SMTP OAuth2 wants a token scoped for `smtp.office365.com`, but my refresh token was scoped for Graph. Different resources, can't mix.\n\n## The fix that worked\n\nDrop SMTP entirely. Exchange the refresh token for a Graph access token and POST straight to `https://graph.microsoft.com/v1.0/me/sendMail`. One delegated `Mail.Send` permission, a one-time browser consent to capture a long-lived refresh token, and the backend sends mail silently forever after.\n\n## The infrastructure gotcha\n\nEven with correct code, emails failed — because the `OUTLOOK_*` variables were in `.env` but never passed through `docker-compose` to the container. And a tangle of orphaned containers from an old service rename meant my tests were hitting *stale code* the whole time. Lesson: when debugging \"impossible\" behaviour, verify *which container* is actually serving the request.\n\n## The payoff\n\nWorking OAuth2 email, plus a confirmed rate limiter (the `429` that finally proved requests were reaching the new code). No more basic-auth dependency, and the refresh token never expires unless unused for 90 days.",
@@ -320,7 +320,7 @@ JSON
 echo ""
 echo "Seeding travel memories..."
 
-seed_item "Travel: London, UK (published)" "/travel" <<'JSON'
+seed_item "Travel: London, UK (published)" "/api/travel" <<'JSON'
 {
   "title": "London — Spring 2025",
   "location": "London, United Kingdom",
@@ -332,7 +332,7 @@ seed_item "Travel: London, UK (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Paris, France (published)" "/travel" <<'JSON'
+seed_item "Travel: Paris, France (published)" "/api/travel" <<'JSON'
 {
   "title": "Paris — A Weekend Escape",
   "location": "Paris, France",
@@ -344,7 +344,7 @@ seed_item "Travel: Paris, France (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Amsterdam, Netherlands (published)" "/travel" <<'JSON'
+seed_item "Travel: Amsterdam, Netherlands (published)" "/api/travel" <<'JSON'
 {
   "title": "Amsterdam by Bike",
   "location": "Amsterdam, Netherlands",
@@ -356,7 +356,7 @@ seed_item "Travel: Amsterdam, Netherlands (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Edinburgh, Scotland (published)" "/travel" <<'JSON'
+seed_item "Travel: Edinburgh, Scotland (published)" "/api/travel" <<'JSON'
 {
   "title": "Edinburgh — Old Town and the Castle",
   "location": "Edinburgh, Scotland",
@@ -368,7 +368,7 @@ seed_item "Travel: Edinburgh, Scotland (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Lisbon, Portugal (published)" "/travel" <<'JSON'
+seed_item "Travel: Lisbon, Portugal (published)" "/api/travel" <<'JSON'
 {
   "title": "Lisbon — Trams, Tiles and Pastéis",
   "location": "Lisbon, Portugal",
@@ -380,7 +380,7 @@ seed_item "Travel: Lisbon, Portugal (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Guernsey, Channel Islands (published)" "/travel" <<'JSON'
+seed_item "Travel: Guernsey, Channel Islands (published)" "/api/travel" <<'JSON'
 {
   "title": "Home — Guernsey",
   "location": "St Peter Port, Guernsey",
@@ -392,7 +392,7 @@ seed_item "Travel: Guernsey, Channel Islands (published)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Barcelona, Spain (draft)" "/travel" <<'JSON'
+seed_item "Travel: Barcelona, Spain (draft)" "/api/travel" <<'JSON'
 {
   "title": "Barcelona — Gaudí and the Gothic Quarter",
   "location": "Barcelona, Spain",
@@ -404,7 +404,7 @@ seed_item "Travel: Barcelona, Spain (draft)" "/travel" <<'JSON'
 }
 JSON
 
-seed_item "Travel: Rome, Italy (draft)" "/travel" <<'JSON'
+seed_item "Travel: Rome, Italy (draft)" "/api/travel" <<'JSON'
 {
   "title": "Rome — Three Days, Too Many Ruins",
   "location": "Rome, Italy",
