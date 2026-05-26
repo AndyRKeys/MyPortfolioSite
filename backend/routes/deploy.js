@@ -8,8 +8,13 @@ import { spawnStream, spawnPromise } from '../utils/shell.js';
 const router   = Router();
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
-// deploy.sh writes to $HOME/prod-deploy.log
-const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, 'prod-deploy.log');
+// DEPLOY_ENV must be 'dev' or 'prod' — controls which pipeline runs and which log to read
+const DEPLOY_ENV = process.env.DEPLOY_ENV || 'prod';
+if (!process.env.DEPLOY_ENV) {
+  console.warn('[deploy] WARNING: DEPLOY_ENV not set in .env — defaulting to "prod". Add DEPLOY_ENV=dev or DEPLOY_ENV=prod.');
+}
+// deploy.sh writes to $HOME/<env>-deploy.log
+const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, `${DEPLOY_ENV}-deploy.log`);
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -126,9 +131,9 @@ router.post('/fetch', authenticate, async (req, res) => {
 
 router.post('/', authenticate, async (req, res) => {
   if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', 'prod'], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV], { cwd: REPO_DIR }));
 });
 
 // ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
@@ -148,10 +153,10 @@ router.post('/rollback', authenticate, async (req, res) => {
   }
 
   if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
 
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', 'prod', '--rollback', sha], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV, '--rollback', sha], { cwd: REPO_DIR }));
 });
 
 export default router;
