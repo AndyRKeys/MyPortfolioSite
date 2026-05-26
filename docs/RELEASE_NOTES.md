@@ -1,5 +1,41 @@
 # Release Notes
 
+## Release 2026-05-26
+
+**Released:** 2026-05-26
+**Branch:** release/2026-05-26
+**PR:** #376
+**Closes:** [#132](https://github.com/AndyRKeys/MyPortfolioSite/issues/132), [#175](https://github.com/AndyRKeys/MyPortfolioSite/issues/175), [#176](https://github.com/AndyRKeys/MyPortfolioSite/issues/176)
+
+### Summary
+
+Admin panel refactoring release. Deconstructs the 1,173-line `admin.js` monolith into eight focused ES modules, removes jQuery from the admin panel entirely, unifies the travel date field naming throughout the stack, and adds a full CRUD E2E test suite wired into the deploy pipeline as a hard-fail phase.
+
+### Changed
+
+**Admin JS modularised (#175)**
+- 1,173-line `admin.js` split into per-feature ES modules under `resources/js/admin/`: `posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`
+- `admin.js` is now a thin entry point (~20 lines) that imports and initialises each module
+- Agents and maintainers can now target individual modules rather than reasoning about the full monolith
+
+**jQuery removed from admin panel (#176)**
+- All admin JS migrated to vanilla DOM APIs and `fetch`
+- No behaviour change; eliminates the jQuery/vanilla ambiguity in the admin codebase
+
+**Travel date field unified (#132)**
+- `visit_date`/`visitDate` alias removed from `TRAVEL_COLS`
+- Field is now consistently `post_date` throughout: backend routes, middleware schemas, frontend JS, utils, and tests
+
+### Added
+
+**Admin CRUD E2E test suite (#175)**
+- `test-admin-e2e.js` — Puppeteer script covering authenticated blog create/delete, travel create/delete, and deploy panel smoke
+- Wired into `deploy.sh` as a hard-fail phase (triggers rollback on assertion failure)
+- Test records prefixed `[E2E]` cleaned up at start and end of each run
+- Console error check resets between unauthenticated first load and authenticated reload to avoid false failures
+
+---
+
 ## Release 2026-05-25
 
 **Released:** 2026-05-25
