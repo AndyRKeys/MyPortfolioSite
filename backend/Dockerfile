@@ -12,7 +12,9 @@ RUN apk add --no-cache \
   harfbuzz \
   ttf-freefont \
   libstdc++ \
-  git
+  git \
+  docker-cli \
+  docker-compose
 
 WORKDIR /app
 

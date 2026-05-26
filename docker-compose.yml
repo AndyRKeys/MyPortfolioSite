@@ -47,6 +47,8 @@ services:
       PORT: ${PORT}
       DEPLOY_ENV: ${DEPLOY_ENV}
       REPO_DIR: /repo
+      DEPLOY_FROM_CONTAINER: "1"
+      DEPLOY_REPO_DIR: /repo
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME}
@@ -73,6 +75,7 @@ services:
     volumes:
       - uploads_data:/app/uploads
       - .:/repo  # repo root — needed by deploy route for git commands and deploy script
+      - /var/run/docker.sock:/var/run/docker.sock  # allows deploy route to run docker compose on the host daemon
     depends_on:
       postgres:
         condition: service_healthy
