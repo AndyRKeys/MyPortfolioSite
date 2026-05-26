@@ -18,6 +18,11 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# /repo is a bind-mount owned by the host user; container runs as root.
+# Git 2.35+ (CVE-2022-24765) rejects git commands in directories not owned
+# by the current user unless explicitly allowed.
+RUN git config --global --add safe.directory /repo
+
 # Tell Puppeteer to use system Chromium instead of downloading its own
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
