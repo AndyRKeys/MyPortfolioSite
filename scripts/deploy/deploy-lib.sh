@@ -1757,32 +1757,38 @@ print_deploy_status() {
 # Call as the very last step of a deploy script (after regression tests).
 print_deploy_report() {
   local label="${1:-unknown}"
-  local width=90  # inner content width (between ║  and  ║)
-  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
-  local _title _title_pad
+  local _title
   _title="Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
-  _title_pad=$(( width + 2 - ${#_title} ))  # fill to same total width as content rows
+
+  # Collect checkpoint lines for this run, strip ANSI and ts= field.
+  local lines=()
+  while IFS= read -r line; do
+    lines+=("$line")
+  done < <(
+    tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
+      | grep -E '^\[deploy:' \
+      | sed 's/\x1b\[[0-9;]*m//g' \
+      | sed 's/ ts=[^ ]*$//'
+  )
+
+  # Compute width from longest content line (title or any checkpoint line).
+  local width=${#_title}
+  for line in "${lines[@]}"; do
+    [ "${#line}" -gt "$width" ] && width=${#line}
+  done
+  # Minimum 60, add 2 padding chars each side (handled by printf %-Ns below).
+  [ "$width" -lt 60 ] && width=60
+
+  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+  local _title_pad=$(( width + 2 - ${#_title} ))
 
   echo ""
   echo "╔${border}╗"
   printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
   echo "╠${border}╣"
-  # Only this run's lines (log is append-only across deploys), and only
-  # checkpoint lines anchored at column 0 — so prose / commit-message text
-  # that happens to contain "[deploy:" is never matched. The regression suite's
-  # own [regression] line is summarised into a normalised [deploy:regression]
-  # checkpoint by run_regression_tests, so we match only [deploy:*] here.
-  tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
-    | grep -E '^\[deploy:' \
-    | sed 's/\x1b\[[0-9;]*m//g' \
-    | sed 's/ ts=[^ ]*$//' \
-    | while IFS= read -r line; do
-        # Truncate lines that are still too long to fit
-        if [ "${#line}" -gt "$width" ]; then
-          line="${line:0:$((width - 1))}…"
-        fi
-        printf "║  %-${width}s  ║\n" "$line"
-      done
+  for line in "${lines[@]}"; do
+    printf "║  %-${width}s  ║\n" "$line"
+  done
   echo "╚${border}╝"
   echo ""
 }
