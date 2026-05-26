@@ -19,7 +19,7 @@
 # Overridable via environment:
 #   COMPOSE_FILE  (default: docker-compose.yml)
 #   BACKEND_SVC   (default: BACKEND_SERVICE from .env, else backend)
-#   BASE_URL      (default: http://localhost:<NGINX_PORT from .env>, else http://localhost:3001)
+#   BASE_URL      (default: https://localhost:<NGINX_PORT from .env>, else https://localhost:3001)
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
@@ -37,7 +37,7 @@ fi
 BACKEND_SVC="${BACKEND_SVC:-${_env_backend:-backend}}"
 # Use the nginx-facing port (host-exposed) not PORT (backend internal port, not exposed on host).
 _default_port="${_env_nginx_port:-3001}"
-BASE_URL="${BASE_URL:-http://localhost:${_default_port}}"
+BASE_URL="${BASE_URL:-https://localhost:${_default_port}}"
 TOKEN="${TOKEN:-}"
 
 pass=0
@@ -104,7 +104,7 @@ fi
 seed_item() {
   local label="$1" endpoint="$2" body code
   body=$(cat)
-  code=$(curl -s -o /tmp/seed_resp.$$ -w '%{http_code}' \
+  code=$(curl -sk -o /tmp/seed_resp.$$ -w '%{http_code}' \
     -X POST \
     -H "Authorization: Bearer ${TOKEN}" \
     -H 'Content-Type: application/json' \
