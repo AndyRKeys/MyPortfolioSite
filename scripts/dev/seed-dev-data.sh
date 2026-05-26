@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # seed-dev-data.sh — Populate the dev-server database with realistic dummy data.
 #
-# Bash counterpart to Seed-DevData.ps1, targeting the Ubuntu dev-server stack
-# (docker-compose.yml — service name read from .env; requests go via nginx, default port: NGINX_PORT from .env else 3001).
+# Bash counterpart to Seed-DevData.ps1, targeting the Ubuntu dev-server stack.
+# All defaults are read from .env (BACKEND_SERVICE, NGINX_PORT, FRONTEND_URL,
+# COMPOSE_FILE). Explicit env var overrides always win.
 #
 # Inserts:
 #   - 5 published blog posts, 3 drafts
@@ -16,28 +17,32 @@
 # Usage (from the dev-branch checkout, e.g. ~/MyPortfolioSite-dev):
 #   bash scripts/dev/seed-dev-data.sh
 #
-# Overridable via environment:
-#   COMPOSE_FILE  (default: docker-compose.yml)
+# Overridable via environment variable (all have .env / built-in fallbacks):
+#   COMPOSE_FILE  (default: COMPOSE_FILE from .env, else docker-compose.yml)
 #   BACKEND_SVC   (default: BACKEND_SERVICE from .env, else backend)
-#   BASE_URL      (default: https://localhost:<NGINX_PORT from .env>, else https://localhost:3001)
+#   BASE_URL      (default: FRONTEND_URL from .env, else https://localhost:<NGINX_PORT>)
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
-
-# Read BACKEND_SERVICE and PORT from .env if present (set by compose unification).
-# Explicit env vars always win; .env is the fallback; then safe built-in defaults.
+# ── Read .env into local vars (explicit env overrides always win) ─────────────
+_env_compose=""
 _env_backend=""
 _env_nginx_port=""
+_env_frontend_url=""
 if [ -f ".env" ]; then
+  _env_compose=$(grep -m1 '^COMPOSE_FILE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
   _env_backend=$(grep -m1 '^BACKEND_SERVICE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
   _env_nginx_port=$(grep -m1 '^NGINX_PORT=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+  _env_frontend_url=$(grep -m1 '^FRONTEND_URL=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
 fi
+
+COMPOSE_FILE="${COMPOSE_FILE:-${_env_compose:-docker-compose.yml}}"
 BACKEND_SVC="${BACKEND_SVC:-${_env_backend:-backend}}"
-# Use the nginx-facing port (host-exposed) not PORT (backend internal port, not exposed on host).
+# FRONTEND_URL is the canonical public-facing origin (https://host:port).
+# Fall back to constructing from NGINX_PORT if not set.
 _default_port="${_env_nginx_port:-3001}"
-BASE_URL="${BASE_URL:-https://localhost:${_default_port}}"
+BASE_URL="${BASE_URL:-${_env_frontend_url:-https://localhost:${_default_port}}}"
 TOKEN="${TOKEN:-}"
 
 pass=0
