@@ -102,8 +102,9 @@ Puppeteer scripts run automatically inside the backend container after every dev
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 | `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
 | `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
+| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175) |
 
-> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
+> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`, `test-admin-e2e.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
 
 ### Contract test (`test-error-logger-browser.js`)
 
@@ -161,6 +162,35 @@ Any `securitypolicyviolation` event during these interactions fails the check. T
 Machine-parseable summary:
 ```
 [admin-e2e-csp] status=OK interactions=3 violations=0
+```
+
+### Admin CRUD E2E (`test-admin-e2e.js`)
+
+Runs a full authenticated Puppeteer session against the admin panel and exercises the real CRUD flows (#175). Mints a JWT from `JWT_SECRET`, loads `/admin/`, and drives:
+
+| # | Flow | What it verifies |
+|---|---|---|
+| 1 | Blog post create | Form submit → `POST /api/posts` → record appears in list |
+| 2 | Blog post delete | Delete the test post → record removed from list |
+| 3 | Travel memory create | Form submit → `POST /api/travel` → record appears in list |
+| 4 | Travel memory delete | Delete the test record → record removed from list |
+| 5 | Deploy panel smoke | Deploy section renders and shows environment label |
+
+Test records are prefixed `[E2E]` and cleaned up at the start and end of each run. Cleanup is also attempted on failure to avoid data pollution.
+
+**Failure policy: hard-fail.** An assertion failure rolls the deploy back (same as Vitest). If Puppeteer fails to launch (e.g. missing Chromium), the test is skipped with a warning and the deploy proceeds.
+
+Machine-parseable summary:
+```
+[admin-e2e] status=OK tests=5 passed=5 failed=0
+```
+
+Run manually:
+```bash
+cd ~/MyPortfolioSite-dev
+docker compose -f docker-compose.yml exec -T \
+  -e JWT_SECRET="$(grep JWT_SECRET .env | cut -d= -f2)" \
+  backend npm run test:admin-e2e -- https://nginx:3001
 ```
 
 ### When to run
@@ -237,6 +267,7 @@ Every deploy ends with a structured report block that collects all `[deploy:*]` 
 ║  [deploy:error-logger] suite=frontend status=ok tests=4 passed=4 failed=0  ║
 ║  [deploy:error-logger-contracts] suite=frontend status=ok tests=10 pas…    ║
 ║  [deploy:csp-violations] suite=frontend status=ok pages=6 violations=0     ║
+║  [deploy:admin-e2e] suite=frontend status=ok tests=5 passed=5 failed=0      ║
 ║  [deploy:admin-e2e-csp] suite=frontend status=ok interactions=3 violat…    ║
 ║  [deploy:regression] suite=regression status=ok tests=13 passed=13 fai…    ║
 ║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
