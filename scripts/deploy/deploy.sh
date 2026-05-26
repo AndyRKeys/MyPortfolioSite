@@ -21,11 +21,13 @@
 set -euo pipefail
 
 # ── Sudo guard (#351) ─────────────────────────────────────────────────────────
-# Running as root (via sudo) sets $HOME=/root, so REPO_DIR resolves to
+# Running as root via sudo sets $HOME=/root, so REPO_DIR resolves to
 # /root/MyPortfolioSite* — a fresh clone with a template .env — instead of
-# the real user's configured repo. try_root() handles the handful of commands
-# that genuinely need elevation; the script itself must not run as root.
-if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+# the real user's configured repo. Block it unconditionally, except when
+# invoked from the backend container (DEPLOY_FROM_CONTAINER=1): the container
+# intentionally runs as root, DEPLOY_REPO_DIR overrides the HOME-derived path,
+# and the Docker socket gives access to the host daemon without sudo escalation.
+if [ "${EUID:-$(id -u)}" -eq 0 ] && [ "${DEPLOY_FROM_CONTAINER:-0}" != "1" ]; then
   echo ""
   echo "ERROR: do not run deploy.sh with sudo." >&2
   echo "" >&2
@@ -122,6 +124,7 @@ case "$DEPLOY_ENV" in
     RUN_DEV_CERTS=1      # dev uses self-signed certs (no certbot); must be generated before nginx starts
     RUN_VITEST=1         # unified image includes devDependencies; run tests against the live container post-deploy
     RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger checks post-deploy
+    RUN_ADMIN_E2E=1      # smoke + interaction tests for admin panel — hard fail (admin is required for content management)
     RUN_DDNS_CHECK=0     # no public DNS in dev; site is LAN-only
     RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
     ;;
@@ -140,6 +143,7 @@ case "$DEPLOY_ENV" in
     RUN_DEV_CERTS=0      # prod uses Let's Encrypt certs managed by certbot, not self-signed
     RUN_VITEST=1         # unified image includes devDependencies; run tests post-deploy on prod too
     RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger on prod too
+    RUN_ADMIN_E2E=1      # smoke + interaction tests for admin panel — hard fail (admin is required for content management)
     RUN_DDNS_CHECK=1     # prod is public; verify DNS points to this server before deploying
     RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
     ;;
@@ -148,6 +152,27 @@ case "$DEPLOY_ENV" in
     exit 1
     ;;
 esac
+
+# ── Container execution path override ────────────────────────────────────────
+# When invoked from the backend container (DEPLOY_FROM_CONTAINER=1), the repo
+# is bind-mounted at /repo and .env lives there — not at $HOME/MyPortfolioSite*.
+# DEPLOY_REPO_DIR must be set to /repo in docker-compose.yml.
+# LOG_FILE stays HOME-derived: $HOME=/root inside the container, which matches
+# where the backend route reads it from, so both sides see the same file.
+if [ "${DEPLOY_FROM_CONTAINER:-0}" = "1" ]; then
+  if [ -z "${DEPLOY_REPO_DIR:-}" ]; then
+    echo "[ERROR] DEPLOY_FROM_CONTAINER=1 requires DEPLOY_REPO_DIR to be set" >&2
+    exit 1
+  fi
+  REPO_DIR="$DEPLOY_REPO_DIR"
+  ENV_FILE="${REPO_DIR}/.env"
+  if [ "$DEPLOY_ENV" = "prod" ]; then
+    ENV_TEMPLATE="${REPO_DIR}/.env.example"
+  else
+    ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
+  fi
+  LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-${DEPLOY_ENV}"
+fi
 
 # Single unified compose file — env-specific behaviour comes from .env, not
 # from selecting a different compose file.
@@ -191,6 +216,19 @@ extra_env_checks() {
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-lib.sh"
+
+# ── Exit trap — always print deploy report ────────────────────────────────────
+# ddie() calls exit 1 directly, bypassing the report block at the bottom.
+# This trap ensures the boxed report is always printed, including on unexpected
+# exits from set -e, so failures are never silent.
+_DEPLOY_REPORT_PRINTED=0
+_deploy_exit_handler() {
+  if [ "$_DEPLOY_REPORT_PRINTED" = "0" ]; then
+    print_deploy_report "${DEPLOY_ENV:-unknown} — FAILED"
+    print_deploy_status "FAILED" "${DEPLOY_ENV:-unknown}"
+  fi
+}
+trap '_deploy_exit_handler' EXIT
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -382,6 +420,7 @@ check_outlook_token "$BACKEND_SERVICE"
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
 [ "$RUN_ERROR_LOGGER" = "1" ] && check_csp_violations
 [ "$RUN_ERROR_LOGGER" = "1" ] && check_admin_e2e_csp
+[ "$RUN_ADMIN_E2E"    = "1" ] && check_admin_e2e
 
 test_csp_reporting
 
@@ -398,6 +437,7 @@ run_regression_tests
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
+_DEPLOY_REPORT_PRINTED=1  # suppress exit trap — we're printing explicitly below
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
   print_deploy_report "$DEPLOY_ENV — ROLLED BACK"
   print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"

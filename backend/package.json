@@ -14,6 +14,7 @@
     "test:error-logger:all-pages": "node ./scripts/tests/test-error-logger-all-pages.js",
     "test:error-logger:browser": "node ./scripts/tests/test-error-logger-browser.js",
     "test:csp-violations": "node ./scripts/tests/test-csp-violations.js",
+    "test:admin-e2e": "node ./scripts/tests/test-admin-e2e.js",
     "test:admin-e2e-csp": "node ./scripts/tests/test-admin-e2e-csp.js"
   },
   "dependencies": {

@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Added
+- Admin E2E test suite (#175): `test-admin-e2e.js` runs full authenticated Puppeteer CRUD flows (blog create/delete, travel create/delete, deploy panel smoke) on every deploy. Hard-fail on assertion error (triggers rollback); warn-only if Puppeteer fails to launch. Test records prefixed `[E2E]` are cleaned up at start and end of each run.
+
+### Changed
+- Admin JS modularised (#175): 1,173-line `admin.js` monolith split into eight focused modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point that imports and initialises each module.
+- jQuery removed from admin panel (#176): all admin JS migrated to vanilla DOM APIs and `fetch`. No behaviour change.
+- Travel date field unified (#132): `visit_date`/`visitDate` alias removed from `TRAVEL_COLS`; field is now consistently `post_date` throughout the stack (backend routes, middleware schemas, frontend JS, utils, tests).
+
 ---
 
 ## Release 2026-05-25

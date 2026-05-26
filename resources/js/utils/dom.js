@@ -161,7 +161,7 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     var content = $('<div class="travel-content"></div>');
     $('<h3></h3>').text(travel.title || 'Untitled memory').appendTo(content);
 
-    var formattedDate = formatVisitDateFn ? formatVisitDateFn(travel.visit_date) : null;
+    var formattedDate = formatVisitDateFn ? formatVisitDateFn(travel.post_date) : null;
     var locationPrefix = travel.location_estimated ? '~ ' : '';
     var locationText = travel.location || 'Location not set';
     var metaHtml = '<span class="travel-location">' + escapeHtml(locationPrefix + locationText) + '</span>';
