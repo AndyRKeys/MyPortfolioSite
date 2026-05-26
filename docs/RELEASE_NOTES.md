@@ -1,5 +1,84 @@
 # Release Notes
 
+## Release 2026-05-25
+
+**Released:** 2026-05-25
+**Branch:** release/2026-05-25
+**Closes:** [#266](https://github.com/AndyRKeys/MyPortfolioSite/issues/266), [#267](https://github.com/AndyRKeys/MyPortfolioSite/issues/267), [#300](https://github.com/AndyRKeys/MyPortfolioSite/issues/300), [#307](https://github.com/AndyRKeys/MyPortfolioSite/issues/307), [#321](https://github.com/AndyRKeys/MyPortfolioSite/issues/321), [#333](https://github.com/AndyRKeys/MyPortfolioSite/issues/333), [#334](https://github.com/AndyRKeys/MyPortfolioSite/issues/334), [#335](https://github.com/AndyRKeys/MyPortfolioSite/issues/335), [#336](https://github.com/AndyRKeys/MyPortfolioSite/issues/336), [#337](https://github.com/AndyRKeys/MyPortfolioSite/issues/337), [#339](https://github.com/AndyRKeys/MyPortfolioSite/issues/339), [#341](https://github.com/AndyRKeys/MyPortfolioSite/issues/341), [#342](https://github.com/AndyRKeys/MyPortfolioSite/issues/342), [#351](https://github.com/AndyRKeys/MyPortfolioSite/issues/351), [#352](https://github.com/AndyRKeys/MyPortfolioSite/issues/352), [#356](https://github.com/AndyRKeys/MyPortfolioSite/issues/356), [#357](https://github.com/AndyRKeys/MyPortfolioSite/issues/357), [#358](https://github.com/AndyRKeys/MyPortfolioSite/issues/358), [#360](https://github.com/AndyRKeys/MyPortfolioSite/issues/360), [#366](https://github.com/AndyRKeys/MyPortfolioSite/issues/366)
+
+### Summary
+
+Observability and deploy-hardening release. Adds a frontend error logger with alert emails, automated CSP scanning on every deploy, backend startup env validation, and unified bash deploy scripts with normalised test reporting. Fixes travel card 404s caused by relative `media_url` paths, browser-extension noise polluting the error table, and a CORS smoke check that wrote live DB entries on every deploy.
+
+### Features
+
+**Frontend error logger (#333, #334, #336)**
+- feat(#333): `error-logger.js` captures uncaught JS errors, resource-load failures, unhandled promise rejections, CSP violations, and `console.error`/`console.warn` calls; reports to `POST /api/debug/errors`, persisted to `client_errors` table, surfaced in admin stats panel
+- feat(#333): admin alert email when 20+ frontend errors arrive within 15 minutes (`ERROR_ALERT_THRESHOLD` / `ERROR_ALERT_WINDOW_MS`); in-memory cooldown prevents repeated emails during sustained storms
+- feat(#334): failed error sends buffered in `localStorage` and flushed on next page load — delivery resilient across page navigations
+- feat(#336): request-ID correlation — `X-Request-Id` links every frontend error report to the exact backend log line for the same page view
+
+**Backend startup env validation (#357)**
+- feat(#357): `backend/utils/validateEnv.js` asserts every required env var at startup via `validateEnvOrExit()`; logs each missing var and exits 1, triggering deploy rollback instead of serving traffic with broken config
+- feat(#357): CORS smoke check added to regression suite — `GET /api/health` with `Origin: https://<SITE_HOST>` must succeed; catches the case where `SITE_HOST` is absent in the container
+
+**CSP scanning on every deploy (#341, #342)**
+- feat(#341): `test-csp-violations.js` loads all served pages (`/`, `/blog/`, `/travel/`, `/login/`, `/admin/`, `/setup/`) in Puppeteer after each deploy, flags any `securitypolicyviolation` event; warn-only with machine-parseable `[csp-violations]` summary line in the deploy report
+- feat(#342): `test-admin-e2e-csp.js` mints a JWT, injects it into `localStorage.adminToken`, loads `/admin/`, and drives Nominatim geocode interactions — catches auth-path CSP breaks like the original #330 incident
+
+**Dev hostname redirect (#358)**
+- feat(#358): `dev.andykeys.me:443` now redirects to `dev.andykeys.me:3001` via a prod-nginx `server` block, eliminating the port-confusion support burden
+
+**Vitest coverage (#335)**
+- feat(#335): upload, cv, and debug route test coverage — auth gating, MIME filtering, size limits, private-info scan warnings, error ingestion/persistence, pagination, sanitisation; posts tests extended with INSERT (201), PUT 404, and DELETE flows
+- fix(#335): `cv.js` `MulterError` now correctly returns 400 (was 500) via multer callback pattern
+
+**Unified deploy scripts (#300)**
+- feat(#300): `dev-deploy.sh` and `prod-deploy.sh` merged into `deploy.sh --env dev|prod`; env-specific behaviour gated by feature flags; PowerShell wrappers updated to match
+
+**Project structure reorg (#307)**
+- feat(#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) for clean URLs; `resources/java/` renamed to `resources/js/`; all internal links and magic-link email URL updated; Nginx `try_files` handles directory routing with no config changes
+
+### Bug Fixes
+
+- fix(#266, #267): `buildPublicTravelCard` and `buildPostCard` in `resources/js/utils/dom.js` now normalise any bare relative `media_url` by prepending `/`, preventing a 404 at `/travel/resources/img/placeholder-transparent.png` (resolved relative to the travel page path) that error-logger captured on every travel page load
+- fix(#356): browser-extension errors (`chrome-extension://`, `moz-extension://`, `safari-extension://`) filtered before reaching `/api/debug/errors`; deploy-time Puppeteer tests intercept and mock `POST /api/debug/errors` so headless-Chromium noise (`Couldn't load fs/zlib`) never writes to `client_errors` or triggers false alert emails
+- fix(#360): `POST /api/debug/csp-violations` handler made `async` for CodeQL rate-limit pattern recognition
+- fix(#351): deploy script exits with a clear error if run as `sudo`, preventing file ownership corruption in the repo directory
+- fix(#352): deploy creates the backup directory, installs the cron job, and takes an initial DB dump on first provision if none exists
+
+### Security
+
+- security(#337): `Reporting-Endpoints` header and CSP `report-to` directive added alongside deprecated `report-uri` — both present during transition
+- security(#337): debug endpoint rate limiting migrated to DB-backed `createRateLimiter`, consistent with auth/contact limiters and surviving container restarts
+- security(#321): `qs` dependency bumped — resolves upstream prototype-pollution advisory
+- docs(#339): CSP maintenance is now a standing dev-cycle rule — any PR adding/moving an external resource must update `scripts/config/nginx-security-headers.conf` in the same PR; documented in `docs/AI.md`, `CLAUDE.md`, and the PR template checklist
+
+### Deploy Test Reporting (#366)
+
+All five deploy test phases now emit consistent `suite= tests= passed= failed=` counts in the deploy report:
+- **vitest** — counts read from json reporter output file (immune to text-summary format drift)
+- **error-logger** — Puppeteer page-load checks for `[error-logger] Initializing`
+- **error-logger-contracts** — API contract checks for `POST /api/debug/errors` and `GET /api/debug/errors`
+- **csp-violations** — browser CSP scan across all public pages
+- **regression** — server-side curl smoke suite
+
+DEPLOY COMPLETE banner moved to after the report box so the structured report is the final machine-readable output.
+
+### Documentation
+
+- `docs/INFRASTRUCTURE.md` — server health monitoring section updated to reflect Glances integration is live but HA dashboard/alerting configuration is pending (#370)
+- `docs/TESTING.md` — Puppeteer scripts table updated; rule added that new page-loading scripts must intercept and mock `/api/debug/errors` before `page.goto()`; CORS smoke check references `GET /api/health`
+
+### Breaking Changes / Deployment Notes
+
+- `ERROR_ALERT_THRESHOLD` and `ERROR_ALERT_WINDOW_MS` env vars are optional (defaults: 20 errors / 15 min); add to `.env` only to tune
+- `deploy.sh --env dev|prod` replaces `dev-deploy.sh` / `prod-deploy.sh`; PowerShell wrappers call the new script automatically
+- Clean URL paths for feature subfolders (`/blog/`, `/travel/`, `/admin/`, `/login/`, `/setup/`) require Nginx `try_files` — no Nginx config change needed as existing templates already handle this
+- No DB schema changes required
+
+---
+
 ## Release 2026-05-11 — Docker CE Migration
 
 **Released:** 2026-05-11

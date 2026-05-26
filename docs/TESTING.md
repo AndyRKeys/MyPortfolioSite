@@ -34,8 +34,9 @@ This approach catches integration issues that unit tests cannot (database state,
 
 Dev and prod deploy scripts now run automated checks as part of every deployment to the server:
 
+- **Backend startup env validation** (#357) — on boot the backend asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty via `validateEnvOrExit()` in `backend/utils/validateEnv.js`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container; the backend then logs each missing var and exits 1, so the deploy fails fast (and rolls back) instead of serving traffic with broken config. This closes the gap that let `SITE_HOST` reach the container undefined.
 - **Backend Vitest suite** runs inside the already-deployed container (`backend` on both dev and prod). If `npm test` fails in the container, the deploy script rolls back to a known-good state and marks the deploy as failed.
-- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass.
+- **HTTP regression smoke tests** run via `scripts/tests/test-regression.sh` against the live site (dev: `https://<SITE_HOST>:3001`, prod: `https://<SITE_HOST>`). These tests hit core public and auth-protected endpoints and will also fail the deploy if they do not pass. This includes a **CORS origin check** (#357): a `GET /api/health` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must not be CORS-rejected — catching the case where `SITE_HOST` is missing/wrong in the container and every site-host origin returns 500. The health endpoint is used (not `POST /api/debug/errors`) so the smoke test does not write to the `client_errors` table and trigger false alert emails.
 
 You can skip the regression smoke tests (for example, during quick iteration) by passing the `-SkipRegression` boolean parameter to the PowerShell wrappers (`$true`/`$false`, defaults to `$false`):
 
@@ -86,6 +87,95 @@ docker compose exec backend npm run test:watch
 docker compose exec backend npm run test:coverage
 ```
 
+> **Note:** The Vitest suite runs automatically inside the deployed container on every dev/prod deploy (see "Automatic tests during deploy" above) — that is the canonical path. The suite mocks `pg` and `nodemailer` so it needs no database, which is also what lets CI run it host-side (`cd backend && npm install && npm test`, see [CI](#ci)). Day-to-day verification is done by deploying to the dev server, not by running tests locally.
+
+---
+
+## Browser-Level Tests
+
+Puppeteer scripts run automatically inside the backend container after every dev/prod deploy (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
+
+| Script | npm script | What it verifies |
+|---|---|---|
+| `test-error-logger.js` | `test:error-logger` | Error logger initialises and reports on the `/api/debug/test-errors` page |
+| `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
+| `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
+| `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
+| `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
+
+> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
+
+### Contract test (`test-error-logger-browser.js`)
+
+Uses Puppeteer request interception to capture POSTs to `/api/debug/errors` and simulate the backend being up/down — so buffering can be exercised without actually taking the backend down. Verifies the *deployed* `error-logger.js`:
+
+| # | Contract | Related issue |
+|---|------|---------------|
+| 1 | Resource-load failures (broken `<script src>`) captured via the capture-phase listener | #332 |
+| 2 | Runtime errors logged exactly once — capture-phase listener does not duplicate them | #332 |
+| 3 | Reports persisted to `localStorage` when the backend is unreachable | #334 |
+| 4 | Buffered reports flushed and `localStorage` cleared once the backend returns | #334 |
+| 5 | No browser hang when five errors fire against a failing backend | #331 |
+
+It prints a machine-parseable summary line collected into the deploy report:
+```
+[error-logger-browser] status=OK passed=8 failed=0
+```
+
+### Failure policy
+
+The error-logger tests are **warn-only** — a failure is surfaced loudly inline in the deploy report but does **not** roll the deploy back (unlike Vitest, which does). This avoids a frontend timing flake blocking a deploy. Treat a `status=failed` line as a must-fix even though the deploy proceeded.
+
+### Running manually
+
+These tests need a base URL (the running site). Run them on the dev server from the deployed checkout, or against any reachable instance:
+
+```bash
+# Dev: NGINX_SERVICE=nginx, NGINX_PORT=3001 → docker-internal URL https://nginx:3001
+cd ~/MyPortfolioSite-dev
+docker compose -f docker-compose.yml -p portfolio_dev exec -T backend \
+  npm run test:error-logger:browser -- https://nginx:3001
+```
+
+### CSP violation scan (`test-csp-violations.js`)
+
+Loads every served page (`/`, `/blog/`, `/travel/`, `/login/`, `/admin/`, `/setup/`) in a real browser and listens for `securitypolicyviolation` events (#341). Reports any blocked resource with the directive, source, and remediation instruction. ISP-injected inline-script noise is expected; maintainers can record known-noise patterns in the `KNOWN_NOISE` array inside the script to suppress specific entries.
+
+Machine-parseable summary:
+```
+[csp-violations] status=OK pages=6 violations=0
+```
+
+### Authenticated admin E2E CSP scan (`test-admin-e2e-csp.js`)
+
+Loads `/admin/` as an authenticated session (JWT minted from `JWT_SECRET` and injected into `localStorage.adminToken`) and drives the interactions that call external origins (#342):
+
+| # | Interaction | External origin |
+|---|---|---|
+| 1 | Admin page load — all static resources | self + CDNs |
+| 2 | Nominatim forward geocode (location search button) | `nominatim.openstreetmap.org` |
+| 3 | Nominatim reverse geocode (lat/lng → location name) | `nominatim.openstreetmap.org` |
+
+Any `securitypolicyviolation` event during these interactions fails the check. This is the Nominatim `connect-src` path that was the root cause of the original #330 breakage.
+
+Machine-parseable summary:
+```
+[admin-e2e-csp] status=OK interactions=3 violations=0
+```
+
+### When to run
+
+- Automatically: every dev/prod deploy
+- Manually after any change to `resources/js/error-logger.js` or `backend/routes/debug.js`
+- Manually after adding or moving any external resource (script, style, font, image, API origin) — verifies the CSP allowlist update is correct
+- Run the admin E2E scan after any change to the admin travel form or any new external fetch:
+  ```bash
+  cd ~/MyPortfolioSite-dev
+  docker compose -f docker-compose.yml exec -T \
+    -e JWT_SECRET="$(grep JWT_SECRET .env | cut -d= -f2)" \
+    backend npm run test:admin-e2e-csp -- https://nginx:3001
+  ```
+
 ---
 
 ## Fallback: Local Testing (Windows)
@@ -133,7 +223,7 @@ bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
 
 ### Deploy report
 
-Every deploy ends with a structured report block that collects all `[deploy:*]` and `[regression]` checkpoint lines:
+Every deploy ends with a structured report block that collects all `[deploy:*]` checkpoint lines. The three test suites report in a consistent shape — each tagged with `suite=backend|frontend|regression` and normalised `tests/passed/failed` counts (CSP scans keep their native `pages`/`interactions`/`violations` metrics, since a violation isn't a 1:1 test):
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════╗
@@ -143,11 +233,17 @@ Every deploy ends with a structured report block that collects all `[deploy:*]` 
 ║  [deploy:git] status=updated branch=feat/x pre=abc1234 sha=def5678         ║
 ║  [deploy:compose] status=ok service=backend                                ║
 ║  [deploy:health] status=ok url=https://dev.andykeys.me:3001/api/h… attem… ║
-║  [deploy:vitest] status=ok service=backend                                 ║
+║  [deploy:vitest] suite=backend status=ok tests=94 passed=94 failed=0       ║
+║  [deploy:error-logger] suite=frontend status=ok tests=4 passed=4 failed=0  ║
+║  [deploy:error-logger-contracts] suite=frontend status=ok tests=10 pas…    ║
+║  [deploy:csp-violations] suite=frontend status=ok pages=6 violations=0     ║
+║  [deploy:admin-e2e-csp] suite=frontend status=ok interactions=3 violat…    ║
+║  [deploy:regression] suite=regression status=ok tests=13 passed=13 fai…    ║
 ║  [deploy:summary] status=ok env=dev branch=feat/x sha=def5678              ║
-║  [regression] status=OK passed=12 failed=0 skipped=0 total=12              ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 ```
+
+The suites are grouped under labelled section headers in the verbose log: **Backend tests — Vitest**, **Frontend tests — error-logger (browser)**, **Frontend scans — CSP**, and **Regression tests — HTTP smoke suite**. The regression script still prints its own detailed `[regression]` line to the full log; the report summarises it as a normalised `[deploy:regression]` checkpoint.
 
 This block is the canonical answer to "what happened?" — paste it into PR comments or AI prompts. Full verbose output is still written to the log file.
 

@@ -88,6 +88,7 @@ npm test -- --reporter=verbose    # Verbose output
 
 # Smoke tests for a PR (regression runs automatically post-deploy; run PR-specific tests from Windows):
 .\scripts\tests\Test-PR148.ps1 -BaseUrl https://dev.andykeys.me:3001 -Insecure
+# Note: dev.andykeys.me resolves from Windows/external only. On the server itself use https://localhost:3001 -k
 ```
 
 ### Git Workflow
@@ -300,7 +301,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 - Every step must include the **exact copy-paste command** — no assumed knowledge, no "run the usual command"
 - Add a `# comment` above every command explaining what it verifies and why it matters for this PR
 - State the **expected output** after each command so the tester knows pass vs fail at a glance
-- Use correct compose file + service for the target env: dev server → `docker-compose.dev-server.yml`, services `backend-dev` / `postgres-dev`, DB `portfolio_dev`; local Docker → `docker-compose.yml`, services `backend` / `postgres`
+- Use correct compose file + service for the target env: dev server → `docker-compose.yml` in `~/MyPortfolioSite-dev`, services `backend` / `postgres`, DB `portfolio_dev`; local Docker → `docker-compose.local.yml`, services `backend` / `postgres`
 - Where a step requires waiting (e.g. token expiry), provide a DB command to simulate it instead
 - HTTP requests from Windows: use `curl.exe` PowerShell syntax; from inside a container or the server: plain `curl`
 - Full rule: see **[docs/AI.md](docs/AI.md) → PR test plans must include**
@@ -348,6 +349,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 | `resources/js/admin.js` | Mirrors admin/index.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
 | `docker-compose.yml` | Volume mounts, env vars, networking — errors break the entire dev environment | Test `docker compose up/down/reset` after changes |
 | `backend/db/schema.sql` | Idempotent, no migration tool — altering existing columns requires careful planning | Always use IF NOT EXISTS / IF NOT; test schema changes on a clean DB |
+| `scripts/config/nginx-security-headers.conf` (CSP) | One directive line governs a whole class of resources; a missing allowlist entry breaks a feature in prod only (enforced CSP) and is invisible to Vitest | When adding/moving any external resource (script, style, font, image, API origin) or inline script, update the allowlist in the same PR and verify it loads in a browser |
 
 ---
 

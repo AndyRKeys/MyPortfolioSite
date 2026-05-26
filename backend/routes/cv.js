@@ -82,7 +82,17 @@ router.get('/', (req, res) => {
 });
 
 // Admin: upload / replace CV
-router.post('/', authenticate, upload.single('cv'), async (req, res) => {
+router.post('/', authenticate, (req, res, next) => {
+  upload.single('cv')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const warnings = scanForPrivateInfo(req.file.buffer);

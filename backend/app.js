@@ -8,6 +8,7 @@
 import express  from 'express';
 import cors     from 'cors';
 import path     from 'path';
+import crypto   from 'crypto';
 import { fileURLToPath } from 'url';
 import pinoHttp from 'pino-http';
 
@@ -35,23 +36,36 @@ export function createApp() {
   // status/latency. Secret redaction is configured in utils/logger.js.
   // Health check polls every 10s — demote to trace so they don't flood
   // info-level logs; visible only when LOG_LEVEL=trace.
+  // Assign a UUID to every request (#336). pino-http exposes it as req.id
+  // in the log line; the middleware below echoes it as X-Request-Id so the
+  // frontend can include it in error reports for correlation.
   app.use(pinoHttp({
     logger,
+    genReqId: () => crypto.randomUUID(),
     customLogLevel: (req, res) =>
       req.url === '/health' ? 'trace' : res.statusCode >= 500 ? 'error' : 'info',
   }));
 
-  const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
+  // Expose the request ID to the frontend so error-logger.js can include it
+  // in /debug/errors reports, correlating client errors with backend log lines.
+  app.use((req, res, next) => {
+    res.setHeader('X-Request-Id', req.id);
+    next();
+  });
 
-  // Extract host+port from ALLOWED_ORIGIN for flexible protocol matching
-  const allowedOriginHostPort = ALLOWED_ORIGIN.replace(/^https?:\/\//, '');
+  const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
+  // SITE_HOST covers requests where the browser omits the non-standard port
+  // (e.g. origin=https://dev.andykeys.me when FRONTEND_URL=https://dev.andykeys.me:3001)
+  const SITE_HOST = process.env.SITE_HOST || '';
 
   app.use(cors({
     origin: (origin, cb) => {
       if (!origin || origin === ALLOWED_ORIGIN ||
           /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-          // Docker internal: allow nginx service names for dev/test (nginx-dev, nginx-local, etc.)
-          /^https?:\/\/nginx-(dev|local)(:\d+)?$/.test(origin)) {
+          // Docker internal: allow nginx service name for dev/test
+          /^https?:\/\/nginx(:\d+)?$/.test(origin) ||
+          // SITE_HOST: allow any port on the configured hostname (handles port-less origins)
+          (SITE_HOST && origin && (() => { try { return new URL(origin).hostname === SITE_HOST; } catch { return false; } })())) {
         cb(null, true);
       } else {
         cb(new Error(`CORS: origin ${origin} not allowed`));

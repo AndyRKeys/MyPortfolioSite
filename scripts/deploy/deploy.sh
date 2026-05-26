@@ -20,6 +20,26 @@
 
 set -euo pipefail
 
+# ── Sudo guard (#351) ─────────────────────────────────────────────────────────
+# Running as root (via sudo) sets $HOME=/root, so REPO_DIR resolves to
+# /root/MyPortfolioSite* — a fresh clone with a template .env — instead of
+# the real user's configured repo. try_root() handles the handful of commands
+# that genuinely need elevation; the script itself must not run as root.
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+  echo ""
+  echo "ERROR: do not run deploy.sh with sudo." >&2
+  echo "" >&2
+  echo "  Running as root sets \$HOME=/root, so REPO_DIR and .env point to a" >&2
+  echo "  fresh clone in /root/ instead of your configured repo." >&2
+  echo "" >&2
+  echo "  Run as your normal user — the script calls try_root internally" >&2
+  echo "  for any commands that need elevated privileges (UFW, certs, etc.):" >&2
+  echo "" >&2
+  echo "    bash ./scripts/deploy/deploy.sh --env ${1:-dev}" >&2
+  echo "" >&2
+  exit 1
+fi
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 DEPLOY_ENV=""
@@ -328,7 +348,7 @@ if [ "$DRY_RUN" = "1" ]; then
   dinfo "  service:      $BACKEND_SERVICE"
   dinfo "  health URL:   $HEALTH_URL"
   [ "$RUN_VITEST"        = "1" ] && dinfo "  vitest:        would run after health check"
-  [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest"
+  [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest (incl. CSP violation scan)"
   [ "$SKIP_REGRESSION"   = "0" ] && dinfo "  regression:    would run smoke tests"
   [ "$RUN_BACKUP_CHECK"  = "1" ] && dinfo "  backup check:  would warn if backups absent/stale"
   dinfo ""
@@ -338,6 +358,11 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 compose_up_with_rollback "$BACKEND_SERVICE"
+
+# ── Schema + maintenance ──────────────────────────────────────────────────────
+
+apply_schema
+prune_client_errors
 
 # ── Health check ──────────────────────────────────────────────────────────────
 
@@ -354,6 +379,9 @@ check_outlook_token "$BACKEND_SERVICE"
 # ── Post-deployment tests ─────────────────────────────────────────────────────
 
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_all_pages
+[ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
+[ "$RUN_ERROR_LOGGER" = "1" ] && check_csp_violations
+[ "$RUN_ERROR_LOGGER" = "1" ] && check_admin_e2e_csp
 
 test_csp_reporting
 
@@ -371,14 +399,14 @@ dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
-  print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV — ROLLED BACK"
+  print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"
 elif [ "$REGRESSION_RC" -ne 0 ]; then
-  print_deploy_status "FAILED" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV — REGRESSION FAILED"
+  print_deploy_status "FAILED" "$DEPLOY_ENV"
 else
-  print_deploy_status "COMPLETE" "$DEPLOY_ENV"
   print_deploy_report "$DEPLOY_ENV"
+  print_deploy_status "COMPLETE" "$DEPLOY_ENV"
 fi
 dlog ""
 

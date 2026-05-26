@@ -29,11 +29,11 @@ Do not call the LAN dev environment "staging" — there is no separate staging t
 
 | Environment | Compose file | Service names |
 |-------------|--------------|---------------|
-| production | `docker-compose.prod.yml` | `backend`, `postgres`, `nginx` |
-| dev environment | `docker-compose.dev-server.yml` | `backend-dev`, `postgres-dev`, `nginx-dev` |
-| local dev | `docker-compose.yml` | `backend`, `postgres`, `nginx` |
+| production | `docker-compose.yml` (in `~/MyPortfolioSite`) | `backend`, `postgres`, `nginx` |
+| dev environment | `docker-compose.yml` (in `~/MyPortfolioSite-dev`) | `backend`, `postgres`, `nginx` |
+| local dev | `docker-compose.local.yml` | `backend`, `postgres`, `nginx` |
 
-Production DB name: `portfolio`. Dev DB name: `portfolio_dev`.
+Production DB name: `portfolio_prod`. Dev DB name: `portfolio_dev`.
 
 ## Branches
 

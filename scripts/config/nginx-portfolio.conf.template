@@ -51,6 +51,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass_header X-Request-Id;
     }
 
     # Uploaded media served directly by Nginx from repo-root uploads/ dir
@@ -64,4 +65,27 @@ server {
     location / {
         try_files $uri $uri/ $uri.html =404;
     }
+}
+
+# Redirect accidental prod-port hits on the dev hostname to the correct port.
+# Visiting https://dev.${DOMAIN} (omitting :3001) otherwise lands on prod nginx
+# and silently runs prod code — the cause of repeated test confusion (#358).
+#
+# PROD-ONLY: this block must never be added to nginx-dev-server.conf.template
+# or nginx-local.conf.template. The dev nginx already listens on 3001 and
+# serves dev.${DOMAIN} there; adding this redirect to it would loop forever.
+#
+# The prod cert is for ${DOMAIN}/www.${DOMAIN}, so browsers show a one-time
+# hostname-mismatch warning on the TLS handshake; the 301 fires before any
+# content is served, so the redirect still works once accepted.
+server {
+    listen 443 ssl;
+    server_name dev.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    return 301 https://dev.${DOMAIN}:3001$request_uri;
 }

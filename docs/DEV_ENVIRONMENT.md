@@ -46,6 +46,8 @@ bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite
 bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev
 ```
 
+> **Do not use `sudo`** with `deploy.sh`. Running as root sets `$HOME=/root`, causing the script to clone a fresh repo into `/root/` and read a template `.env` with placeholder values instead of your configured one. The script calls `try_root` internally for any commands that need elevation (UFW, certs). The script will exit immediately with a clear error if invoked as root.
+
 ### What happens on the first run
 
 The script checks for a `.env` file. If one doesn't exist it copies `.env.dev-server.example` into place and stops with instructions:

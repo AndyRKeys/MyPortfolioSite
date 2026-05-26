@@ -56,6 +56,7 @@ Closes #<!-- issue number -->
 - [ ] `docs/CHANGELOG.md` updated with an entry under `[Unreleased]`
 - [ ] Behaviour docs updated if needed (`docs/AI.md` / `docs/STYLE_GUIDE.md` / `docs/DATABASE.md` / `docs/SECURITY.md` / `docs/TESTING.md`)
 - [ ] Ops docs updated if needed (`docs/RUNBOOK.md` / `docs/BACKUP.md` / `docs/INCIDENTS.md` / `docs/INFRASTRUCTURE.md` / `docs/PROD_ENVIRONMENT.md` / `docs/DEV_ENVIRONMENT.md`)
+- [ ] CSP allowlist (`scripts/config/nginx-security-headers.conf`) updated if any external resource or inline script was added/moved — or N/A
 - [ ] N/A — behaviour and operator docs already match the change (no updates needed)
 
 ## Risk / Impact

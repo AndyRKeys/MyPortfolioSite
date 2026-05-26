@@ -1,15 +1,17 @@
 /**
  * Priority 2 — posts route integration tests.
  * Verifies validation rejects bad input before the DB is touched,
- * and that protected routes return 401 without a valid JWT.
+ * that protected routes return 401 without a valid JWT,
+ * and happy-path DB writes for create/update/delete.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request   from 'supertest';
 import jwt        from 'jsonwebtoken';
 import { createApp } from '../../app.js';
 
+const mockQuery = vi.hoisted(() => vi.fn());
 vi.mock('../../db/pool.js', () => ({
-  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+  pool: { query: mockQuery },
 }));
 
 const app = createApp();
@@ -17,6 +19,11 @@ const app = createApp();
 function makeToken() {
   return jwt.sign({ userId: 'test-user' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
+
+beforeEach(() => {
+  mockQuery.mockReset();
+  mockQuery.mockResolvedValue({ rows: [] });
+});
 
 describe('POST /posts', () => {
   it('returns 401 when no Authorization header', async () => {
@@ -33,9 +40,6 @@ describe('POST /posts', () => {
   });
 
   it('returns 400 when title is missing (DB not touched)', async () => {
-    const { pool } = vi.mocked(await import('../../db/pool.js'));
-    pool.query.mockClear();
-
     const res = await request(app)
       .post('/posts')
       .set('Authorization', `Bearer ${makeToken()}`)
@@ -43,23 +47,76 @@ describe('POST /posts', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/title/i);
-    // Validation fires before DB — no query should have run
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('calls INSERT and returns 201 for a valid blog post', async () => {
+    const fakePost = {
+      id: 'abc-123', title: 'Hello World', slug: 'hello-world',
+      body_markdown: '# Hello', post_type: 'blog', published_at: null,
+    };
+    // tryInsertPost does a slug check then INSERT RETURNING
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })   // slug uniqueness check
+      .mockResolvedValueOnce({ rows: [fakePost] }); // INSERT RETURNING
+
+    const res = await request(app)
+      .post('/posts')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Hello World', body_markdown: '# Hello' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.slug).toBe('hello-world');
+    const insertCall = mockQuery.mock.calls.find(([sql]) => sql.includes('INSERT INTO posts'));
+    expect(insertCall).toBeDefined();
   });
 });
 
-describe('PUT /posts/:slug', () => {
+describe('PUT /posts/:id', () => {
   it('returns 401 when no JWT provided', async () => {
-    const res = await request(app).put('/posts/some-slug').send({ title: 'Updated' });
+    const res = await request(app).put('/posts/some-id').send({ title: 'Updated' });
     expect(res.status).toBe(401);
   });
 
   it('returns 400 when title is missing', async () => {
     const res = await request(app)
-      .put('/posts/some-slug')
+      .put('/posts/some-id')
       .set('Authorization', `Bearer ${makeToken()}`)
       .send({ body_markdown: '# No title' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/title/i);
+  });
+
+  it('returns 404 when post does not exist', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // SELECT existing post → empty
+    const res = await request(app)
+      .put('/posts/nonexistent-id')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Updated Title', body_markdown: '# Updated' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /posts/:id', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).delete('/posts/some-id');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 when post does not exist', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const res = await request(app)
+      .delete('/posts/nonexistent-id')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('deletes the post and returns { deleted: true }', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'abc' }] });
+    const res = await request(app)
+      .delete('/posts/abc')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(true);
   });
 });

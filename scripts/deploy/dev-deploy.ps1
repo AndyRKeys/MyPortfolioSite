@@ -31,19 +31,25 @@ if ($DryRun)         { $flags += '--dry-run' }
 if ($AutoYes)        { $flags += '--auto-yes' }
 $flagStr = $flags -join ' '
 
+# Resolve the remote home directory for the SSH user so paths in the
+# printed command are exact — avoids the opaque $HOME bash variable.
+$RemoteHome = (ssh $Hostname 'echo $HOME').Trim()
+$RepoUrl    = 'https://github.com/AndyRKeys/MyPortfolioSite.git'
+$DevRepo    = "$RemoteHome/MyPortfolioSite-dev"
+
 $remoteCommand = @"
-DEV_REPO=`$HOME/MyPortfolioSite-dev
-REPO_URL=https://github.com/AndyRKeys/MyPortfolioSite.git
-BRANCH="$Branch"
-if [ ! -d "`$DEV_REPO/.git" ]; then
-    git clone "`$REPO_URL" "`$DEV_REPO"
+if [ ! -d "$DevRepo/.git" ]; then
+    git clone "$RepoUrl" "$DevRepo"
 fi
-bash "`$DEV_REPO/scripts/deploy/switch-branch.sh" "`$BRANCH" "`$DEV_REPO"
-bash "`$DEV_REPO/scripts/deploy/deploy.sh" --env dev "`$BRANCH" $flagStr
+bash "$DevRepo/scripts/deploy/switch-branch.sh" "$Branch" "$DevRepo"
+bash "$DevRepo/scripts/deploy/deploy.sh" --env dev "$Branch" $flagStr
 "@
 
 # Strip CRLF — bash on the server rejects Windows line endings
 $remoteCommand = $remoteCommand -replace "`r`n", "`n"
+
+Write-Host "Executing remote command on $Hostname" -ForegroundColor Yellow
+Write-Host $remoteCommand -ForegroundColor Yellow
 
 ssh $Hostname $remoteCommand
 exit $LASTEXITCODE

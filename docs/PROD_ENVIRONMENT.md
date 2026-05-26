@@ -27,6 +27,16 @@ docker compose -f docker-compose.prod.yml <command>
 
 **SSL:** Let's Encrypt certs managed by certbot on the host; `/etc/letsencrypt` is bind-mounted into the nginx container read-only.
 
+**Dev-hostname redirect (#358):** the prod nginx template includes an extra
+`server` block for `dev.<domain>` on port 443 that issues a `301` to
+`https://dev.<domain>:3001`. The dev server only listens on `3001`; visiting
+the dev hostname without the port otherwise lands on prod nginx and silently
+runs prod code, which has repeatedly caused confusing test results. The block
+reuses the prod cert, so browsers show a one-time hostname-mismatch warning
+before the redirect fires. This block lives **only** in
+`nginx-portfolio.conf.template` — adding it to the dev/local templates (which
+already serve the dev hostname on `3001`) would create a redirect loop.
+
 ---
 
 ## Prod env vars and key files
@@ -76,6 +86,8 @@ bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod
 # or for rollback:
 bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod --rollback <sha>
 ```
+
+> **Do not use `sudo`** with `deploy.sh`. Running as root sets `$HOME=/root`, causing the script to clone a fresh repo into `/root/` and read a template `.env` with placeholder values instead of your configured one. The script calls `try_root` internally for any commands that need elevation (UFW, certs). The script will exit immediately with a clear error if invoked as root.
 
 `deploy.sh --env prod` uses `deploy-lib.sh` to:
 

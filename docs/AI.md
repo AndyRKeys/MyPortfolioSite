@@ -173,7 +173,8 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 
 **Test plan commands — mandatory rules:**
 - Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
-- Use the correct compose file and service name for the environment being tested: `docker-compose.yml` with services `backend` / `postgres` for both the dev server (project `portfolio_dev`) and prod (project `portfolio_prod`); `docker-compose.local.yml` with services `backend` / `postgres` for local laptop dev.
+- **Target the dev server first.** The dev server is the canonical test environment (real DB, auth, file uploads). Write the test plan for someone SSHed into `ak-home-server`. **Important:** `dev.andykeys.me` does not resolve from the server itself — use `https://localhost:3001` with `-k` (self-signed cert) for on-server curl commands. `dev.andykeys.me` works only from external machines (browser, Windows). Local Docker is a fallback only — if a step only makes sense locally, label it clearly as `# Local Docker fallback (if dev server unavailable)`.
+- Use the correct compose file and service name for the environment being tested: `docker-compose.yml` with services `backend` / `postgres` for the dev server (project `portfolio_dev`) and prod (project `portfolio_prod`); `docker-compose.local.yml` with services `backend` / `postgres` for local laptop dev.
 - Add a **comment line above every command** (using `#`) that explains what the command does and why it matters for this specific PR — not just what the tool is, but what you are verifying.
 - Include the **expected output or outcome** after each command so the tester knows immediately whether it passed or failed.
 - Where a step would normally require waiting (e.g. token expiry), provide a DB command to simulate it rather than leaving the tester to wait.
@@ -449,6 +450,7 @@ Every PR that touches backend code **must** include a `scripts/tests/Test-PRN.ps
 - Use parameterized queries for SQL
 - Validate user input at system entry points only
 - Never log or commit sensitive data (`.env`, tokens, API keys)
+- **Keep the CSP allowlist in lockstep.** Any change that adds or moves an external resource — a `<script>`/`<link>`/font/image source, an inline script or style, or a `fetch`/XHR to a new origin — must update `scripts/config/nginx-security-headers.conf` in the **same PR** and be verified to load in a browser. A missed entry is blocked **only in prod** (where the CSP is enforced) and breaks that feature silently; Vitest cannot catch it. Enforcement is per-resource (one violation blocks one resource, not the whole page), but a single directive line governs a whole *class* of resources — so a wrong or over-tightened line (e.g. dropping `'self'` from `script-src`) has site-wide blast radius. Treat edits to this file as high-risk. (Prior incidents: Nominatim geocoding, #330.)
 
 ## Hotfixes
 
