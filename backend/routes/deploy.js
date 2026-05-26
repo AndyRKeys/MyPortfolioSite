@@ -6,7 +6,9 @@ import { authenticate }  from '../middleware/authenticate.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
 
 const router   = Router();
-const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// /repo is the repo root mounted via docker-compose — the backend image only
+// contains /app (backend code), so relative path resolution gives / not the repo root.
+const REPO_DIR = process.env.REPO_DIR || '/repo';
 const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
 // DEPLOY_ENV ('dev'|'prod') is required — validated at startup by validateEnv.js
 const DEPLOY_ENV = process.env.DEPLOY_ENV;
