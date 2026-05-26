@@ -6,10 +6,14 @@ import { authenticate }  from '../middleware/authenticate.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
 
 const router   = Router();
-const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/prod-deploy.sh');
-// Deploy log lives in $HOME on the Pi — falls back to repo root in dev
-const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, 'deploy.log');
+// /repo is the repo root mounted via docker-compose — the backend image only
+// contains /app (backend code), so relative path resolution gives / not the repo root.
+const REPO_DIR = process.env.REPO_DIR || '/repo';
+const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
+// DEPLOY_ENV ('dev'|'prod') is required — validated at startup by validateEnv.js
+const DEPLOY_ENV = process.env.DEPLOY_ENV;
+// deploy.sh writes to $HOME/<env>-deploy.log
+const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, `${DEPLOY_ENV}-deploy.log`);
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -60,6 +64,7 @@ router.get('/status', authenticate, async (req, res) => {
 
     const behind = parseInt(behindRaw.trim(), 10) || 0;
     res.json({
+      env:       DEPLOY_ENV,
       branch:    branch.trim(),
       head:      { sha: fullSha.trim().slice(0, 7), fullSha: fullSha.trim(), message: message.trim(), date: date.trim() },
       behind,
@@ -96,12 +101,17 @@ router.get('/history', authenticate, async (req, res) => {
     let deployLog = [];
     try {
       const raw = await fs.readFile(DEPLOY_LOG, 'utf8');
+      // Strip ANSI escape codes, then parse [YYYY-MM-DD HH:MM:SS] <message>
+      // eslint-disable-next-line no-control-regex
+      const stripAnsi = s => s.replace(/\x1b\[[0-9;]*m/g, '');
       deployLog = raw.trim().split('\n').filter(Boolean)
         .slice(-20).reverse()
         .map(l => {
-          const parts = l.split(' ');
-          return { ts: parts[0], action: parts[1], detail: parts.slice(2).join(' ') };
-        });
+          const clean = stripAnsi(l).trim();
+          const m = clean.match(/^\[([^\]]+)\]\s*(.*)$/);
+          return m ? { ts: m[1], detail: m[2] } : { ts: '', detail: clean };
+        })
+        .filter(e => e.detail); // skip blank separator lines
     } catch { /* log file may not exist yet */ }
 
     res.json({ commits, deployLog });
@@ -121,9 +131,9 @@ router.post('/fetch', authenticate, async (req, res) => {
 
 router.post('/', authenticate, async (req, res) => {
   if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV], { cwd: REPO_DIR }));
 });
 
 // ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
@@ -143,10 +153,10 @@ router.post('/rollback', authenticate, async (req, res) => {
   }
 
   if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
+    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
 
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--rollback', sha], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV, '--rollback', sha], { cwd: REPO_DIR }));
 });
 
 export default router;

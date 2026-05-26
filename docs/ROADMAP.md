@@ -229,7 +229,8 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 **Platform & architecture:**
 
 - **Server-side rendering for blog/travel** — current client-side Markdown rendering degrades SEO; a minimal SSR or build-time pre-render (still no heavy framework) would help discoverability.
-- **Modularise the monoliths** — continue the direction in #175 (`admin.js`) and #178 (HTML feature folders); pairs well with the jQuery removal in #176.
+- ✅ **Done — `admin.js` modularised (#175)** — admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
+- **Continue modularisation** — #178 (HTML feature folders) and jQuery removal (#176) are the natural next steps.
 - **API versioning** (`/api/v1`) — cheap to add now, painful to retrofit later if the AI Lab API grows.
 - **Typed backend** — incremental TypeScript or JSDoc-typed modules on the highest-risk files (`auth.js`, `deploy.js`) for safety without a build step everywhere.
 

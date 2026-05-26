@@ -216,6 +216,7 @@ _log_cmd() {
 # (or nothing if absent). Anchored on a leading space/start so `passed` doesn't
 # also match e.g. `skipped`. `|| true` keeps a no-match from aborting under set -e.
 _kv_num() { printf '%s' "$1" | grep -oE "(^| )$2=[0-9]+" | head -1 | grep -oE '[0-9]+' || true; }
+_kv_str() { printf '%s' "$1" | grep -oE "(^| )$2=[^ ]+" | head -1 | sed "s/.*$2=//" || true; }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
@@ -1562,9 +1563,39 @@ check_admin_e2e_csp() {
     dok "Admin E2E CSP scan passed — ${interactions:-0} interactions, no violations ✓"
   else
     dstatus admin-e2e-csp suite=frontend status=failed interactions="${interactions:-0}" violations="${violations:-0}"
-    dwarn "Admin E2E CSP scan output:"
     echo "$test_output" | tee -a "$LOG_FILE"
-    dwarn "CSP violations detected in admin interactions — update nginx-security-headers.conf"
+    _do_rollback "CSP violations detected in admin interactions"
+    ddie "Deploy failed: CSP violations detected — update nginx-security-headers.conf. See log at $LOG_FILE"
+  fi
+}
+
+check_admin_e2e() {
+  dsection "Frontend tests — admin E2E smoke + interactions (hard fail)"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping admin E2E tests"
+    dstatus admin-e2e suite=frontend status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Running admin E2E smoke and interaction tests..."
+
+  local test_output rc smoke interactions
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
+      -e JWT_SECRET="${JWT_SECRET:-}" \
+      "$BACKEND_SERVICE" \
+      npm run test:admin-e2e -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[admin-e2e\]' | tail -1 || true)
+  smoke=$(_kv_str "$sline" smoke); interactions=$(_kv_str "$sline" interactions)
+  if [ "$rc" -eq 0 ]; then
+    dstatus admin-e2e suite=frontend status=ok smoke="${smoke:-?}" interactions="${interactions:-?}"
+    dok "Admin E2E passed — smoke ${smoke:-?}, interactions ${interactions:-?} ✓"
+  else
+    dstatus admin-e2e suite=frontend status=failed smoke="${smoke:-?}" interactions="${interactions:-?}"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    _do_rollback "admin E2E tests failed — admin panel non-functional"
+    ddie "Deploy failed: admin E2E tests did not pass. See log at $LOG_FILE"
   fi
 }
 
@@ -1726,32 +1757,38 @@ print_deploy_status() {
 # Call as the very last step of a deploy script (after regression tests).
 print_deploy_report() {
   local label="${1:-unknown}"
-  local width=72  # inner content width (between ║  and  ║)
-  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
-  local _title _title_pad
+  local _title
   _title="Deploy Report — ${label} — $(date '+%Y-%m-%d %H:%M:%S')"
-  _title_pad=$(( width + 2 - ${#_title} ))  # fill to same total width as content rows
+
+  # Collect checkpoint lines for this run, strip ANSI and ts= field.
+  local lines=()
+  while IFS= read -r line; do
+    lines+=("$line")
+  done < <(
+    tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
+      | grep -E '^\[deploy:' \
+      | sed 's/\x1b\[[0-9;]*m//g' \
+      | sed 's/ ts=[^ ]*$//'
+  )
+
+  # Compute width from longest content line (title or any checkpoint line).
+  local width=${#_title}
+  for line in "${lines[@]}"; do
+    [ "${#line}" -gt "$width" ] && width=${#line}
+  done
+  # Minimum 60, add 2 padding chars each side (handled by printf %-Ns below).
+  [ "$width" -lt 60 ] && width=60
+
+  local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
+  local _title_pad=$(( width + 2 - ${#_title} ))
 
   echo ""
   echo "╔${border}╗"
   printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
   echo "╠${border}╣"
-  # Only this run's lines (log is append-only across deploys), and only
-  # checkpoint lines anchored at column 0 — so prose / commit-message text
-  # that happens to contain "[deploy:" is never matched. The regression suite's
-  # own [regression] line is summarised into a normalised [deploy:regression]
-  # checkpoint by run_regression_tests, so we match only [deploy:*] here.
-  tail -n +"$(( ${DEPLOY_LOG_START:-0} + 1 ))" "$LOG_FILE" 2>/dev/null \
-    | grep -E '^\[deploy:' \
-    | sed 's/\x1b\[[0-9;]*m//g' \
-    | sed 's/ ts=[^ ]*$//' \
-    | while IFS= read -r line; do
-        # Truncate lines that are still too long to fit
-        if [ "${#line}" -gt "$width" ]; then
-          line="${line:0:$((width - 1))}…"
-        fi
-        printf "║  %-${width}s  ║\n" "$line"
-      done
+  for line in "${lines[@]}"; do
+    printf "║  %-${width}s  ║\n" "$line"
+  done
   echo "╚${border}╝"
   echo ""
 }
