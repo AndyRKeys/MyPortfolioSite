@@ -168,7 +168,8 @@ No build step. HTML pages load ES modules directly via `<script type="module">`.
 - `resources/js/script.js` — homepage only: GitHub widget, contact form, home visit counter
 - `resources/js/blog.js` — blog listing page
 - `resources/js/travel.js` — travel listing page (map, cards, timeline, lightbox)
-- `resources/js/admin.js` — admin panel (18KB, monolithic, highest-risk file to modify)
+- `resources/js/admin.js` — admin panel entry point (thin orchestrator; imports modules from `admin/`)
+- `resources/js/admin/` — modular admin panel: `posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`
 - `resources/js/utils/` — shared utilities (escapeHtml, formatVisitDate, buildTimelineItem, etc.)
 
 **Key pattern:** jQuery used only for legacy compatibility (DOM queries, $.ajax for API calls). New code uses vanilla DOM APIs and fetch.
@@ -224,14 +225,15 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 
 ### Admin Panel
 
-Single HTML file (`admin/index.html`) with inline JS (`admin.js`). Handles:
-- Blog post CRUD
-- Travel memory CRUD
-- CV upload + file browser
-- Deployment console (show status, trigger deploy, rollback)
-- Stats (visit counts, error counts)
+Single HTML file (`admin/index.html`) with JS split across modular ES modules. Handles:
+- Blog post CRUD (`admin/posts.js`)
+- Travel memory CRUD (`admin/travel.js`)
+- CV upload + file browser (`admin/cv.js`)
+- Deployment console (`admin/deploy.js`)
+- Stats (`admin/stats.js`)
+- Auth / passkey management (`admin/auth.js`, `admin/passkeys.js`)
 
-**Highest-risk file to touch.** Modifying it risks breaking multiple features. Read the full file before making changes. Test thoroughly.
+`admin.js` is a thin entry point that imports and initialises each module. **When modifying admin features, edit the relevant module file** — do not add logic back to `admin.js`. Test CRUD flows for blog + travel after any admin change.
 
 ---
 
@@ -344,9 +346,9 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 
 | File | Why | Mitigation |
 |------|-----|----------|
-| `admin/index.html` (18KB) | Monolithic, handles blog + travel + CV + deploy; one mistake breaks multiple features | Read full file before edits; test admin flows thoroughly |
 | `backend/routes/auth.js` (12KB) | WebAuthn state machine is complex; JWT + magic links state must be correct | High test coverage; read full file; don't eyeball auth logic |
-| `resources/js/admin.js` | Mirrors admin/index.html complexity; form logic for multiple post types | Test CRUD flows for blog + travel; check date field handling |
+| `resources/js/admin/travel.js` | Largest admin module (495 lines); travel CRUD, geocoding, EXIF, map | Read the full module before editing; test travel CRUD + map flows |
+| `resources/js/admin/posts.js` | Blog post CRUD with draft/publish state | Test create, edit, publish, delete flows after changes |
 | `docker-compose.yml` | Volume mounts, env vars, networking — errors break the entire dev environment | Test `docker compose up/down/reset` after changes |
 | `backend/db/schema.sql` | Idempotent, no migration tool — altering existing columns requires careful planning | Always use IF NOT EXISTS / IF NOT; test schema changes on a clean DB |
 | `scripts/config/nginx-security-headers.conf` (CSP) | One directive line governs a whole class of resources; a missing allowlist entry breaks a feature in prod only (enforced CSP) and is invisible to Vitest | When adding/moving any external resource (script, style, font, image, API origin) or inline script, update the allowlist in the same PR and verify it loads in a browser |
@@ -357,7 +359,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 
 - **No backups:** Database and uploads have no automated backup. (#164)
 - **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
-- **Admin.html monolithic:** 18KB single file; refactoring needed. (No issue yet; low priority)
+- **Admin.js modularised (#175):** admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
 - **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; docs/ROADMAP.md §3.5)
 
