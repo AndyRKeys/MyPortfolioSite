@@ -216,6 +216,7 @@ _log_cmd() {
 # (or nothing if absent). Anchored on a leading space/start so `passed` doesn't
 # also match e.g. `skipped`. `|| true` keeps a no-match from aborting under set -e.
 _kv_num() { printf '%s' "$1" | grep -oE "(^| )$2=[0-9]+" | head -1 | grep -oE '[0-9]+' || true; }
+_kv_str() { printf '%s' "$1" | grep -oE "(^| )$2=[^ ]+" | head -1 | sed "s/.*$2=//" || true; }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
@@ -1562,9 +1563,37 @@ check_admin_e2e_csp() {
     dok "Admin E2E CSP scan passed — ${interactions:-0} interactions, no violations ✓"
   else
     dstatus admin-e2e-csp suite=frontend status=failed interactions="${interactions:-0}" violations="${violations:-0}"
-    dwarn "Admin E2E CSP scan output:"
     echo "$test_output" | tee -a "$LOG_FILE"
-    dwarn "CSP violations detected in admin interactions — update nginx-security-headers.conf"
+    ddie "CSP violations detected in admin interactions — update nginx-security-headers.conf. Deploy rolled back."
+  fi
+}
+
+check_admin_e2e() {
+  dsection "Frontend tests — admin E2E smoke + interactions (hard fail)"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping admin E2E tests"
+    dstatus admin-e2e suite=frontend status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Running admin E2E smoke and interaction tests..."
+
+  local test_output rc smoke interactions
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
+      -e JWT_SECRET="${JWT_SECRET:-}" \
+      "$BACKEND_SERVICE" \
+      npm run test:admin-e2e -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[admin-e2e\]' | tail -1 || true)
+  smoke=$(_kv_str "$sline" smoke); interactions=$(_kv_str "$sline" interactions)
+  if [ "$rc" -eq 0 ]; then
+    dstatus admin-e2e suite=frontend status=ok smoke="${smoke:-?}" interactions="${interactions:-?}"
+    dok "Admin E2E passed — smoke ${smoke:-?}, interactions ${interactions:-?} ✓"
+  else
+    dstatus admin-e2e suite=frontend status=failed smoke="${smoke:-?}" interactions="${interactions:-?}"
+    echo "$test_output" | tee -a "$LOG_FILE"
+    ddie "Admin E2E tests failed — admin panel is non-functional. Deploy rolled back."
   fi
 }
 
