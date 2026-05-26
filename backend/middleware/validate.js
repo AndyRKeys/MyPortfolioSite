@@ -69,7 +69,7 @@ export const CreateTravelSchema = z.object({
   title:      z.string().min(1, 'Title is required'),
   location:   z.string().optional().nullable(),
   notes:      z.string().optional().nullable(),
-  visitDate:  dateString,
+  post_date:  dateString,
   lat:        latLng,
   lng:        latLng,
   publish:    z.boolean().optional(),

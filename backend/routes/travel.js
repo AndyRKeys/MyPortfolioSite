@@ -11,7 +11,7 @@ const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
   p.media_url, p.media_type, p.lat, p.lng,
-  p.post_date AS visit_date,
+  p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
@@ -112,12 +112,12 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { title, location, notes, mediaItems, lat, lng, visitDate, publish } = req.body;
+    const { title, location, notes, mediaItems, lat, lng, post_date, publish } = req.body;
     // title guaranteed present by validate()
 
     const latVal     = lat  != null ? parseFloat(lat)  : null;
     const lngVal     = lng  != null ? parseFloat(lng)  : null;
-    const postDateVal = visitDate || null;
+    const postDateVal = post_date || null;
     const publishedAt = publish ? new Date() : null;
 
     const baseSlug = slugify(title, 'travel');
@@ -173,7 +173,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { title, location, notes, mediaItems, lat, lng, visitDate, publish } = req.body;
+    const { title, location, notes, mediaItems, lat, lng, post_date, publish } = req.body;
     // title guaranteed present by validate()
 
     const existing = await client.query(
@@ -184,7 +184,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
 
     const latVal      = lat  != null ? parseFloat(lat)  : null;
     const lngVal      = lng  != null ? parseFloat(lng)  : null;
-    const postDateVal  = visitDate || null;
+    const postDateVal  = post_date || null;
 
     let { published_at } = existing.rows[0];
     if (publish && !published_at) published_at = new Date();

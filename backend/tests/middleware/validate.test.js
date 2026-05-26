@@ -128,13 +128,13 @@ describe('UpdatePostSchema', () => {
 describe('CreateTravelSchema', () => {
   it('accepts valid input', () => {
     const { nextCalled } = runValidate(CreateTravelSchema, {
-      title: 'Paris Trip', visitDate: '2026-04-01',
+      title: 'Paris Trip', post_date: '2026-04-01',
     });
     expect(nextCalled).toBe(true);
   });
 
   it('rejects missing title', () => {
-    const { res } = runValidate(CreateTravelSchema, { visitDate: '2026-04-01' });
+    const { res } = runValidate(CreateTravelSchema, { post_date: '2026-04-01' });
     expect(res._status).toBe(400);
     expect(res._json.error).toMatch(/title/i);
   });

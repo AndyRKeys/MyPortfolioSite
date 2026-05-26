@@ -244,7 +244,7 @@ async function loadTravelForEdit(memory) {
         $('#travel-notes').val(full.notes || '');
         // Slice to YYYY-MM-DD — full ISO timestamps like 2026-05-04T00:00:00.000Z
         // are not accepted by <input type="date"> and silently clear the field (#93)
-        $('#travel-date').val(full.visit_date ? String(full.visit_date).slice(0, 10) : todayIso());
+        $('#travel-date').val(full.post_date ? String(full.post_date).slice(0, 10) : todayIso());
         $('#travel-lat').val(full.lat != null ? full.lat : '');
         $('#travel-lng').val(full.lng != null ? full.lng : '');
 
@@ -279,7 +279,7 @@ async function toggleTravelPublish(memory) {
                 location: memory.location || '',
                 notes: memory.notes || '',
                 // Slice to YYYY-MM-DD — list response returns full ISO timestamp (#93)
-                visitDate: memory.visit_date ? String(memory.visit_date).slice(0, 10) : null,
+                post_date: memory.post_date ? String(memory.post_date).slice(0, 10) : null,
                 lat: memory.lat,
                 lng: memory.lng,
                 publish: !memory.published_at,
@@ -573,7 +573,7 @@ function initTravelForm() {
                 title,
                 location: $('#travel-location').val().trim(),
                 notes: $('#travel-notes').val().trim(),
-                visitDate: $('#travel-date').val() || null,
+                post_date: $('#travel-date').val() || null,
                 mediaItems,
                 lat: $('#travel-lat').val(),
                 lng: $('#travel-lng').val(),
