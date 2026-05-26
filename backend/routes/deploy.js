@@ -64,6 +64,7 @@ router.get('/status', authenticate, async (req, res) => {
 
     const behind = parseInt(behindRaw.trim(), 10) || 0;
     res.json({
+      env:       DEPLOY_ENV,
       branch:    branch.trim(),
       head:      { sha: fullSha.trim().slice(0, 7), fullSha: fullSha.trim(), message: message.trim(), date: date.trim() },
       behind,

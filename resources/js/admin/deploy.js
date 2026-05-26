@@ -2,6 +2,8 @@ import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
 
 export function initDeploy() {
+    let deployEnv = 'prod'; // fallback until status loads
+
     const fetchBtn        = document.getElementById('fetch-btn');
     const deployBtn       = document.getElementById('deploy-btn');
     const rollbackBtn     = document.getElementById('rollback-btn');
@@ -27,6 +29,7 @@ export function initDeploy() {
     }
 
     function renderStatus(s) {
+        if (s.env) deployEnv = s.env;
         const badge = s.upToDate
             ? '<span style="color:var(--color-success)">✓ Up to date</span>'
             : `<span style="color:var(--color-error)">↓ ${s.behind} commit${s.behind !== 1 ? 's' : ''} behind</span>`;
@@ -151,7 +154,7 @@ export function initDeploy() {
     });
 
     deployBtn.addEventListener('click', async () => {
-        if (!confirm('Deploy latest main to production?\n\nThe backend will restart briefly.')) return;
+        if (!confirm(`Deploy latest to ${deployEnv}?\n\nThe backend will restart briefly.`)) return;
         setMessage('');
         try {
             await runStream('POST', '/deploy/');
