@@ -322,7 +322,7 @@ seed_item "Travel: London, UK (published)" "/travel" <<'JSON'
   "notes": "## First trip to London\n\nSpent a long weekend exploring South Bank, Borough Market, and Shoreditch. The city is enormous — you could spend a month here and still find new streets.\n\nHighlights:\n- Borough Market on a Saturday morning\n- Tate Modern\n- Walking across Millennium Bridge at dusk\n\nThe weather was surprisingly decent for April.",
   "lat": 51.5074,
   "lng": -0.1278,
-  "visitDate": "2025-04-12",
+  "post_date": "2025-04-12",
   "publish": true
 }
 JSON
@@ -334,7 +334,7 @@ seed_item "Travel: Paris, France (published)" "/travel" <<'JSON'
   "notes": "## City of light\n\nTook the Eurostar for a 48-hour trip. Spent most of the time in Le Marais and Saint-Germain rather than doing the tourist circuit.\n\nHighlights:\n- Musée d'Orsay — worth every minute of the queue\n- Coffee and a croque-monsieur at a corner café\n- Walking the Canal Saint-Martin at sunset\n\nWould go back for a full week.",
   "lat": 48.8566,
   "lng": 2.3522,
-  "visitDate": "2025-06-20",
+  "post_date": "2025-06-20",
   "publish": true
 }
 JSON
@@ -346,7 +346,7 @@ seed_item "Travel: Amsterdam, Netherlands (published)" "/travel" <<'JSON'
   "notes": "## Two wheels, one city\n\nRented a bike on day one and barely put it down. Amsterdam makes total sense when you're cycling — the canal rings become a map in your head.\n\nHighlights:\n- Rijksmuseum\n- Vondelpark on a sunny afternoon\n- Cycling out to the Jordaan district for dinner\n\nThe stroopwafels at the Albert Cuyp market were genuinely the best I've ever had.",
   "lat": 52.3676,
   "lng": 4.9041,
-  "visitDate": "2025-09-05",
+  "post_date": "2025-09-05",
   "publish": true
 }
 JSON
@@ -358,7 +358,7 @@ seed_item "Travel: Edinburgh, Scotland (published)" "/travel" <<'JSON'
   "notes": "## A city carved from stone\n\nEdinburgh has a gravity to it that other cities lack. The castle sits above everything, and the Royal Mile runs downhill from it through centuries of history.\n\nHighlights:\n- Edinburgh Castle at opening time before the crowds\n- Arthur's Seat — the hike is short but the views are long\n- A proper Scottish breakfast at a café off the Grassmarket\n\nWould strongly recommend visiting outside festival season if you want to actually move around.",
   "lat": 55.9533,
   "lng": -3.1883,
-  "visitDate": "2025-10-18",
+  "post_date": "2025-10-18",
   "publish": true
 }
 JSON
@@ -370,7 +370,7 @@ seed_item "Travel: Lisbon, Portugal (published)" "/travel" <<'JSON'
   "notes": "## Seven hills, one perfect city\n\nLisbon caught me off guard. I expected a smaller version of Barcelona and got something far more characterful — older, quieter in places, with an aesthetic built around azulejo tiles and wrought iron.\n\nHighlights:\n- Pastéis de Belém — the original custard tart\n- Tram 28 through Alfama (survived the crowds)\n- Sunset from Miradouro da Graça with a glass of vinho verde\n\nThe food is exceptional and the cost of living for visitors feels like a decade ago.",
   "lat": 38.7223,
   "lng": -9.1393,
-  "visitDate": "2026-02-14",
+  "post_date": "2026-02-14",
   "publish": true
 }
 JSON
@@ -382,7 +382,7 @@ seed_item "Travel: Guernsey, Channel Islands (published)" "/travel" <<'JSON'
   "notes": "## The island\n\nNot technically a trip, but worth documenting. Guernsey sits between England and France — part of neither, shaped by both.\n\nHighlights:\n- Cliff path walk from Petit Bot to Saints Bay\n- Castle Cornet at high tide\n- Guernsey Gâche from a local bakery\n\nThe light here in summer is different to the mainland — softer, more horizontal. I notice it every time I come back.",
   "lat": 49.4657,
   "lng": -2.5853,
-  "visitDate": "2026-03-28",
+  "post_date": "2026-03-28",
   "publish": true
 }
 JSON
@@ -394,7 +394,7 @@ seed_item "Travel: Barcelona, Spain (draft)" "/travel" <<'JSON'
   "notes": "## Draft — photos not uploaded yet\n\nSpent four days in Barcelona. Sagrada Família is genuinely extraordinary in person — no photograph prepares you for the scale.\n\nGothic Quarter is best explored without a map and without a destination.\n\n_TODO: add photos once uploaded_",
   "lat": 41.3851,
   "lng": 2.1734,
-  "visitDate": "2026-01-09",
+  "post_date": "2026-01-09",
   "publish": false
 }
 JSON
@@ -406,7 +406,7 @@ seed_item "Travel: Rome, Italy (draft)" "/travel" <<'JSON'
   "notes": "## Draft\n\nThree days in Rome. The Colosseum, the Forum, the Vatican. Overwhelmed in the best possible way.\n\n_TODO: write proper notes_",
   "lat": 41.9028,
   "lng": 12.4964,
-  "visitDate": "2025-12-03",
+  "post_date": "2025-12-03",
   "publish": false
 }
 JSON
