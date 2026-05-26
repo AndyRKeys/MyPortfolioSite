@@ -2,7 +2,7 @@
 # seed-dev-data.sh — Populate the dev-server database with realistic dummy data.
 #
 # Bash counterpart to Seed-DevData.ps1, targeting the Ubuntu dev-server stack
-# (docker-compose.yml — service name and port read from .env, default: backend:8080).
+# (docker-compose.yml — service name read from .env; requests go via nginx, default port: NGINX_PORT from .env else 3001).
 #
 # Inserts:
 #   - 5 published blog posts, 3 drafts
@@ -19,7 +19,7 @@
 # Overridable via environment:
 #   COMPOSE_FILE  (default: docker-compose.yml)
 #   BACKEND_SVC   (default: BACKEND_SERVICE from .env, else backend)
-#   BASE_URL      (default: http://localhost:<PORT from .env>, else http://localhost:8080)
+#   BASE_URL      (default: http://localhost:<NGINX_PORT from .env>, else http://localhost:3001)
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
@@ -29,13 +29,14 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 # Read BACKEND_SERVICE and PORT from .env if present (set by compose unification).
 # Explicit env vars always win; .env is the fallback; then safe built-in defaults.
 _env_backend=""
-_env_port=""
+_env_nginx_port=""
 if [ -f ".env" ]; then
   _env_backend=$(grep -m1 '^BACKEND_SERVICE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
-  _env_port=$(grep -m1 '^PORT=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+  _env_nginx_port=$(grep -m1 '^NGINX_PORT=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
 fi
 BACKEND_SVC="${BACKEND_SVC:-${_env_backend:-backend}}"
-_default_port="${_env_port:-8080}"
+# Use the nginx-facing port (host-exposed) not PORT (backend internal port, not exposed on host).
+_default_port="${_env_nginx_port:-3001}"
 BASE_URL="${BASE_URL:-http://localhost:${_default_port}}"
 TOKEN="${TOKEN:-}"
 
