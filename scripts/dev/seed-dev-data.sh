@@ -20,7 +20,7 @@
 # Overridable via environment variable (all have .env / built-in fallbacks):
 #   COMPOSE_FILE  (default: COMPOSE_FILE from .env, else docker-compose.yml)
 #   BACKEND_SVC   (default: BACKEND_SERVICE from .env, else backend)
-#   BASE_URL      (default: FRONTEND_URL from .env, else https://localhost:<NGINX_PORT>)
+#   BASE_URL      (default: https://localhost:<NGINX_PORT from .env, else 3001>)
 #   TOKEN         (default: auto-generated from the running container's JWT_SECRET)
 
 set -uo pipefail
@@ -29,20 +29,18 @@ set -uo pipefail
 _env_compose=""
 _env_backend=""
 _env_nginx_port=""
-_env_frontend_url=""
 if [ -f ".env" ]; then
   _env_compose=$(grep -m1 '^COMPOSE_FILE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
   _env_backend=$(grep -m1 '^BACKEND_SERVICE=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
   _env_nginx_port=$(grep -m1 '^NGINX_PORT=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
-  _env_frontend_url=$(grep -m1 '^FRONTEND_URL=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
 fi
 
 COMPOSE_FILE="${COMPOSE_FILE:-${_env_compose:-docker-compose.yml}}"
 BACKEND_SVC="${BACKEND_SVC:-${_env_backend:-backend}}"
-# FRONTEND_URL is the canonical public-facing origin (https://host:port).
-# Fall back to constructing from NGINX_PORT if not set.
+# Use localhost + NGINX_PORT — the script runs on the server where the external
+# hostname (FRONTEND_URL / dev.andykeys.me) does not resolve via DNS.
 _default_port="${_env_nginx_port:-3001}"
-BASE_URL="${BASE_URL:-${_env_frontend_url:-https://localhost:${_default_port}}}"
+BASE_URL="${BASE_URL:-https://localhost:${_default_port}}"
 TOKEN="${TOKEN:-}"
 
 pass=0
@@ -107,9 +105,10 @@ fi
 
 # seed_item LABEL ENDPOINT  (JSON body read from stdin)
 seed_item() {
-  local label="$1" endpoint="$2" body code
+  local label="$1" endpoint="$2" body code _resp
   body=$(cat)
-  code=$(curl -sk -o /tmp/seed_resp.$$ -w '%{http_code}' \
+  _resp=$(mktemp)
+  code=$(curl -sk -o "$_resp" -w '%{http_code}' \
     -X POST \
     -H "Authorization: Bearer ${TOKEN}" \
     -H 'Content-Type: application/json' \
@@ -119,10 +118,10 @@ seed_item() {
     echo "  [OK]   $label"
     pass=$((pass + 1))
   else
-    echo "  [FAIL] $label (HTTP ${code}) — $(tr -d '\n' < /tmp/seed_resp.$$ 2>/dev/null)"
+    echo "  [FAIL] $label (HTTP ${code}) — $(tr -d '\n' < "$_resp" 2>/dev/null)"
     fail=$((fail + 1))
   fi
-  rm -f /tmp/seed_resp.$$
+  rm -f "$_resp"
   return 0
 }
 
