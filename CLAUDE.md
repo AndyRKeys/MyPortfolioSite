@@ -269,6 +269,13 @@ const result = await pool.query('SELECT * FROM posts WHERE id = $1', [postId]);
 const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
+**Variables over hardcoding:**
+- Name magic numbers and strings as constants — no bare `3001`, `8080`, `7d`, `50`, `/api/auth` sprinkled through logic.
+- Paths, ports, timeouts, limits, and URLs belong in env vars (`.env`) or named constants at the top of the file.
+- Test data (URLs, credentials, labels, step counts) duplicated between scripts and source must live in one place.
+- Shell scripts: define repeated values as local variables at the top of the function; never paste the same string twice.
+- When adding a new configurable value, check whether it already exists in `.env.*.example` before inventing a new one.
+
 **DRY principle (Don't Repeat Yourself):**
 - **Frontend:** Reuse utility functions from `resources/js/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
 - **Backend:** Extract common logic into middleware or route helpers. Don't repeat validation, error handling, or CORS logic.
