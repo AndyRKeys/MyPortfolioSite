@@ -169,6 +169,10 @@ try {
   await page.goto(`${baseUrl}/admin/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.evaluate(token => localStorage.setItem('adminToken', token), testToken);
 
+  // Discard errors from the unauthenticated first load (401s from init calls
+  // that fired before the token was in localStorage — expected, not a bug).
+  consoleErrors.length = 0;
+
   // Reload as authenticated.
   await page.goto(`${baseUrl}/admin/`, { waitUntil: 'networkidle0', timeout: 30000 });
 
