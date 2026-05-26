@@ -7,9 +7,9 @@ import { spawnStream, spawnPromise } from '../utils/shell.js';
 
 const router   = Router();
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/prod-deploy.sh');
-// Deploy log lives in $HOME on the Pi — falls back to repo root in dev
-const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, 'deploy.log');
+const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
+// deploy.sh writes to $HOME/prod-deploy.log
+const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, 'prod-deploy.log');
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -96,12 +96,17 @@ router.get('/history', authenticate, async (req, res) => {
     let deployLog = [];
     try {
       const raw = await fs.readFile(DEPLOY_LOG, 'utf8');
+      // Strip ANSI escape codes, then parse [YYYY-MM-DD HH:MM:SS] <message>
+      // eslint-disable-next-line no-control-regex
+      const stripAnsi = s => s.replace(/\x1b\[[0-9;]*m/g, '');
       deployLog = raw.trim().split('\n').filter(Boolean)
         .slice(-20).reverse()
         .map(l => {
-          const parts = l.split(' ');
-          return { ts: parts[0], action: parts[1], detail: parts.slice(2).join(' ') };
-        });
+          const clean = stripAnsi(l).trim();
+          const m = clean.match(/^\[([^\]]+)\]\s*(.*)$/);
+          return m ? { ts: m[1], detail: m[2] } : { ts: '', detail: clean };
+        })
+        .filter(e => e.detail); // skip blank separator lines
     } catch { /* log file may not exist yet */ }
 
     res.json({ commits, deployLog });
@@ -123,7 +128,7 @@ router.post('/', authenticate, async (req, res) => {
   if (!await scriptExists()) {
     return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
   }
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', 'prod'], { cwd: REPO_DIR }));
 });
 
 // ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
@@ -146,7 +151,7 @@ router.post('/rollback', authenticate, async (req, res) => {
     return res.status(400).json({ error: 'Deploy script not found — this panel only works in production' });
   }
 
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--rollback', sha], { cwd: REPO_DIR }));
+  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', 'prod', '--rollback', sha], { cwd: REPO_DIR }));
 });
 
 export default router;

@@ -43,7 +43,7 @@ export function initDeploy() {
 
     function renderLog(data) {
         const rows = data.deployLog.map(e =>
-            `<p style="font-size:0.85rem;font-family:monospace">${escapeHtml(e.ts)} <strong>${escapeHtml(e.action)}</strong> ${escapeHtml(e.detail)}</p>`
+            `<p style="font-size:0.85rem;font-family:monospace">${escapeHtml(e.ts ? '[' + e.ts + '] ' : '')}${escapeHtml(e.detail)}</p>`
         ).join('');
         logList.innerHTML = rows || '<p class="hint">No deploy log entries yet.</p>';
 
