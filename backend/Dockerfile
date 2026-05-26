@@ -11,7 +11,8 @@ RUN apk add --no-cache \
   freetype \
   harfbuzz \
   ttf-freefont \
-  libstdc++
+  libstdc++ \
+  git
 
 WORKDIR /app
 
