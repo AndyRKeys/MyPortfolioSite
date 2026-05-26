@@ -217,6 +217,19 @@ extra_env_checks() {
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-lib.sh"
 
+# ── Exit trap — always print deploy report ────────────────────────────────────
+# ddie() calls exit 1 directly, bypassing the report block at the bottom.
+# This trap ensures the boxed report is always printed, including on unexpected
+# exits from set -e, so failures are never silent.
+_DEPLOY_REPORT_PRINTED=0
+_deploy_exit_handler() {
+  if [ "$_DEPLOY_REPORT_PRINTED" = "0" ]; then
+    print_deploy_report "${DEPLOY_ENV:-unknown} — FAILED"
+    print_deploy_status "FAILED" "${DEPLOY_ENV:-unknown}"
+  fi
+}
+trap '_deploy_exit_handler' EXIT
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 init_log_banner "${DEPLOY_ENV^} Deploy"
@@ -424,6 +437,7 @@ run_regression_tests
 dinfo "Container status:"
 docker compose -f "$COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
 
+_DEPLOY_REPORT_PRINTED=1  # suppress exit trap — we're printing explicitly below
 if [ "$DEPLOY_ROLLED_BACK" = "1" ]; then
   print_deploy_report "$DEPLOY_ENV — ROLLED BACK"
   print_deploy_status "ROLLED BACK" "$DEPLOY_ENV"

@@ -220,13 +220,13 @@ try {
     await page.$eval('#post-body', el => { el.value = 'E2E test content — safe to delete.'; });
 
     await page.click('#post-save-btn');
-    // Wait for the success message AND the list to contain the new post.
-    // loadAll() runs after the save so both happen sequentially — 15s covers both.
-    await waitForText(page, '#post-message', 'Draft saved', 15000);
+    // Wait for the post to appear in the list — loadAll() runs after save.
+    // Don't wait on #post-message: clearForm() calls setMessage('') synchronously
+    // right after setMessage('Draft saved.'), so the text is never visible to poll.
     await page.waitForFunction(
       (title) => Array.from(document.querySelectorAll('#posts-admin-list strong'))
         .some(el => el.textContent.trim() === title),
-      { timeout: 10000 },
+      { timeout: 15000 },
       TEST_TITLE,
     );
     interact('Create blog post — appears in list', true);
@@ -269,12 +269,11 @@ try {
     await page.$eval('#travel-notes', el => { el.value = 'E2E test memory — safe to delete.'; });
 
     await page.click('#travel-save-btn');
-    // Same pattern as posts: wait for message then list — 15s covers save + loadAll.
-    await waitForText(page, '#travel-message', 'Draft saved', 15000);
+    // Same pattern as posts: wait for item in list, not the message.
     await page.waitForFunction(
       (title) => Array.from(document.querySelectorAll('#saved-memories-list strong'))
         .some(el => el.textContent.trim() === title),
-      { timeout: 10000 },
+      { timeout: 15000 },
       TEST_TRAVEL,
     );
     interact('Create travel memory — appears in list', true);

@@ -1564,7 +1564,8 @@ check_admin_e2e_csp() {
   else
     dstatus admin-e2e-csp suite=frontend status=failed interactions="${interactions:-0}" violations="${violations:-0}"
     echo "$test_output" | tee -a "$LOG_FILE"
-    ddie "CSP violations detected in admin interactions — update nginx-security-headers.conf. Deploy rolled back."
+    _do_rollback "CSP violations detected in admin interactions"
+    ddie "Deploy failed: CSP violations detected — update nginx-security-headers.conf. See log at $LOG_FILE"
   fi
 }
 
@@ -1593,7 +1594,8 @@ check_admin_e2e() {
   else
     dstatus admin-e2e suite=frontend status=failed smoke="${smoke:-?}" interactions="${interactions:-?}"
     echo "$test_output" | tee -a "$LOG_FILE"
-    ddie "Admin E2E tests failed — admin panel is non-functional. Deploy rolled back."
+    _do_rollback "admin E2E tests failed — admin panel non-functional"
+    ddie "Deploy failed: admin E2E tests did not pass. See log at $LOG_FILE"
   fi
 }
 
