@@ -8,8 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+---
+
+## Release 2026-05-26
+
 ### Added
-- Admin E2E test suite (#175): `test-admin-e2e.js` runs full authenticated Puppeteer CRUD flows (blog create/delete, travel create/delete, deploy panel smoke) on every deploy. Hard-fail on assertion error (triggers rollback); warn-only if Puppeteer fails to launch. Test records prefixed `[E2E]` are cleaned up at start and end of each run.
+- Admin CRUD E2E test suite (#175): `test-admin-e2e.js` runs full authenticated Puppeteer CRUD flows (blog create/delete, travel create/delete, deploy panel smoke) on every deploy. Hard-fail on assertion error (triggers rollback); warn-only if Puppeteer fails to launch. Test records prefixed `[E2E]` are cleaned up at start and end of each run.
 
 ### Changed
 - Admin JS modularised (#175): 1,173-line `admin.js` monolith split into eight focused modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point that imports and initialises each module.
