@@ -6,7 +6,7 @@
 # COMPOSE_FILE). Explicit env var overrides always win.
 #
 # Inserts:
-#   - 14 published blog posts, 3 drafts
+#   - 15 published blog posts, 3 drafts
 #   - 6 published travel memories (with coordinates), 2 drafts
 #
 # Safe to run multiple times. To wipe and re-seed cleanly:
@@ -303,6 +303,15 @@ seed_item "Blog: Draft — Rate Limiting Without Redis" "/api/posts" <<'JSON'
   "body_markdown": "## The requirement\n\nPrevent spam on the contact form without adding infrastructure.\n\n## The approach\n\nA `rate_limits` table in Postgres with one row per IP. An upsert increments the counter within the current time window and resets it when the window expires.\n\n_TODO: add code snippet_",
   "post_date": "2026-05-02",
   "publish": false
+}
+JSON
+
+seed_item "Blog: One Deploy Script for Dev and Prod (published)" "/api/posts" <<'JSON'
+{
+  "title": "One Deploy Script for Dev and Prod",
+  "body_markdown": "# One Deploy Script for Dev and Prod\n\nFor a while the project had two deploy scripts: `dev-deploy.sh` and `prod-deploy.sh`. They started as copies of each other and drifted. A fix applied to one would quietly not exist in the other — the kind of bug that only surfaces when you need the other environment most.\n\n## The consolidation\n\nBoth scripts merged into a single `deploy.sh --env dev|prod`. Environment-specific behaviour is gated by feature flags inside one file:\n\n```bash\nbash scripts/deploy/deploy.sh --env dev   # deploys the dev stack\nbash scripts/deploy/deploy.sh --env prod  # deploys the prod stack\n```\n\nThe PowerShell wrappers (`dev-deploy.ps1`, `prod-deploy.ps1`) became thin pass-throughs — they SSH into the server and call the unified script with the right flag.\n\n## What the script does\n\nBoth environments share the same phases:\n\n1. **Validate** — check required env vars, reject an IP in the WebAuthn RP ID\n2. **Update** — pull the target branch, verify the checkout\n3. **Build** — `docker compose build`, prune old images\n4. **Deploy** — `docker compose up -d`, wait for health check\n5. **Test** — run the Vitest suite, CSP scan, E2E CRUD tests, regression suite\n6. **Report** — structured summary with pass/fail counts per phase\n7. **Rollback** — if any hard-fail phase errors, revert to the previous commit and redeploy\n\nDev gets an extra step: generate self-signed certs if they don't exist (prod uses Let's Encrypt).\n\n## Why it matters\n\nTwo codebases means two places to maintain, two places to forget, two sets of bugs. One script with a flag means fixes apply everywhere. The deploy report format is now identical for both environments — the same CI checks, the same structured output, the same rollback logic.\n\n## The payoff\n\nSince the consolidation, deploys to both environments have been smooth. The test suite runs identically on dev and prod, which means regressions surface on dev before they ever reach production.",
+  "post_date": "2026-05-25",
+  "publish": true
 }
 JSON
 
