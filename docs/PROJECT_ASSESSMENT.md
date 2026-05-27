@@ -1,6 +1,6 @@
 # Project Assessment
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-27_
 
 This document is a frank self-assessment of the current state of MyPortfolioSite — what is working well, what is fragile, where technical debt lives, and what would benefit most from attention. It is written to be honest rather than flattering.
 
@@ -26,7 +26,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **Production is containerised (migration complete).** Both dev and prod now run on Docker Compose, closing the structural dev/prod gap that previously caused "works locally, breaks in prod" risk. The original Raspberry Pi + PM2 setup has been retired (#165/#171/#179); residual risk is now operational (script-driven deploys — see ROADMAP §3.5) rather than architectural.
 - **No database backups.** There is no automated backup of the PostgreSQL data on the server. If the disk dies or the server is lost, all blog posts, travel entries, and user data are gone permanently.
 - **Uploads are stored on the server filesystem.** User-uploaded images (`/uploads`) live directly on the server with no backup, no CDN, and no size/type validation beyond what multer provides. This is fine for now but will become a problem as content grows.
-- **No staging environment.** `dev` branch is tested locally in Docker but there is no equivalent of the prod environment to test against before merging to `main`. The dual-environment work in the roadmap (Issues #151/#159) directly addresses this.
+- ✅ **Staging environment now live.** A dev stack runs permanently on `ak-home-server` at `dev.andykeys.me:3001` (LAN-only, self-signed TLS). The `dev` branch is deployed there after every merge, giving real-hardware, real-auth testing before anything reaches `main`. (Dual-env implementation #151/#159 shipped ~Release 2026-05-18.)
 - **The schema has no migration versioning.** Re-running `schema.sql` is safe but there is no record of what version the live database is at. As the schema grows, this becomes harder to manage without a tool like `node-postgres-migrate` or Flyway.
 
 **Overall architecture rating: Amber.** Solid for a personal project at this stage; the single-server + no-backup + no-staging combination is the biggest real risk.
@@ -47,7 +47,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 - **`admin/index.html` JS is now modularised (#175).** The admin panel JS has been split into per-feature modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point. `admin/travel.js` remains the largest module (495 lines) and warrants care when modifying.
 - **`index.html` is also large (23KB).** The main page has grown by accretion. Some of this is unavoidable (it is a portfolio page with many sections), but it is worth periodically reviewing whether JavaScript logic belongs in a separate module.
-- **Legacy jQuery is still present.** Some files use jQuery for DOM manipulation alongside vanilla ES modules. The two styles coexist but this creates inconsistency — a new agent reading the codebase may not know which pattern to follow in a given file. In practice, this creates genuine friction: agents often hesitate between patterns and may make inconsistent choices. `docs/AI.md` addresses this ("jQuery only for legacy compatibility") but the rule doesn't fully resolve the uncertainty without cleaning up the legacy code itself.
+- **Legacy jQuery partially removed.** The admin panel no longer uses jQuery (#176, Release 2026-05-26) — all admin JS is now vanilla DOM APIs and `fetch`. jQuery is still present in `script.js`, `blog.js`, and `travel-post.js`. The jQuery/vanilla coexistence creates inconsistency for agents working on those files; `docs/AI.md` documents the rule ("jQuery only for legacy compatibility") but the uncertainty won't fully resolve until those files are migrated too.
 - **`backend/routes/auth.js` is the most complex file at 12KB.** WebAuthn + JWT + magic links in one file is a lot of state to hold. It works correctly and is tested, but it is the highest-risk file to modify. Agents should treat it with extra caution and read it fully before any changes.
 - **Frontend test coverage is essentially zero.** The Vitest suite covers backend utilities and some API routes, but there are no frontend tests at all. UI regressions are caught manually via smoke test scripts (`Test-PRN.ps1`), which is better than nothing, but fragile for a codebase growing in complexity. Adding frontend tests (e.g., Playwright) would help but requires a significant architectural decision — no build step means test infrastructure needs careful thought.
 - **`test-results/` is committed to the repo.** Test output artefacts should not be in version control. This is minor but messy.
@@ -138,13 +138,13 @@ This is an unusual section for a project assessment, but it is directly relevant
 
 ### Where agent friction exists
 
-- **No architecture diagram.** There is no visual representation of how the pieces fit together. Agents (and new humans) must construct a mental model from reading code. A simple `docs/ARCHITECTURE.md` with an ASCII or Mermaid diagram of Nginx → Node → PostgreSQL and the file structure would reduce onboarding time.
+- ✅ **Architecture diagram now exists.** `docs/ARCHITECTURE.md` was added in the project structure reorg (#308). It covers the Nginx → Node → PostgreSQL flow, the file tree, request lifecycle, ADR trade-offs, and critical code paths. Keep it current when the structure changes meaningfully.
 - **Admin JS is now modularised (#175 — shipped).** `resources/js/admin/` contains per-feature modules (`posts.js`, `travel.js`, `deploy.js`, etc.) with `admin.js` as a thin entry point. Agents can now target the correct module directly rather than reading an 18KB monolith. This was a significant friction point; it is now substantially resolved.
 - **Implicit server-specific knowledge.** Several operational facts (Compose service names, where Nginx config files live on the server, how `ddclient` is configured, where the Let's Encrypt certs are) were previously undocumented. This is now captured in `docs/INFRASTRUCTURE.md` and `docs/TERMINOLOGY.md`; keep them current so agents can diagnose production issues without asking the owner for facts.
 - **Context window pressure in long sessions.** The doc suite is thorough but also long. In extended sessions, earlier context (especially specific file contents read at the start) can be lost. This is a fundamental LLM constraint, not a fixable problem, but it means breaking work into smaller issues (which the project already does well) is especially important here.
 - **No structured way for agents to flag "I am not sure about this."** When an agent is uncertain, it either proceeds (risky) or asks (slows things down). A convention like "if in doubt, raise a GitHub issue with the `needs-decision` label and stop" would help, but this is aspirational rather than current practice.
 
-**Overall AI-readiness rating: Amber-Green.** The admin JS modularisation (#175) removes the single biggest practical friction point — agents can now target individual feature modules rather than reasoning about an 18KB monolith. Remaining friction: no architecture diagram, jQuery/vanilla JS coexistence, and context window pressure in long sessions. These are real but not session-blockers.
+**Overall AI-readiness rating: Amber-Green.** The admin JS modularisation (#175) and the addition of `docs/ARCHITECTURE.md` (#308) have removed the two biggest practical friction points. Remaining friction: jQuery/vanilla JS coexistence in non-admin files (`script.js`, `blog.js`, `travel-post.js`), and context window pressure in long sessions. These are real but not session-blockers.
 
 ---
 
@@ -178,6 +178,7 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-27** — Post Release 2026-05-26 audit. §1: staging environment marked resolved (dev server live at dev.andykeys.me:3001). §2: jQuery note updated — removed from admin (#176), still present in blog/travel/script. §6: architecture diagram friction point marked resolved (docs/ARCHITECTURE.md added #308); AI-readiness rating summary updated to reflect both resolutions.
 - **2026-05-26** — Admin JS modularisation (#175) shipped. Updated §2 codebase health (admin monolith resolved), §6 agent friction (admin friction substantially resolved), AI-readiness rating upgraded Amber → Amber-Green. High-risk table updated to reflect modular structure.
 - **2026-05-19** — Post Release 2026-05-18 audit. Marked as resolved: health endpoint (#279), structured logging (#153), rate limiting on auth endpoints (#237), CSP/security headers (#210/#211), deploy output/verification (#276/#263), WebAuthn registration guard (#274), Outlook OAuth2 email (#241). Updated §4 (reliability/observability) rating from Red-Amber to Amber. Updated §5 (security) rating from Amber to Amber-Green. §3 pain points revised to reflect deploy improvements. §7 improvement opportunities #3 and #4 marked complete.
 - **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern. Removed the "SSH from Windows is not frictionless" DX pain point — key auth has stabilised and is now reliable.

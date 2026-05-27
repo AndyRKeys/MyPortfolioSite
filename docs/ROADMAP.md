@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-27_
 
 ## 1. Vision and goals
 
@@ -20,7 +20,7 @@ The goals for the project are:
 - Node/Express backend serving static HTML/CSS/JS pages.
 - PostgreSQL database backing blog/travel content and admin features.
 - Hosted on an Ubuntu Server (`ak-home-server`) — Docker Compose + Nginx reverse proxy + Let’s Encrypt TLS. (Migrated off the original Raspberry Pi; see §5.1.)
-- Single production environment; dev work is mostly local.
+- Dual-environment hosting live: prod on `main` (public, port 443) and dev on `dev` branch (LAN-only, `dev.andykeys.me:3001`), both on `ak-home-server`.
 
 **Features**
 
@@ -31,26 +31,22 @@ The goals for the project are:
 
 **Pain points**
 
-- Deployments are script-driven and improving but not yet fully automated — unified deploy script and compose base are the next step (#300/#301).
+- ✅ Unified deploy script shipped (#300, Release 2026-05-25): `deploy.sh --env dev|prod` replaces separate dev/prod scripts. Compose base unification (#301) still outstanding.
 - Single-server resource ceiling limits what can run concurrently (especially with future AI experiments).
 - No database backups or external alerting — the biggest remaining operational risk.
 - Log aggregation requires SSH; no admin-surfaced view yet.
 
 ## 3. Near-term priorities
 
-> **Sequencing principle (ops first):** Deployment reliability, logging, and the automated test gate take precedence over new feature work (including AI Lab v1, §3.2). Recent sessions have lost significant time to deployment bugs (orphan containers, stale code, env-var gaps) and to debugging blind without structured logs. Until deploys are boringly reliable and observable, ops/deploy/logging items are pulled ahead of feature delivery. Concretely the near-term order is: **3.5 (deploy reliability & logging) → 3.4 (test gate) → 3.1 (dual-env) → 3.3 (QoL) → 3.2 (AI Lab v1)**.
+> **Sequencing principle (ops first):** Deployment reliability, logging, and the automated test gate take precedence over new feature work (including AI Lab v1, §3.2). Recent sessions have lost significant time to deployment bugs. The original near-term order was: **3.5 → 3.4 → 3.1 → 3.3 → 3.2**. §3.4 (test gate), §3.5 (deploy reliability), and §3.1 (dual-env) are now all shipped. Current priority is **3.3 (QoL) → 3.2 (AI Lab v1)**, with medium-term observability work (§4.2) and backup hardening (§4.5) remaining risks.
 
-### 3.1 Dual-environment hosting (LAN dev + public prod)
+### 3.1 ✅ Dual-environment hosting — SHIPPED (~Release 2026-05-18)
 
-- Implement the dual-environment setup described in Issue #151 / #159:
-  - Production on `main` via Nginx → Docker service bound to loopback.
-  - Dev/staging on `dev` via LAN-only port on the server (`ak-home-server`).
-- Extend the admin console to:
-  - Show status for both environments.
-  - Trigger “Pull & Restart” for prod and dev separately.
-  - Start/stop the dev environment for resource management.
+Both environments run on `ak-home-server`:
+- Production on `main` — public, port 443, Let's Encrypt TLS.
+- Dev/staging on `dev` branch — LAN-only, `dev.andykeys.me:3001`, self-signed TLS.
 
-**Outcome:** Safe place to test work-in-progress on real hardware while keeping production stable.
+The admin deploy console triggers deploys for the active environment. Admin console multi-environment status view (#151 stretch goal) is still a medium-term item in §4.2.
 
 ### 3.2 AI Lab v1
 
@@ -80,7 +76,7 @@ Vitest runs as part of the deploy pipeline rather than on GitHub Actions (GitHub
 
 GitHub Actions CI (`.github/workflows/ci.yml`) exists but is disabled — it's kept as a placeholder for if/when a faster setup is viable.
 
-**Remaining:** The full CD half (versioned image build, GHCR, self-hosted runner) is still in §4.4 and sequences after dual-environment hosting (3.1).
+**Remaining:** The full CD half (versioned image build, GHCR, self-hosted runner) is still in §4.4. Dual-environment hosting (3.1) is now live, so that sequencing dependency is cleared.
 
 ### 3.5 ✅ Deployment reliability & structured logging — SHIPPED (Release 2026-05-18)
 
@@ -92,7 +88,7 @@ The critical blockers from this section are resolved:
 
 **What remains (promoted to §4.2 / new issues):**
 
-- Unify dev/prod deploy scripts with environment-aware feature flags to prevent config drift (#300).
+- ✅ Unified dev/prod deploy script shipped (#300, Release 2026-05-25): `deploy.sh --env dev|prod`.
 - Unify docker-compose files with a shared base (#301).
 - Pre-flight port check and nginx config validation in the deploy pipeline (#302/#303).
 - Outlook OAuth2 token validity pre-flight at startup (#304).
@@ -230,7 +226,8 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 
 - **Server-side rendering for blog/travel** — current client-side Markdown rendering degrades SEO; a minimal SSR or build-time pre-render (still no heavy framework) would help discoverability.
 - ✅ **Done — `admin.js` modularised (#175)** — admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
-- **Continue modularisation** — #178 (HTML feature folders) and jQuery removal (#176) are the natural next steps.
+- ✅ **Done — jQuery removed from admin (#176)** — all admin JS now uses vanilla DOM APIs and `fetch`. jQuery still present in `script.js`, `blog.js`, `travel-post.js` — full removal is a follow-on.
+- **Continue modularisation** — #178 (HTML feature folders) and jQuery removal from non-admin files are the natural next steps.
 - **API versioning** (`/api/v1`) — cheap to add now, painful to retrofit later if the AI Lab API grows.
 - **Typed backend** — incremental TypeScript or JSDoc-typed modules on the highest-risk files (`auth.js`, `deploy.js`) for safety without a build step everywhere.
 
@@ -264,6 +261,8 @@ Speculative, not committed — captured so good ideas are not lost. To be promot
 
 ## 7. Change log
 
+- **2026-05-27** — Post Release 2026-05-26 audit. §2 current state updated (dual-env live, #300 shipped). §3 sequencing note updated (3.1 and 3.5 both done). §3.1 marked ✅ shipped. §3.4 §3.5 remaining: #300 marked done. §5.5: jQuery removal (#176) marked ✅ done. §3.4 remaining note clarified.
+- **2026-05-25** — Release 2026-05-25: unified deploy script (#300) shipped; frontend error logger (#333/#334/#336), backend env validation (#357), CSP scanning (#341/#342), dev hostname redirect (#358), Vitest coverage (#335), project structure reorg (#307).
 - **2026-05-19** – Post Release 2026-05-18 update. §3.4 and §3.5 marked as shipped. §2 pain points revised. §4.5 cross-refs updated to reflect shipped items (#236/#237/#229). New outstanding items from deploy session added to §3.5 remainder (#300/#301/#302/#303/#304).
 - **2026-05-07** – Initial roadmap drafting, based on issues #15, #151, #159 and current architecture.
 - **2026-05-15** – Added §4.4 Professionalised CI/CD pipeline (GitHub Actions + GHCR + self-hosted runner), prompted by the orphan-container deploy incident (#253).
