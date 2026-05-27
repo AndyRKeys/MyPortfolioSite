@@ -6,7 +6,7 @@
 # COMPOSE_FILE). Explicit env var overrides always win.
 #
 # Inserts:
-#   - 5 published blog posts, 3 drafts
+#   - 15 published blog posts, 3 drafts
 #   - 6 published travel memories (with coordinates), 2 drafts
 #
 # Safe to run multiple times. To wipe and re-seed cleanly:
@@ -303,6 +303,24 @@ seed_item "Blog: Draft — Rate Limiting Without Redis" "/api/posts" <<'JSON'
   "body_markdown": "## The requirement\n\nPrevent spam on the contact form without adding infrastructure.\n\n## The approach\n\nA `rate_limits` table in Postgres with one row per IP. An upsert increments the counter within the current time window and resets it when the window expires.\n\n_TODO: add code snippet_",
   "post_date": "2026-05-02",
   "publish": false
+}
+JSON
+
+seed_item "Blog: One Deploy Script for Dev and Prod (published)" "/api/posts" <<'JSON'
+{
+  "title": "One Deploy Script for Dev and Prod",
+  "body_markdown": "# One Deploy Script for Dev and Prod\n\nFor a while the project had two deploy scripts: `dev-deploy.sh` and `prod-deploy.sh`. They started as copies of each other and drifted. A fix applied to one would quietly not exist in the other — the kind of bug that only surfaces when you need the other environment most.\n\n## The consolidation\n\nBoth scripts merged into a single `deploy.sh --env dev|prod`. Environment-specific behaviour is gated by feature flags inside one file:\n\n```bash\nbash scripts/deploy/deploy.sh --env dev   # deploys the dev stack\nbash scripts/deploy/deploy.sh --env prod  # deploys the prod stack\n```\n\nThe PowerShell wrappers (`dev-deploy.ps1`, `prod-deploy.ps1`) became thin pass-throughs — they SSH into the server and call the unified script with the right flag.\n\n## What the script does\n\nBoth environments share the same phases:\n\n1. **Validate** — check required env vars, reject an IP in the WebAuthn RP ID\n2. **Update** — pull the target branch, verify the checkout\n3. **Build** — `docker compose build`, prune old images\n4. **Deploy** — `docker compose up -d`, wait for health check\n5. **Test** — run the Vitest suite, CSP scan, E2E CRUD tests, regression suite\n6. **Report** — structured summary with pass/fail counts per phase\n7. **Rollback** — if any hard-fail phase errors, revert to the previous commit and redeploy\n\nDev gets an extra step: generate self-signed certs if they don't exist (prod uses Let's Encrypt).\n\n## Why it matters\n\nTwo codebases means two places to maintain, two places to forget, two sets of bugs. One script with a flag means fixes apply everywhere. The deploy report format is now identical for both environments — the same CI checks, the same structured output, the same rollback logic.\n\n## The payoff\n\nSince the consolidation, deploys to both environments have been smooth. The test suite runs identically on dev and prod, which means regressions surface on dev before they ever reach production.",
+  "post_date": "2026-05-25",
+  "publish": true
+}
+JSON
+
+seed_item "Blog: Splitting the Admin Panel into Modules (published)" "/api/posts" <<'JSON'
+{
+  "title": "Splitting the Admin Panel into Modules",
+  "body_markdown": "# Splitting the Admin Panel into Modules\n\nThe admin panel started as a single 1,173-line JavaScript file. It worked, but reasoning about it — and editing it without breaking something — took longer than it should. So I split it up.\n\n## What changed\n\n`admin.js` is now a thin entry point (~20 lines) that imports and initialises eight focused modules:\n\n| Module | Responsibility |\n|---|---|\n| `posts.js` | Blog post CRUD, draft/publish state |\n| `travel.js` | Travel memory CRUD, geocoding, EXIF, map |\n| `deploy.js` | Deployment console, rollback, log polling |\n| `cv.js` | CV upload and file browser |\n| `auth.js` | Session management, magic link |\n| `passkeys.js` | Register and remove passkeys |\n| `stats.js` | Site visit statistics |\n| `notes.js` | Private local notes |\n\nI also removed jQuery from the admin panel entirely — everything is now vanilla DOM APIs and `fetch`. No behaviour change, but one less dependency and no more framework ambiguity.\n\n## Why it matters\n\nWhen a file is 1,173 lines, an AI pair programmer has to load the whole thing to find the 20 lines relevant to a bug. With per-feature modules, a targeted edit stays targeted. It also makes it obvious where new functionality belongs.\n\n## The unified date field\n\nAs part of the same release I cleaned up a naming inconsistency that had been bothering me: the travel date was called `visit_date` in some places and `post_date` in others. It's now consistently `post_date` throughout — backend routes, middleware schemas, frontend JS, and tests.\n\n## Testing\n\nThe refactor shipped with a new Puppeteer E2E test (`test-admin-e2e.js`) that runs on every deploy: authenticated blog create/delete, travel create/delete, and a deploy panel smoke check. One false-failure edge case — 401 errors from the unauthenticated page load accumulating before the token was injected — took a single `consoleErrors.length = 0` to fix.\n\n## Takeaway\n\nSplitting a module is rarely urgent. But when it's done, the next change is noticeably easier.",
+  "post_date": "2026-05-26",
+  "publish": true
 }
 JSON
 
