@@ -214,12 +214,11 @@ As an example of how the system works end-to-end:
 - Better for AI-assisted development: code is immediately readable without build tool knowledge
 - Trade-off: larger file sizes on the wire (but Nginx handles gzipping)
 
-### Why vanilla JS + jQuery coexistence?
+### Why vanilla JS only?
 
-- Project migrated from jQuery to ES modules incrementally
-- Legacy jQuery code remains in some files for compatibility
-- New code uses vanilla ES modules
-- Trade-off: inconsistency creates friction; full migration (#176) is planned
+- jQuery fully removed (#176 admin panel, #385 public pages)
+- All JS is now vanilla ES modules — no global `$` dependency
+- Consistent DOM APIs throughout the codebase
 
 ### Why single `admin/index.html` instead of separate pages?
 

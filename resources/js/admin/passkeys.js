@@ -40,6 +40,11 @@ async function deletePasskey(id) {
         const res = await authFetch(`/auth/passkeys/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Delete failed');
         await loadPasskeys();
+        // Warn if the user has removed all passkeys — they can still sign in via magic link (#283)
+        const remaining = document.querySelectorAll('#passkey-list .passkey-row');
+        if (remaining.length === 0) {
+            setMessage('No passkeys registered. You can still sign in with a magic link from the login page.');
+        }
     } catch {
         setMessage('Failed to remove passkey.', true);
     }

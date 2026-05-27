@@ -74,8 +74,8 @@ fi
 # ── JWT auto-generation ──────────────────────────────────────────────────────────
 
 if [ -z "$TOKEN" ] && [ -n "$COMPOSE_FILE" ]; then
-  TOKEN=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node -e "
-    const jwt = require('jsonwebtoken');
+  TOKEN=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node --input-type=module -e "
+    import jwt from 'jsonwebtoken';
     if (!process.env.JWT_SECRET) { process.stderr.write('NO_SECRET\n'); process.exit(1); }
     console.log(jwt.sign({ userId: 'regression-test' }, process.env.JWT_SECRET, { expiresIn: '1h' }));
   " 2>/dev/null | grep '^eyJ' | tail -1 || true)
@@ -99,7 +99,7 @@ TMPERR=$(mktemp)
 reset_rate_limits() {
   [ "$RESET_RL" = "1" ] || return 0
   [ -n "$COMPOSE_FILE" ] || return 0
-  if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node -e "
+  if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node --input-type=module -e "
     import('./db/pool.js')
       .then(async ({ pool }) => { await pool.query('DELETE FROM rate_limits'); await pool.end(); })
       .then(() => process.exit(0))

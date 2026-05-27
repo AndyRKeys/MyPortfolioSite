@@ -1,5 +1,6 @@
 /**
- * Auth route — POST /auth/setup server-side admin guard (#274).
+ * Auth route — POST /auth/setup retired (#282); now returns 410.
+ * POST /auth/email/send bootstraps the admin user on first use.
  * The pg pool is mocked so no real DB is required.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,14 +23,37 @@ vi.mock('nodemailer', () => ({
 const app = createApp();
 const ADMIN = 'admin@example.com';
 
-describe('POST /auth/setup — admin registration guard (#274)', () => {
+describe('POST /auth/setup — retired endpoint (#282)', () => {
+  it('returns 410 Gone for any request', async () => {
+    const res = await request(app)
+      .post('/auth/setup')
+      .send({ email: ADMIN, username: 'admin' });
+    expect(res.status).toBe(410);
+    expect(res.body.error).toMatch(/retired/i);
+  });
+
+  it('returns 410 Gone even for non-admin email', async () => {
+    const res = await request(app)
+      .post('/auth/setup')
+      .send({ email: 'attacker@evil.com', username: 'attacker' });
+    expect(res.status).toBe(410);
+  });
+});
+
+describe('POST /auth/email/send — magic link find-or-create', () => {
   const origAdmin = process.env.ADMIN_EMAIL;
   const origSecret = process.env.JWT_SECRET;
+  const origFrontend = process.env.FRONTEND_URL;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     process.env.ADMIN_EMAIL = ADMIN;
     process.env.JWT_SECRET = 'test-secret-test-secret-test-secret-32';
+    process.env.FRONTEND_URL = 'https://example.com';
+    // SMTP_* set so isEmailConfigured() returns true without OAuth2
+    process.env.SMTP_HOST = 'smtp.example.com';
+    process.env.SMTP_USER = 'user@example.com';
+    process.env.SMTP_PASS = 'pass';
     const { pool } = vi.mocked(await import('../../db/pool.js'));
     pool.query.mockResolvedValue({ rows: [] });
   });
@@ -37,53 +61,50 @@ describe('POST /auth/setup — admin registration guard (#274)', () => {
   afterEach(() => {
     process.env.ADMIN_EMAIL = origAdmin;
     process.env.JWT_SECRET = origSecret;
+    process.env.FRONTEND_URL = origFrontend;
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
   });
 
-  it('rejects with 403 when the submitted email does not match ADMIN_EMAIL', async () => {
-    const res = await request(app)
-      .post('/auth/setup')
-      .send({ email: 'attacker@evil.com', username: 'attacker' });
-    expect(res.status).toBe(403);
+  it('returns sent:true and skips user/token DB calls when email does not match ADMIN_EMAIL', async () => {
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    expect(pool.query).not.toHaveBeenCalled(); // gated before any DB access
-  });
-
-  it('rejects with 403 (fail closed) when ADMIN_EMAIL is not configured', async () => {
-    delete process.env.ADMIN_EMAIL;
+    // Rate limiter fires first (DB-backed), then the admin-email gate blocks — no user/token queries.
+    pool.query.mockResolvedValueOnce({ rows: [{ count: 1 }] }); // rate limiter
     const res = await request(app)
-      .post('/auth/setup')
-      .send({ email: 'admin@example.com', username: 'admin' });
-    expect(res.status).toBe(403);
+      .post('/auth/email/send')
+      .send({ email: 'attacker@evil.com' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ sent: true });
+    expect(pool.query).toHaveBeenCalledTimes(1); // only the rate limiter
   });
 
-  it('rejects with 403 when a user already exists, even for the admin email', async () => {
-    const { pool } = vi.mocked(await import('../../db/pool.js'));
-    pool.query.mockResolvedValueOnce({ rows: [{ count: '1' }] }); // COUNT(*)
-    const res = await request(app)
-      .post('/auth/setup')
-      .send({ email: ADMIN, username: 'admin' });
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/already complete/i);
-  });
-
-  it('allows setup for the admin email when no user exists yet', async () => {
+  it('creates user and issues token when no user exists (fresh DB)', async () => {
     const { pool } = vi.mocked(await import('../../db/pool.js'));
     pool.query
-      .mockResolvedValueOnce({ rows: [{ count: '0' }] }) // COUNT(*)
-      .mockResolvedValueOnce({ rows: [{ id: 1, email: ADMIN, username: 'admin' }] }); // INSERT
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] })                     // rate limiter
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: true }] })  // upsert
+      .mockResolvedValueOnce({ rows: [] });                                  // token insert
     const res = await request(app)
-      .post('/auth/setup')
-      .send({ email: ADMIN, username: 'admin' });
+      .post('/auth/email/send')
+      .send({ email: ADMIN });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('token');
-    expect(res.body.user).toMatchObject({ email: ADMIN });
+    expect(res.body).toEqual({ sent: true });
+    expect(pool.query).toHaveBeenCalledTimes(3);
   });
 
-  it('rejects with 400 on an invalid email before the guard runs', async () => {
+  it('reuses existing user and issues token when user already exists', async () => {
+    const { pool } = vi.mocked(await import('../../db/pool.js'));
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] })                      // rate limiter
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: false }] })  // upsert (existing)
+      .mockResolvedValueOnce({ rows: [] });                                   // token insert
     const res = await request(app)
-      .post('/auth/setup')
-      .send({ email: 'not-an-email', username: 'admin' });
-    expect(res.status).toBe(400);
+      .post('/auth/email/send')
+      .send({ email: ADMIN });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ sent: true });
+    expect(pool.query).toHaveBeenCalledTimes(3);
   });
 });
 

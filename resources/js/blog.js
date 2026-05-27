@@ -4,7 +4,7 @@ import { buildPostCard, buildTimelineItem } from './utils/dom.js';
 
 function truncate(str, len) {
     if (!str) return '';
-    return str.length > len ? str.slice(0, len).trimEnd() + '\u2026' : str;
+    return str.length > len ? str.slice(0, len).trimEnd() + '…' : str;
 }
 
 function buildBlogPostCard(post) {
@@ -16,43 +16,55 @@ function buildBlogPostCard(post) {
     });
 }
 
-// ── Blog view toggle ──────────────────────────────────────────────────────────────────────────
+// ── Blog view toggle ──────────────────────────────────────────────────────────
+
 function applyBlogView(view) {
+    var postsList = document.getElementById('posts-list');
+    var blogTimeline = document.getElementById('blog-timeline');
+    if (!postsList || !blogTimeline) return;
     if (view === 'timeline') {
-        $('#posts-list').addClass('hidden');
-        $('#blog-timeline').removeClass('hidden');
+        postsList.classList.add('hidden');
+        blogTimeline.classList.remove('hidden');
     } else {
-        $('#posts-list').removeClass('hidden');
-        $('#blog-timeline').addClass('hidden');
+        postsList.classList.remove('hidden');
+        blogTimeline.classList.add('hidden');
     }
 }
 
 function initBlogViewToggle() {
-    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
+    var activeBtn = document.querySelector('.blog-view-toggle .view-toggle-btn.active');
+    var activeView = (activeBtn && activeBtn.dataset.view) || 'timeline';
     applyBlogView(activeView);
 
-    $('.blog-view-toggle .view-toggle-btn').on('click', function () {
-        var view = $(this).data('view');
-        $('.blog-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
-        $(this).addClass('active').attr('aria-selected', 'true');
-        applyBlogView(view);
+    document.querySelectorAll('.blog-view-toggle .view-toggle-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.blog-view-toggle .view-toggle-btn').forEach(function (b) {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
+            btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
+            applyBlogView(btn.dataset.view);
+        });
     });
 }
 
 function loadPosts() {
-    var activeView = $('.blog-view-toggle .view-toggle-btn.active').data('view') || 'timeline';
+    var activeBtn = document.querySelector('.blog-view-toggle .view-toggle-btn.active');
+    var activeView = (activeBtn && activeBtn.dataset.view) || 'timeline';
     applyBlogView(activeView);
 
     fetch(API_BASE + '/posts')
         .then(function (res) { return res.json(); })
         .then(function (posts) {
-            var list = $('#posts-list');
-            list.empty();
+            var list = document.getElementById('posts-list');
+            list.innerHTML = '';
 
             if (!posts.length) {
-                $('#posts-empty').removeClass('hidden');
-                list.addClass('hidden');
-                $('.blog-view-toggle').addClass('hidden');
+                document.getElementById('posts-empty').classList.remove('hidden');
+                list.classList.add('hidden');
+                var toggle = document.querySelector('.blog-view-toggle');
+                if (toggle) toggle.classList.add('hidden');
                 return;
             }
 
@@ -63,7 +75,7 @@ function loadPosts() {
                 var db = b.post_date ? String(b.post_date).slice(0, 10) : (b.published_at ? b.published_at.slice(0, 10) : '');
                 return db < da ? -1 : db > da ? 1 : 0;
             });
-            var timelineEl = $('#blog-timeline');
+            var timelineEl = document.getElementById('blog-timeline');
             sorted.forEach(function (post) {
                 timelineEl.append(buildTimelineItem({
                     dateStr: formatPostDate(post),
@@ -77,13 +89,14 @@ function loadPosts() {
             initBlogViewToggle();
         })
         .catch(function (err) {
-            console.error('loadPosts failed:', err);
-            $('#posts-list').html('<p class="hint" style="color:var(--color-error)">Could not load posts.</p>');
+            console.error('loadPosts failed:', err && (err.message || String(err)), err && err.stack);
+            document.getElementById('posts-list').innerHTML = '<p class="hint" style="color:var(--color-error)">Could not load posts.</p>';
         });
 }
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 // Fire-and-forget visit counter — swallow errors so stats never break the page
 fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
 
-// Modules are deferred by default — DOM is ready and jQuery is available.
 loadPosts();
