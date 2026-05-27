@@ -2,60 +2,87 @@
  * Shared DOM builder utilities.
  * Extracted from script.js to eliminate window.* cross-file coupling.
  *
- * All user-supplied strings are set via jQuery .text() or .attr()
- * to prevent XSS — never via string concatenation into HTML.
- *
- * Depends on jQuery ($) being available as a global (loaded via <script> tag
- * before any module entry point).
+ * All user-supplied strings are set via textContent or setAttribute
+ * to prevent XSS — never via string concatenation into innerHTML.
  */
 
 import { escapeHtml } from './html.js';
 import { formatRelativeDate } from './date.js';
 
+// ── Internal helper ───────────────────────────────────────────────────────────
+
+function el(tag, attrs) {
+    var node = document.createElement(tag);
+    if (attrs) {
+        Object.keys(attrs).forEach(function (k) {
+            if (k === 'className') {
+                node.className = attrs[k];
+            } else if (k === 'textContent') {
+                node.textContent = attrs[k];
+            } else {
+                node.setAttribute(k, attrs[k]);
+            }
+        });
+    }
+    return node;
+}
+
 /**
  * Builds a timeline item element.
  * opts: { dateStr, title, location, notes, mediaUrl, mediaType, mediaCount, linkHref }
+ * Returns a DOM element.
  */
 export function buildTimelineItem(opts) {
-    var item = $('<div class="timeline-item"></div>');
-    item.append('<div class="timeline-marker"></div>');
-    var content = $('<div class="timeline-content"></div>');
+    var item = el('div', { className: 'timeline-item' });
+    item.appendChild(el('div', { className: 'timeline-marker' }));
+    var content = el('div', { className: 'timeline-content' });
 
     if (opts.dateStr) {
-        $('<span class="timeline-date"></span>').text(opts.dateStr).appendTo(content);
+        var dateSpan = el('span', { className: 'timeline-date' });
+        dateSpan.textContent = opts.dateStr;
+        content.appendChild(dateSpan);
     }
 
     if (opts.linkHref) {
-        var link = $('<a></a>').attr('href', opts.linkHref);
-        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(link);
-        content.append(link);
+        var link = el('a', { href: opts.linkHref });
+        var h3 = el('h3');
+        h3.textContent = opts.title || 'Untitled';
+        link.appendChild(h3);
+        content.appendChild(link);
     } else {
-        $('<h3></h3>').text(opts.title || 'Untitled').appendTo(content);
+        var h3b = el('h3');
+        h3b.textContent = opts.title || 'Untitled';
+        content.appendChild(h3b);
     }
 
     if (opts.location) {
-        $('<p class="timeline-location"></p>').text('\uD83D\uDCCD ' + opts.location).appendTo(content);
+        var loc = el('p', { className: 'timeline-location' });
+        loc.textContent = '📍 ' + opts.location;
+        content.appendChild(loc);
     }
 
     if (opts.notes) {
-        $('<p></p>').text(opts.notes).appendTo(content);
+        var notes = el('p');
+        notes.textContent = opts.notes;
+        content.appendChild(notes);
     }
 
     if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
-        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
-        var img = $('<img class="timeline-thumb" alt="">').attr('src', opts.mediaUrl);
-        img.on('error', function () { $(this).remove(); });
-        mediaWrap.append(img);
+        var mediaWrap = el('div', { className: 'media-thumb-wrap' });
+        var img = el('img', { className: 'timeline-thumb', alt: '', src: opts.mediaUrl });
+        img.addEventListener('error', function () { img.remove(); });
+        mediaWrap.appendChild(img);
 
         if (opts.mediaCount && opts.mediaCount > 1) {
-            var extraCount = opts.mediaCount - 1;
-            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
+            var badge = el('span', { className: 'media-extra-badge' });
+            badge.textContent = '+' + (opts.mediaCount - 1);
+            mediaWrap.appendChild(badge);
         }
 
-        content.append(mediaWrap);
+        content.appendChild(mediaWrap);
     }
 
-    item.append(content);
+    item.appendChild(content);
     return item;
 }
 
@@ -64,66 +91,82 @@ export function buildTimelineItem(opts) {
  * type: 'blog' | 'travel'
  * data (blog):   { slug, title, date, excerpt }
  * data (travel): { id, title, location, date, notes, mediaUrl, mediaType }
+ * Returns a DOM element.
  */
 export function buildPostCard(type, data) {
     if (type === 'blog') {
-        var card = $('<a class="post-card"></a>');
-        card.attr('href', '/blog/post/?slug=' + encodeURIComponent(data.slug));
-        $('<h3 class="post-card-title"></h3>').text(data.title || 'Untitled').appendTo(card);
+        var card = el('a', { className: 'post-card', href: '/blog/post/?slug=' + encodeURIComponent(data.slug) });
+        var title = el('h3', { className: 'post-card-title' });
+        title.textContent = data.title || 'Untitled';
+        card.appendChild(title);
         if (data.date) {
-            $('<p class="post-card-date"></p>').text(data.date).appendTo(card);
+            var date = el('p', { className: 'post-card-date' });
+            date.textContent = data.date;
+            card.appendChild(date);
         }
         if (data.excerpt) {
-            $('<p class="post-card-excerpt"></p>').text(data.excerpt).appendTo(card);
+            var excerpt = el('p', { className: 'post-card-excerpt' });
+            excerpt.textContent = data.excerpt;
+            card.appendChild(excerpt);
         }
         return card;
     }
 
     // type === 'travel'
     var placeholder = '/resources/img/placeholder-transparent.png';
-    var tCard = $('<article class="travel-card box draft-card"></article>');
-    tCard.attr('data-memory-id', data.id);
+    var tCard = el('article', { className: 'travel-card box draft-card' });
+    tCard.setAttribute('data-memory-id', data.id);
 
-    var media = $('<div class="media"></div>');
+    var media = el('div', { className: 'media' });
     // Same root-relative guard as buildPublicTravelCard (#266).
     var safeMediaUrl = (data.mediaUrl && !data.mediaUrl.startsWith('/') && !data.mediaUrl.startsWith('http'))
         ? '/' + data.mediaUrl : data.mediaUrl;
     if (safeMediaUrl) {
         if (data.mediaType && data.mediaType.indexOf('video') === 0) {
-            $('<video controls></video>').attr('src', safeMediaUrl).appendTo(media);
+            media.appendChild(el('video', { controls: '', src: safeMediaUrl }));
         } else {
-            var img = $('<img alt="Travel snapshot">').attr('src', safeMediaUrl);
-            img.on('error', function () { $(this).attr('src', placeholder); });
-            media.append(img);
+            var tImg = el('img', { alt: 'Travel snapshot', src: safeMediaUrl });
+            tImg.addEventListener('error', function () { tImg.setAttribute('src', placeholder); });
+            media.appendChild(tImg);
         }
     } else {
-        $('<img alt="Travel snapshot">').attr('src', placeholder).appendTo(media);
+        media.appendChild(el('img', { alt: 'Travel snapshot', src: placeholder }));
     }
 
-    var content = $('<div class="travel-content"></div>');
-    $('<h3></h3>').text(data.title || 'Untitled memory').appendTo(content);
+    var content = el('div', { className: 'travel-content' });
+    var tTitle = el('h3');
+    tTitle.textContent = data.title || 'Untitled memory';
+    content.appendChild(tTitle);
 
-    var meta = $('<p class="meta"></p>');
-    $('<span class="travel-location"></span>').text(data.location || 'Location not set').appendTo(meta);
+    var meta = el('p', { className: 'meta' });
+    var locSpan = el('span', { className: 'travel-location' });
+    locSpan.textContent = data.location || 'Location not set';
+    meta.appendChild(locSpan);
     if (data.date) {
-        $('<span class="travel-date"></span>').text(data.date).appendTo(meta);
+        var dateSpan2 = el('span', { className: 'travel-date' });
+        dateSpan2.textContent = data.date;
+        meta.appendChild(dateSpan2);
     }
-    meta.appendTo(content);
-    $('<p></p>').text(data.notes || 'No notes yet.').appendTo(content);
+    content.appendChild(meta);
 
-    tCard.append(media).append(content);
+    var notesP = el('p');
+    notesP.textContent = data.notes || 'No notes yet.';
+    content.appendChild(notesP);
+
+    tCard.appendChild(media);
+    tCard.appendChild(content);
     return tCard;
 }
 
 /**
  * Builds a public-facing travel card linked to the detail page.
- * Uses escapeHtml for interpolated HTML fragments (meta/notes).
+ * Returns a DOM element.
  */
 export function buildPublicTravelCard(travel, formatVisitDateFn) {
-    var card = $('<a class="travel-card box draft-card"></a>');
-    card.attr('href', '/travel/post/?id=' + encodeURIComponent(travel.id));
-    card.attr('data-memory-id', travel.id);
-    var media = $('<div class="media"></div>');
+    var card = el('a', { className: 'travel-card box draft-card' });
+    card.setAttribute('href', '/travel/post/?id=' + encodeURIComponent(travel.id));
+    card.setAttribute('data-memory-id', travel.id);
+    var media = el('div', { className: 'media' });
 
     var allMedia = Array.isArray(travel.media) && travel.media.length
         ? travel.media
@@ -134,32 +177,34 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     var extraCount = allMedia ? allMedia.length - 1 : 0;
 
     var placeholder = '/resources/img/placeholder-transparent.png';
-    // Ensure media URLs from the API are root-relative. A bare relative path
-    // (e.g. "resources/img/...") would be resolved relative to the current page
-    // path ("/travel/") causing a 404 before the error-fallback fires (#266).
+    // Ensure media URLs from the API are root-relative (#266).
     if (mediaUrl && !mediaUrl.startsWith('/') && !mediaUrl.startsWith('http')) {
         mediaUrl = '/' + mediaUrl;
     }
     if (mediaUrl) {
-        var mediaWrap = $('<div class="media-thumb-wrap"></div>');
+        var mediaWrap = el('div', { className: 'media-thumb-wrap' });
         if (mediaType && mediaType.indexOf('video') === 0) {
-            mediaWrap.append($('<video muted></video>').attr('src', mediaUrl));
+            mediaWrap.appendChild(el('video', { muted: '', src: mediaUrl }));
         } else {
-            var img = $('<img alt="Travel snapshot">').attr('src', mediaUrl);
-            img.on('error', function () { $(this).attr('src', placeholder); });
-            mediaWrap.append(img);
+            var mImg = el('img', { alt: 'Travel snapshot', src: mediaUrl });
+            mImg.addEventListener('error', function () { mImg.setAttribute('src', placeholder); });
+            mediaWrap.appendChild(mImg);
         }
         if (extraCount > 0) {
-            mediaWrap.append('<span class="media-extra-badge">+' + extraCount + '</span>');
-            card.addClass('has-gallery');
+            var badge = el('span', { className: 'media-extra-badge' });
+            badge.textContent = '+' + extraCount;
+            mediaWrap.appendChild(badge);
+            card.classList.add('has-gallery');
         }
-        media.append(mediaWrap);
+        media.appendChild(mediaWrap);
     } else {
-        $('<img alt="Travel snapshot">').attr('src', placeholder).appendTo(media);
+        media.appendChild(el('img', { alt: 'Travel snapshot', src: placeholder }));
     }
 
-    var content = $('<div class="travel-content"></div>');
-    $('<h3></h3>').text(travel.title || 'Untitled memory').appendTo(content);
+    var content = el('div', { className: 'travel-content' });
+    var cTitle = el('h3');
+    cTitle.textContent = travel.title || 'Untitled memory';
+    content.appendChild(cTitle);
 
     var formattedDate = formatVisitDateFn ? formatVisitDateFn(travel.post_date) : null;
     var locationPrefix = travel.location_estimated ? '~ ' : '';
@@ -168,26 +213,36 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     if (formattedDate) {
         metaHtml += '<span class="travel-date">' + escapeHtml(formattedDate) + '</span>';
     }
-    content.append('<p class="meta">' + metaHtml + '</p>');
-    $('<p></p>').text(travel.notes || 'No notes yet.').appendTo(content);
+    var metaP = el('p', { className: 'meta' });
+    metaP.innerHTML = metaHtml;
+    content.appendChild(metaP);
 
-    card.append(media).append(content);
+    var notesP = el('p');
+    notesP.textContent = travel.notes || 'No notes yet.';
+    content.appendChild(notesP);
+
+    card.appendChild(media);
+    card.appendChild(content);
     return card;
 }
 
 /**
  * Builds a GitHub repo card linked to the repo's URL.
+ * Returns a DOM element.
  */
 export function buildRepoCard(repo) {
-    var card = $('<a class="github-repo-card" target="_blank" rel="noopener noreferrer"></a>');
-    card.attr('href', repo.html_url);
-    $('<div class="github-repo-name"></div>').text(repo.name).appendTo(card);
-    $('<div class="github-repo-desc"></div>').text(repo.description || 'No description').appendTo(card);
-    var meta = $('<div class="github-repo-meta"></div>');
+    var card = el('a', { className: 'github-repo-card', target: '_blank', rel: 'noopener noreferrer', href: repo.html_url });
+    var name = el('div', { className: 'github-repo-name' });
+    name.textContent = repo.name;
+    card.appendChild(name);
+    var desc = el('div', { className: 'github-repo-desc' });
+    desc.textContent = repo.description || 'No description';
+    card.appendChild(desc);
+    var meta = el('div', { className: 'github-repo-meta' });
     if (repo.language) {
-        meta.append('<span class="github-repo-lang">' + escapeHtml(repo.language) + '</span>');
+        meta.insertAdjacentHTML('beforeend', '<span class="github-repo-lang">' + escapeHtml(repo.language) + '</span>');
     }
-    meta.append('<span class="github-repo-updated">Updated ' + escapeHtml(formatRelativeDate(repo.pushed_at)) + '</span>');
-    card.append(meta);
+    meta.insertAdjacentHTML('beforeend', '<span class="github-repo-updated">Updated ' + escapeHtml(formatRelativeDate(repo.pushed_at)) + '</span>');
+    card.appendChild(meta);
     return card;
 }
