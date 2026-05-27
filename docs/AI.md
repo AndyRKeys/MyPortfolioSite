@@ -358,8 +358,8 @@ var name = user.name; // Get the user's name
 - Use semantic HTML (`<article>`, `<header>`, `<nav>`, `<button>` with proper `aria-` attributes)
 
 **JavaScript**
-- Use vanilla JS when possible, jQuery only for legacy compatibility
-- Use `const/let` in modern ES modules (use `var` only in legacy jQuery files)
+- Use vanilla JS — jQuery has been fully removed (#385)
+- Use `const/let` in modern ES modules
 - For security-critical operations (escaping, DOM manipulation), always use shared utilities
 - Prevent XSS: escape user input with `escapeHtml()` before setting `innerHTML`
 - Prevent SQL injection: use parameterized queries on backend (never string concatenation)
@@ -394,7 +394,7 @@ Recent work has lost significant time to deployment bugs and blind debugging. Ob
 
 ## Architecture Notes
 
-- **Frontend:** ES modules for JavaScript, shared utilities in `resources/js/utils/*`; HTML/CSS, jQuery for legacy compat; no build step
+- **Frontend:** ES modules for JavaScript, shared utilities in `resources/js/utils/*`; HTML/CSS, vanilla JS only; no build step
 - **Backend:** Node.js/Express (ES modules), PostgreSQL with parameterized queries
 - **Reverse proxy:** Nginx (`/api/*` → backend, `/*` → static files)
 - **Auth:** JWT + WebAuthn/FIDO2 passkeys
@@ -470,7 +470,7 @@ When working with this project:
 
 - **Architecture:** Nginx reverse proxy (`/api/*` → Node backend), static frontend served by Nginx
 - **Database:** PostgreSQL with UUID primary keys, idempotent schema migrations
-- **Frontend:** No build step — vanilla JS/HTML/CSS with jQuery for compatibility
+- **Frontend:** No build step — vanilla JS/HTML/CSS (jQuery fully removed, #385)
 - **Stack:** Node.js/Express backend, WebAuthn/JWT auth, fully containerised (Docker Compose — PM2 retired, #165/#179)
 - **Deployment:** Script-driven Docker Compose deploy (`switch-branch.sh` → `deploy.sh --env prod` → `docker compose -f docker-compose.prod.yml up -d --build`); rebuilds and recreates affected containers
 - **Terminal:** Developer uses PowerShell on Windows. Provide PowerShell-compatible commands for local machine operations. Bash is correct for server (`ak-home-server`) / container operations.

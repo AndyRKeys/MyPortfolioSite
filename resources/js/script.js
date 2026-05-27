@@ -2,83 +2,77 @@ import { API_BASE } from './config.js';
 import { isAdminSession } from './auth-utils.js';
 import { buildRepoCard } from './utils/dom.js';
 
-// duration of scroll animation
-var scrollDuration = 300;
-// paddles
+// ── Horizontal scroll carousel ────────────────────────────────────────────────
+
 var leftPaddle = document.getElementsByClassName('left-paddle');
 var rightPaddle = document.getElementsByClassName('right-paddle');
-// get items dimensions
-var itemsLength = $('.port-cont').length;
-var itemSize = $('.port-cont').outerWidth(true);
-// get some relevant size for the paddle triggering point
 var paddleMargin = 20;
 
-// get wrapper width
-var getMenuWrapperSize = function () {
-    return $('.hs-wrap').outerWidth();
-};
+function outerWidth(el) {
+    var style = getComputedStyle(el);
+    return el.offsetWidth + parseFloat(style.marginLeft) + parseFloat(style.marginRight);
+}
+
+var portConts = document.querySelectorAll('.port-cont');
+var itemsLength = portConts.length;
+var itemSize = portConts.length ? outerWidth(portConts[0]) : 0;
+
+var hsWrap = document.querySelector('.hs-wrap');
+var hs = document.querySelector('.hs');
+
+function getMenuWrapperSize() {
+    return hsWrap ? hsWrap.offsetWidth : 0;
+}
+
 var menuWrapperSize = getMenuWrapperSize();
-$(window).on('resize', function () {
+window.addEventListener('resize', function () {
     menuWrapperSize = getMenuWrapperSize();
 });
-var menuVisibleSize = menuWrapperSize;
 
-var getMenuSize = function () {
-    return itemsLength * itemSize;
-};
-var menuSize = getMenuSize();
+var menuSize = itemsLength * itemSize;
 var menuInvisibleSize = menuSize - menuWrapperSize;
 
-var getMenuPosition = function () {
-    return $('.hs').scrollLeft();
-};
+function getMenuPosition() {
+    return hs ? hs.scrollLeft : 0;
+}
 
-$('.hs').on('scroll', function () {
-    menuInvisibleSize = menuSize - menuWrapperSize;
-    var menuPosition = getMenuPosition();
+function setPaddleVisibility(menuPosition) {
     var menuEndOffset = menuInvisibleSize - paddleMargin;
+    var showLeft = menuPosition > paddleMargin;
+    var showRight = menuPosition < menuEndOffset;
+    Array.from(leftPaddle).forEach(function (el) { el.classList.toggle('hidden', !showLeft); });
+    Array.from(rightPaddle).forEach(function (el) { el.classList.toggle('hidden', !showRight); });
+}
 
-    if (menuPosition <= paddleMargin) {
-        $(leftPaddle).addClass('hidden');
-        $(rightPaddle).removeClass('hidden');
-    } else if (menuPosition < menuEndOffset) {
-        $(leftPaddle).removeClass('hidden');
-        $(rightPaddle).removeClass('hidden');
-    } else if (menuPosition >= menuEndOffset) {
-        $(leftPaddle).removeClass('hidden');
-        $(rightPaddle).addClass('hidden');
-    }
+if (hs) {
+    hs.addEventListener('scroll', function () {
+        menuInvisibleSize = menuSize - menuWrapperSize;
+        setPaddleVisibility(getMenuPosition());
+    });
+}
+
+Array.from(rightPaddle).forEach(function (el) {
+    el.addEventListener('click', function () {
+        if (hs) hs.scrollTo({ left: menuInvisibleSize, behavior: 'smooth' });
+    });
 });
 
-$(rightPaddle).on('click', function () {
-    $('.hs').animate({ scrollLeft: menuInvisibleSize }, scrollDuration);
-});
-
-$(leftPaddle).on('click', function () {
-    $('.hs').animate({ scrollLeft: '0' }, scrollDuration);
+Array.from(leftPaddle).forEach(function (el) {
+    el.addEventListener('click', function () {
+        if (hs) hs.scrollTo({ left: 0, behavior: 'smooth' });
+    });
 });
 
 var childDivs = document.getElementsByClassName('hs');
 for (var i = 0; i < childDivs.length; i++) {
-    var childHeight = getHeight(childDivs[i]);
-    var parentHeight = childHeight - 20;
-    var parent = childDivs[i].parentNode;
-    setHeight(parent, parentHeight);
+    childDivs[i].parentNode.style.height = (childDivs[i].offsetHeight - 20) + 'px';
 }
 
-function getHeight(div) {
-    return div.offsetHeight;
-}
-
-function setHeight(div, height) {
-    div.style.height = height + 'px';
-}
-
-// ── GitHub activity widget
+// ── GitHub activity widget ────────────────────────────────────────────────────
 
 function loadGithubWidget() {
-    var container = $('#github-repos');
-    if (!container.length) return;
+    var container = document.getElementById('github-repos');
+    if (!container) return;
 
     fetch('https://api.github.com/users/AndyRKeys/repos?sort=pushed&per_page=6')
         .then(function (res) {
@@ -87,18 +81,18 @@ function loadGithubWidget() {
             return res.json();
         })
         .then(function (repos) {
-            container.empty();
+            container.innerHTML = '';
             repos.forEach(function (repo) { container.append(buildRepoCard(repo)); });
         })
         .catch(function (err) {
             var msg = err.message === 'rate-limited'
                 ? 'GitHub API rate limit reached — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.'
                 : 'Could not load GitHub activity — <a href="https://github.com/AndyRKeys" target="_blank" rel="noopener noreferrer">view profile directly</a>.';
-            container.html('<p class="github-fallback">' + msg + '</p>');
+            container.innerHTML = '<p class="github-fallback">' + msg + '</p>';
         });
 }
 
-// ── Contact form
+// ── Contact form ──────────────────────────────────────────────────────────────
 
 function initContactForm() {
     var form = document.getElementById('contact-form');
@@ -144,7 +138,7 @@ function initContactForm() {
     });
 }
 
-// ── Visit counter
+// ── Visit counter ─────────────────────────────────────────────────────────────
 
 function recordVisit(page) {
     if (isAdminSession()) return;
@@ -164,10 +158,8 @@ function recordVisit(page) {
         .catch(function () {});
 }
 
-// ── Bootstrap
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-// Modules are deferred by default — DOM is ready when this executes.
-// jQuery (<script> before this module) and Leaflet (if present) are already loaded.
 loadGithubWidget();
 initContactForm();
 recordVisit('home');

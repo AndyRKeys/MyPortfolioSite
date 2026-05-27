@@ -3,7 +3,7 @@ import { escapeHtml } from './utils/html.js';
 import { formatVisitDate } from './utils/date.js';
 import { buildTimelineItem, buildPublicTravelCard } from './utils/dom.js';
 
-// ── Travel map (Leaflet)
+// ── Travel map (Leaflet) ──────────────────────────────────────────────────────
 
 var travelMap = null;
 
@@ -34,7 +34,7 @@ function initTravelMap(memories) {
 
     if (!withCoords.length) {
         mapEl.classList.add('hidden');
-        $('.travel-view-toggle').addClass('hidden');
+        document.querySelectorAll('.travel-view-toggle').forEach(function (el) { el.classList.add('hidden'); });
         return;
     }
 
@@ -42,7 +42,7 @@ function initTravelMap(memories) {
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
-        attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(travelMap);
 
     var markers = [];
@@ -63,26 +63,27 @@ function initTravelMap(memories) {
 }
 
 function applyTravelView(view) {
-    var mapEl = $('#travel-map');
-    var grid = $('#travel-grid');
-    var timeline = $('#travel-timeline');
+    var mapEl = document.getElementById('travel-map');
+    var grid = document.getElementById('travel-grid');
+    var timeline = document.getElementById('travel-timeline');
 
-    mapEl.addClass('hidden');
-    grid.addClass('hidden');
-    timeline.addClass('hidden');
+    if (!mapEl || !grid || !timeline) return;
+    mapEl.classList.add('hidden');
+    grid.classList.add('hidden');
+    timeline.classList.add('hidden');
 
     if (view === 'map-timeline') {
-        mapEl.removeClass('hidden');
-        timeline.removeClass('hidden');
+        mapEl.classList.remove('hidden');
+        timeline.classList.remove('hidden');
     } else if (view === 'both') {
-        mapEl.removeClass('hidden');
-        grid.removeClass('hidden');
+        mapEl.classList.remove('hidden');
+        grid.classList.remove('hidden');
     } else if (view === 'map') {
-        mapEl.removeClass('hidden');
+        mapEl.classList.remove('hidden');
     } else if (view === 'cards') {
-        grid.removeClass('hidden');
+        grid.classList.remove('hidden');
     } else if (view === 'timeline') {
-        timeline.removeClass('hidden');
+        timeline.classList.remove('hidden');
     }
 
     if (travelMap && (view === 'map-timeline' || view === 'map' || view === 'both')) {
@@ -91,18 +92,24 @@ function applyTravelView(view) {
 }
 
 function initViewToggle() {
-    var activeView = $('.travel-view-toggle .view-toggle-btn.active').data('view') || 'map-timeline';
+    var activeBtn = document.querySelector('.travel-view-toggle .view-toggle-btn.active');
+    var activeView = (activeBtn && activeBtn.dataset.view) || 'map-timeline';
     applyTravelView(activeView);
 
-    $('.travel-view-toggle .view-toggle-btn').on('click', function () {
-        var view = $(this).data('view');
-        $('.travel-view-toggle .view-toggle-btn').removeClass('active').attr('aria-selected', 'false');
-        $(this).addClass('active').attr('aria-selected', 'true');
-        applyTravelView(view);
+    document.querySelectorAll('.travel-view-toggle .view-toggle-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.travel-view-toggle .view-toggle-btn').forEach(function (b) {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
+            btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
+            applyTravelView(btn.dataset.view);
+        });
     });
 }
 
-// ── Gallery lightbox
+// ── Gallery lightbox ──────────────────────────────────────────────────────────
 
 var lightboxItems = [];
 var lightboxIndex = 0;
@@ -110,30 +117,43 @@ var lightboxIndex = 0;
 function openLightbox(items, startIndex, title) {
     lightboxItems = items;
     lightboxIndex = startIndex || 0;
-    $('#travel-lightbox .lightbox-title').text(title || '');
+    var titleEl = document.querySelector('#travel-lightbox .lightbox-title');
+    if (titleEl) titleEl.textContent = title || '';
     renderLightboxItem();
-    $('#travel-lightbox').removeClass('hidden');
+    document.getElementById('travel-lightbox').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 }
 
 function closeLightbox() {
-    $('#travel-lightbox').addClass('hidden');
+    document.getElementById('travel-lightbox').classList.add('hidden');
     document.body.style.overflow = '';
-    $('#travel-lightbox video').each(function () { this.pause(); });
+    document.querySelectorAll('#travel-lightbox video').forEach(function (v) { v.pause(); });
 }
 
 function renderLightboxItem() {
     var item = lightboxItems[lightboxIndex];
+    var mediaContainer = document.querySelector('#travel-lightbox .lightbox-media');
     var mediaEl;
     if (item.type && item.type.indexOf('video') === 0) {
-        mediaEl = $('<video controls playsinline></video>').attr('src', item.url);
+        mediaEl = document.createElement('video');
+        mediaEl.controls = true;
+        mediaEl.playsInline = true;
+        mediaEl.src = item.url;
     } else {
-        mediaEl = $('<img alt="Gallery image">').attr('src', item.url);
+        mediaEl = document.createElement('img');
+        mediaEl.alt = 'Gallery image';
+        mediaEl.src = item.url;
     }
-    $('#travel-lightbox .lightbox-media').empty().append(mediaEl);
-    $('#travel-lightbox .lightbox-counter').text((lightboxIndex + 1) + ' / ' + lightboxItems.length);
-    $('#travel-lightbox .lightbox-prev').toggleClass('hidden', lightboxIndex === 0);
-    $('#travel-lightbox .lightbox-next').toggleClass('hidden', lightboxIndex === lightboxItems.length - 1);
+    mediaContainer.innerHTML = '';
+    mediaContainer.appendChild(mediaEl);
+
+    var counter = document.querySelector('#travel-lightbox .lightbox-counter');
+    if (counter) counter.textContent = (lightboxIndex + 1) + ' / ' + lightboxItems.length;
+
+    var prevBtn = document.querySelector('#travel-lightbox .lightbox-prev');
+    var nextBtn = document.querySelector('#travel-lightbox .lightbox-next');
+    if (prevBtn) prevBtn.classList.toggle('hidden', lightboxIndex === 0);
+    if (nextBtn) nextBtn.classList.toggle('hidden', lightboxIndex === lightboxItems.length - 1);
 }
 
 function initLightbox() {
@@ -158,11 +178,11 @@ function initLightbox() {
     });
 }
 
-// ── Travel cards
+// ── Travel cards ──────────────────────────────────────────────────────────────
 
 function loadPublicTravelPosts() {
-    var travelGrid = $('#travel-grid');
-    if (!travelGrid.length) return;
+    var travelGrid = document.getElementById('travel-grid');
+    if (!travelGrid) return;
 
     fetch(API_BASE + '/travel')
         .then(function (res) {
@@ -171,9 +191,9 @@ function loadPublicTravelPosts() {
         })
         .then(function (memories) {
             if (!memories.length) {
-                $('#travel-empty').removeClass('hidden');
-                $('#travel-map').addClass('hidden');
-                $('.travel-view-toggle').addClass('hidden');
+                document.getElementById('travel-empty').classList.remove('hidden');
+                document.getElementById('travel-map').classList.add('hidden');
+                document.querySelectorAll('.travel-view-toggle').forEach(function (el) { el.classList.add('hidden'); });
                 return;
             }
 
@@ -186,7 +206,7 @@ function loadPublicTravelPosts() {
                 var db = b.post_date ? String(b.post_date).slice(0, 10) : '';
                 return db < da ? -1 : db > da ? 1 : 0;
             });
-            var timelineEl = $('#travel-timeline');
+            var timelineEl = document.getElementById('travel-timeline');
             sorted.forEach(function (travel) {
                 var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
                 var firstMedia = allMedia ? allMedia[0] : null;
@@ -204,9 +224,13 @@ function loadPublicTravelPosts() {
                     linkHref: '/travel/post/?id=' + encodeURIComponent(travel.id),
                 });
 
-                item.find('.media-thumb-wrap').css('cursor', 'pointer').on('click', function () {
-                    window.location.href = '/travel/post/?id=' + encodeURIComponent(travel.id);
-                });
+                var thumb = item.querySelector('.media-thumb-wrap');
+                if (thumb) {
+                    thumb.style.cursor = 'pointer';
+                    thumb.addEventListener('click', function () {
+                        window.location.href = '/travel/post/?id=' + encodeURIComponent(travel.id);
+                    });
+                }
 
                 timelineEl.append(item);
             });
@@ -215,14 +239,16 @@ function loadPublicTravelPosts() {
             initTravelMap(memories);
             initViewToggle();
         })
-        .catch(function () {
-            $('#travel-empty').removeClass('hidden');
-            $('#travel-map').addClass('hidden');
-            $('.travel-view-toggle').addClass('hidden');
+        .catch(function (err) {
+            console.error('loadPublicTravelPosts failed:', err && (err.message || String(err)), err && err.stack);
+            document.getElementById('travel-empty').classList.remove('hidden');
+            document.getElementById('travel-map').classList.add('hidden');
+            document.querySelectorAll('.travel-view-toggle').forEach(function (el) { el.classList.add('hidden'); });
         });
 }
 
-// ── Bootstrap
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+
 fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
 loadPublicTravelPosts();
 initLightbox();

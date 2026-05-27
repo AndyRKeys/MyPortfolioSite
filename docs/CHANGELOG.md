@@ -10,6 +10,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ---
 
+## Release 2026-05-25
+
+### Added
+- Frontend error logger (#333, #336): `error-logger.js` captures uncaught JS errors, resource-load failures, unhandled promise rejections, CSP violations, and explicit `console.error`/`console.warn` calls. Reports delivered to `POST /api/debug/errors`, persisted to `client_errors` table, and surfaced in the admin stats panel. Resilient delivery: failed sends buffered in `localStorage` and flushed on next page load (#334). Request-ID correlation (#336) groups all errors from the same page view and links frontend reports to the exact backend log line via `X-Request-Id`.
+- Error alert emails (#333): admin receives an email when 20+ frontend errors arrive within a 15-minute window (configurable via `ERROR_ALERT_THRESHOLD` / `ERROR_ALERT_WINDOW_MS`). In-memory cooldown prevents repeated emails during sustained storms. Top error types/messages included in the alert body.
+- Backend startup env validation (#357): `backend/utils/validateEnv.js` asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty at startup via `validateEnvOrExit()`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container — the backend logs each missing var and exits 1, so the deploy rolls back instead of serving traffic with broken config.
+- CSP maintenance is now a standing dev-cycle rule (#339): adding or moving any external resource (script/style/font/image source, inline script, or a `fetch` to a new origin) must update `scripts/config/nginx-security-headers.conf` in the same PR. Documented in `docs/AI.md`, `CLAUDE.md`, and a new PR-template checklist item.
+- Automated browser CSP violation scan on every deploy (#341): `test-csp-violations.js` loads all served pages in Puppeteer and flags any `securitypolicyviolation` event. Warn-only; machine-parseable `[csp-violations]` summary line in the deploy report.
+- Authenticated admin E2E CSP scan on every deploy (#342): `test-admin-e2e-csp.js` mints a JWT, loads `/admin/`, and drives Nominatim geocode interactions. Any CSP violation during authenticated flows fails the check.
+- Dev hostname redirect (#358): `dev.andykeys.me:443` redirects to `:3001` via a prod-nginx `server` block — eliminates the port-confusion support burden.
+- Vitest test coverage for upload, cv, and debug routes (#335): auth gating, MIME filtering, size limits, private-info scan warnings, error ingestion/persistence, pagination, and sanitisation. `posts` tests extended with happy-path INSERT (201), PUT 404, and DELETE flows. Bug fix: `cv.js` `MulterError` now correctly returns 400 (was 500) via callback pattern.
+
+### Fixed
+- Browser-extension errors filtered from error-logger (#356): uncaught errors and resource-load failures originating from `chrome-extension://`, `moz-extension://`, or `safari-extension://` URLs are discarded before reaching `/api/debug/errors`. Deploy-time Puppeteer tests now intercept and mock `POST /api/debug/errors` to prevent headless-Chromium noise (`Couldn't load fs/zlib`) from writing to `client_errors` and triggering false alert emails.
+- CORS smoke check added to regression suite (#357): `GET /api/health` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must succeed — catches the case where `SITE_HOST` is missing in the container and every site-origin request returns 500.
+- CSP violations handler made `async` (#360): `POST /api/debug/csp-violations` handler is now correctly `async` for CodeQL rate-limit pattern recognition.
+- Relative media URLs in travel cards (#266, #267): `buildPublicTravelCard` and `buildPostCard` now normalise any bare relative `media_url` from the API by prepending `/`, preventing a 404 for `/travel/resources/img/...` (resolved relative to the page path) that was captured by error-logger on every travel page load.
+- Deploy script exits with a clear error if run as sudo (#351): prevents file ownership corruption in the repo directory.
+- Backup bootstrap on deploy (#352): deploy now creates the backup directory, installs the cron job, and takes an initial DB dump if none exists — ensures the backup schedule is active immediately after a fresh provision.
+
+### Security
+- CSP `report-to` added alongside deprecated `report-uri` (#337): `Reporting-Endpoints` header names `/api/debug/csp-violations`; both directives present during transition.
+- Debug endpoint rate limiting migrated to DB-backed `createRateLimiter` (#337): limits survive container restarts and are consistent with auth/contact limiters.
+- `qs` dependency bumped (#321): resolves upstream prototype-pollution advisory.
+
+### Changed
+- Deploy test-suite reporting normalised (#366): all five test phases (`vitest`, `error-logger`, `error-logger-contracts`, `csp-violations`, `regression`) now emit consistent `suite= tests= passed= failed=` counts in the deploy report. Backend Vitest counts read from the json reporter (immune to text-summary format drift). Deploy-time Puppeteer tests use `setRequestInterception` to mock `POST /api/debug/errors` so test sessions never write to `client_errors`. DEPLOY COMPLETE banner moved to after the report box.
+- Unified bash deploy scripts (#300): `dev-deploy.sh` and `prod-deploy.sh` replaced by a single `deploy.sh --env dev|prod`.
+- Project structure reorg (#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) giving clean URLs. `resources/java/` renamed to `resources/js/`. All internal links and the magic link email URL updated.
+
+---
+
 ## Release 2026-05-26
 
 ### Added

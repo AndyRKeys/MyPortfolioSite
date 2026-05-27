@@ -6,9 +6,13 @@ Authentication and security reference for andykeys.me. Read this before touching
 
 ## Single-User Assumption
 
-The site has **one admin user**. There is no registration flow for the public — `/setup/` creates the account and is a one-time operation. All protected routes check for a valid JWT and assume the bearer is the admin.
+The site has **one admin user**. There is no registration flow for the public. All protected routes check for a valid JWT and assume the bearer is the admin.
 
-**Server-side registration guard (#274):** `POST /auth/setup` is not protected by the `/setup/` redirect alone (trivially bypassed by POSTing directly). The route enforces two server-side checks before creating the account: (1) the submitted email must equal `ADMIN_EMAIL`, and (2) no user may already exist. It **fails closed** — if `ADMIN_EMAIL` is unset the route refuses all registration. Both the not-configured and wrong-email cases return the same generic `403` so a caller cannot probe whether setup has completed.
+**Bootstrap via magic link (#282):** The `/setup/` page and `POST /auth/setup` are retired. Account creation happens automatically on the first magic-link send: `POST /auth/email/send` does an `INSERT … ON CONFLICT DO UPDATE` upsert, creating the user record if it does not yet exist. To bootstrap a fresh instance: request a magic link, click the link to get a JWT, then add a passkey from the admin dashboard.
+
+`POST /auth/setup` returns **410 Gone**. `GET /auth/setup/status` is retained for compatibility but is no longer used by the setup page.
+
+**Recipient gate:** Magic links are only sent to `ADMIN_EMAIL`. Requests for any other address return the same success response but no email is sent and no user is created (fail-closed, no enumeration signal). If `ADMIN_EMAIL` is unset, all magic-link sends are silently discarded.
 
 ---
 
@@ -45,7 +49,6 @@ Two independent methods are supported. Either can be used to obtain a JWT.
 **Expiry:** Tokens expire based on `expires_at`. Expired tokens are rejected regardless of `used` status.
 **Single-use:** Once a token is used, `used = TRUE` and any subsequent attempt with the same token is rejected.
 **At-rest protection:** Only the bcrypt hash of the token is persisted, so a stolen DB dump cannot be replayed to forge magic-link logins (#134).
-**Recipient gate:** Tokens are only sent to `ADMIN_EMAIL`. Requests for any other address return the same success response (no enumeration signal) but no email is sent.
 **Rate limit:** `/auth/email/send` is limited to 5 requests/hour/IP (DB-backed, survives restarts).
 
 **Email transport:** Outlook OAuth2 via the Microsoft Graph API (`/v1.0/me/sendMail`). Microsoft has disabled SMTP basic auth, so a long-lived refresh token (delegated `Mail.Send` scope, personal-account `/consumers/` endpoint) is exchanged for a short-lived access token on each send. The refresh token is stored in `.env` only. SMTP basic auth (`nodemailer`) is retained as a fallback for non-Outlook providers.

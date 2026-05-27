@@ -5,7 +5,7 @@
     <script type="module" src="/resources/js/error-logger.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>First-time Setup | AK Portfolio</title>
+    <title>Setup | AK Portfolio</title>
     <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
     <link rel="stylesheet" href="/resources/css/reset.css" />
     <link rel="stylesheet" href="/resources/css/styles.css" />
@@ -17,7 +17,7 @@
     <header id="home">
         <h1>A|K</h1>
         <h2>Andy | Keys</h2>
-        <h2>First-time Setup</h2>
+        <h2>Setup</h2>
     </header>
     <nav>
         <ul class="nav">
@@ -29,21 +29,13 @@
     <main class="admin-page">
         <section class="sec-cont login-section">
             <div class="admin-card">
-                <h2>Create your admin account</h2>
-                <p>One-time setup. Enter your details then follow the passkey prompt from your device.</p>
-
-                <form id="setup-form">
-                    <label>Email
-                        <input id="setup-email" type="email" required placeholder="your@email.com" autocomplete="email" />
-                    </label>
-                    <label>Username
-                        <input id="setup-username" type="text" required placeholder="andy" autocomplete="username" />
-                    </label>
-                    <button type="submit">Create account &amp; register passkey</button>
-                </form>
-
+                <h2>Sign in to get started</h2>
+                <p>Use the magic link login to create your account and set up a passkey from the admin dashboard.</p>
                 <p id="setup-message" class="login-message"></p>
-                <p><a href="/">Back to public site</a></p>
+                <div class="form-actions" style="margin-top:1.5rem">
+                    <a href="/login/" class="btn-primary">Go to sign-in page</a>
+                </div>
+                <p style="margin-top:1rem"><a href="/">Back to public site</a></p>
             </div>
         </section>
     </main>
