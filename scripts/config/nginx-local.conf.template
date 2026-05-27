@@ -41,6 +41,12 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
+    # JS modules: revalidate on every request to prevent stale-module bugs after deploy
+    location ~* \.js$ {
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
     # Static files
     location / {
         try_files $uri $uri/ $uri.html =404;
