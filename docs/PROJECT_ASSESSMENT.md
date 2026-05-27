@@ -1,6 +1,6 @@
 # Project Assessment
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-27_
 
 This document is a frank self-assessment of the current state of MyPortfolioSite — what is working well, what is fragile, where technical debt lives, and what would benefit most from attention. It is written to be honest rather than flattering.
 
@@ -18,18 +18,19 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **Clear frontend/backend boundary.** Nginx routes `/api/*` to the backend and serves everything else as static files. This is clean and easy to reason about.
 - **No build step.** Vanilla JS/HTML/CSS with ES modules means the frontend is immediately readable and debuggable without tooling knowledge. This is a genuine advantage for an AI-assisted workflow.
 - **Docker for local dev is well set up.** The `dev-local.ps1` wrapper and `docker-compose.yml` make onboarding straightforward. The backend container, PostgreSQL, and Nginx all come up together.
-- **Idempotent schema migrations.** Using `IF NOT EXISTS` throughout `backend/db/schema.sql` means re-running the schema does not destroy data. This is the right approach for a project without a proper migration tool.
+- **Graceful shutdown handling.** The backend listens for `SIGTERM` and waits up to 10 seconds for in-flight connections to drain before exiting. This prevents request drops during rolling restarts and Docker stop cycles.
+- **Non-blocking startup preflight checks.** DB connectivity and Outlook OAuth2 token validity are verified at startup; missing env vars cause an immediate exit with a clear message (`validateEnvOrExit()`), so broken config fails fast rather than silently serving broken traffic.
 
 ### Weaknesses and risks
 
 - **Single-node, single-point-of-failure production.** Everything runs on one Ubuntu Server (`ak-home-server`). There is no redundancy, no failover, and no easy rollback if a deploy breaks the server. A bad deploy to `main` means the site is down until manually fixed over SSH.
 - **Production is containerised (migration complete).** Both dev and prod now run on Docker Compose, closing the structural dev/prod gap that previously caused "works locally, breaks in prod" risk. The original Raspberry Pi + PM2 setup has been retired (#165/#171/#179); residual risk is now operational (script-driven deploys — see ROADMAP §3.5) rather than architectural.
-- **No database backups.** There is no automated backup of the PostgreSQL data on the server. If the disk dies or the server is lost, all blog posts, travel entries, and user data are gone permanently.
+- **Database backups are local-only with no offsite redundancy.** `scripts/backup/db-backup.sh` runs via cron at 02:00 daily, creating a gzip'd `pg_dump` with 7-day rotation. But all backups live on the same disk as the database — a disk failure or host loss still means permanent data loss. Offsite sync via rclone is supported but not configured.
 - **Uploads are stored on the server filesystem.** User-uploaded images (`/uploads`) live directly on the server with no backup, no CDN, and no size/type validation beyond what multer provides. This is fine for now but will become a problem as content grows.
-- **No staging environment.** `dev` branch is tested locally in Docker but there is no equivalent of the prod environment to test against before merging to `main`. The dual-environment work in the roadmap (Issues #151/#159) directly addresses this.
+- ✅ **Staging environment now live.** A dev stack runs permanently on `ak-home-server` at `dev.andykeys.me:3001` (LAN-only, self-signed TLS). The `dev` branch is deployed there after every merge, giving real-hardware, real-auth testing before anything reaches `main`. (Dual-env implementation #151/#159 shipped ~Release 2026-05-18.)
 - **The schema has no migration versioning.** Re-running `schema.sql` is safe but there is no record of what version the live database is at. As the schema grows, this becomes harder to manage without a tool like `node-postgres-migrate` or Flyway.
 
-**Overall architecture rating: Amber.** Solid for a personal project at this stage; the single-server + no-backup + no-staging combination is the biggest real risk.
+**Overall architecture rating: Amber.** Solid for a personal project at this stage. Staging environment and containerisation are resolved. The remaining real risk is the single-server setup with local-only backups — a disk failure is still a full data loss event.
 
 ---
 
@@ -41,13 +42,13 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **Parameterised queries throughout.** SQL injection risk is well managed. No string concatenation in queries found in recent audits.
 - **Shared frontend utilities exist.** `resources/js/utils/` contains `escapeHtml()`, `formatVisitDate()`, and similar helpers. These exist because technical debt was explicitly paid down in earlier sessions (PR #85). This is good practice.
 - **ES modules on the frontend.** The codebase has been migrated to ES modules, which means imports are explicit and dependencies are traceable.
-- **`docs/` is unusually complete for a personal project.** Having `AI.md`, `STYLE_GUIDE.md`, `TESTING.md`, `DATABASE.md`, `SECURITY.md`, and `DEPENDENCIES.md` all present is genuinely above average. Most solo projects have none of these.
+- **`docs/` is unusually complete for a personal project.** 24 markdown files covering architecture, security, database schema, infrastructure, testing, deployment lessons, logging, style, AI onboarding, terminology, runbook, and release notes. Most solo projects have none of these. This is a genuine Green-rated project strength.
 
 ### Where it is less healthy
 
 - **`admin/index.html` JS is now modularised (#175).** The admin panel JS has been split into per-feature modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point. `admin/travel.js` remains the largest module (495 lines) and warrants care when modifying.
 - **`index.html` is also large (23KB).** The main page has grown by accretion. Some of this is unavoidable (it is a portfolio page with many sections), but it is worth periodically reviewing whether JavaScript logic belongs in a separate module.
-- **Legacy jQuery is still present.** Some files use jQuery for DOM manipulation alongside vanilla ES modules. The two styles coexist but this creates inconsistency — a new agent reading the codebase may not know which pattern to follow in a given file. In practice, this creates genuine friction: agents often hesitate between patterns and may make inconsistent choices. `docs/AI.md` addresses this ("jQuery only for legacy compatibility") but the rule doesn't fully resolve the uncertainty without cleaning up the legacy code itself.
+- **Legacy jQuery partially removed.** The admin panel no longer uses jQuery (#176, Release 2026-05-26) — all admin JS is now vanilla DOM APIs and `fetch`. jQuery is still present in `script.js`, `blog.js`, and `travel-post.js`. The jQuery/vanilla coexistence creates inconsistency for agents working on those files; `docs/AI.md` documents the rule ("jQuery only for legacy compatibility") but the uncertainty won't fully resolve until those files are migrated too.
 - **`backend/routes/auth.js` is the most complex file at 12KB.** WebAuthn + JWT + magic links in one file is a lot of state to hold. It works correctly and is tested, but it is the highest-risk file to modify. Agents should treat it with extra caution and read it fully before any changes.
 - **Frontend test coverage is essentially zero.** The Vitest suite covers backend utilities and some API routes, but there are no frontend tests at all. UI regressions are caught manually via smoke test scripts (`Test-PRN.ps1`), which is better than nothing, but fragile for a codebase growing in complexity. Adding frontend tests (e.g., Playwright) would help but requires a significant architectural decision — no build step means test infrastructure needs careful thought.
 - **`test-results/` is committed to the repo.** Test output artefacts should not be in version control. This is minor but messy.
@@ -67,9 +68,8 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 ### Pain points
 
-- **Production deploy now has a visible outcome.** The deploy script emits a structured final report (pass/fail, health-check result, git ref) back to the terminal. Post-deploy verification hits `/health` internally and confirms the running image matches the intended ref. (Shipped Release 2026-05-18.)
-- **Health check endpoint exists and is internal-only.** `/health` returns `{ status, db, version, uptime }` and is bound to `127.0.0.1` — reachable by Docker health checks and the deploy script but not from the public internet. (`/api/health` alias removed.) (Shipped Release 2026-05-18.)
-- **The admin panel has grown without a clear UX model.** It handles blog posts, travel posts, CV upload, deploy triggers, and stats in one page. Functionally fine for one user; but navigating it is increasingly "just knowing where things are" rather than following an obvious structure.
+- **The deploy pipeline is comprehensive but complex.** `deploy.sh` (20KB) + `deploy-lib.sh` (2,000+ lines) is a significant bash codebase. It handles sudo guards, dry-run, rollback, structured output, secret redaction, and seven test phases — all correct behaviour, but maintaining this is a real burden. Bash string handling at this scale is brittle to edge cases.
+- **The admin panel has grown without a clear UX model.** It handles blog posts, travel posts, CV upload, deploy triggers, and stats in one page. Functionally fine for one user; navigating it is increasingly "just knowing where things are" rather than following an obvious structure.
 - **Agent context resets every session.** Each new Claude session must re-read all the docs from scratch. The onboarding prompt handles this well, but long sessions where the context fills up risk agents losing track of earlier decisions. Devlogs (Issues linked in earlier sessions) help mitigate this but require discipline to maintain.
 
 **Overall DX rating: Amber-Green.** The process is good; the operational tooling around it (health checks, deploy feedback, SSH reliability) needs polish.
@@ -83,7 +83,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **Docker Compose provides process supervision.** Since the migration off PM2 (#165/#171/#179), the backend runs under Docker with a restart policy — if the container exits, Docker restarts it. This is the minimum viable reliability for a personal site and is now consistent between dev and prod.
 - **Nginx handles static files independently.** The Nginx container serves static pages even if the backend container is down. In practice, most pages rely on API calls, so this is limited comfort.
 - **No automated SSL renewal monitoring.** Let's Encrypt auto-renews via a systemd timer, but there is no alert if renewal silently fails. The first sign of a problem would be a browser HTTPS warning — not ideal.
-- **No automated host health monitoring.** There is no alerting on CPU, memory, disk space, or process health. If the server disk fills up, nothing will warn you before the site goes down.
+- **Basic host monitoring via cron.** `scripts/monitoring/monitor.sh` runs every 5 minutes via cron: tracks CPU/memory/disk/swap, logs to `~/logs/monitor.log`, and applies graduated responses at thresholds (drop caches, restart app/postgres/nginx). This is better than nothing, but it is local-only — no external alert or dashboard; you only know there's a problem if you SSH in and read the log.
 
 ### Observability
 
@@ -97,7 +97,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **No image optimisation.** Uploaded images are stored and served at their original size. With ample server headroom this is no longer a performance risk, but it still wastes bandwidth and slows page loads for visitors as content grows — a UX concern rather than a capacity one.
 - **No caching headers on static assets.** Nginx likely serves static files without long-lived cache headers, meaning repeat visitors re-download assets on every visit.
 
-**Overall reliability/observability rating: Amber.** Structured logging and internal health checks are now in place. What remains: no automated database backups, no external alerting, no log aggregation/viewer. For a personal site this is acceptable; for anything more important it would not be.
+**Overall reliability/observability rating: Amber.** Structured logging, internal health checks, local daily backups, and a basic host monitor are all now in place. What remains: offsite backup redundancy (most critical gap), no external alerting, no log aggregation/viewer. For a personal site this is acceptable; for anything more important it would not be.
 
 ---
 
@@ -110,6 +110,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 - **No third-party auth services.** No OAuth flow means no risk of a third-party breach compromising access.
 - **Parameterised queries prevent SQL injection.** Verified consistently across all route files.
 - **XSS mitigations are in place.** `escapeHtml()` is used in frontend rendering; this was shored up as part of PR #85.
+- **Secret redaction in logs is comprehensive.** `deploy-lib.sh` and `pino` both redact a defined list of sensitive fields (auth headers, cookies, all `*token` and `*password` patterns) before writing to disk. Deliberate and reviewable.
 - **`docs/SECURITY.md` exists and documents the threat model.** Having this written down means agents and the owner have a shared reference for what is and is not protected.
 
 ### Gaps
@@ -138,13 +139,13 @@ This is an unusual section for a project assessment, but it is directly relevant
 
 ### Where agent friction exists
 
-- **No architecture diagram.** There is no visual representation of how the pieces fit together. Agents (and new humans) must construct a mental model from reading code. A simple `docs/ARCHITECTURE.md` with an ASCII or Mermaid diagram of Nginx → Node → PostgreSQL and the file structure would reduce onboarding time.
+- ✅ **Architecture diagram now exists.** `docs/ARCHITECTURE.md` was added in the project structure reorg (#308). It covers the Nginx → Node → PostgreSQL flow, the file tree, request lifecycle, ADR trade-offs, and critical code paths. Keep it current when the structure changes meaningfully.
 - **Admin JS is now modularised (#175 — shipped).** `resources/js/admin/` contains per-feature modules (`posts.js`, `travel.js`, `deploy.js`, etc.) with `admin.js` as a thin entry point. Agents can now target the correct module directly rather than reading an 18KB monolith. This was a significant friction point; it is now substantially resolved.
 - **Implicit server-specific knowledge.** Several operational facts (Compose service names, where Nginx config files live on the server, how `ddclient` is configured, where the Let's Encrypt certs are) were previously undocumented. This is now captured in `docs/INFRASTRUCTURE.md` and `docs/TERMINOLOGY.md`; keep them current so agents can diagnose production issues without asking the owner for facts.
 - **Context window pressure in long sessions.** The doc suite is thorough but also long. In extended sessions, earlier context (especially specific file contents read at the start) can be lost. This is a fundamental LLM constraint, not a fixable problem, but it means breaking work into smaller issues (which the project already does well) is especially important here.
 - **No structured way for agents to flag "I am not sure about this."** When an agent is uncertain, it either proceeds (risky) or asks (slows things down). A convention like "if in doubt, raise a GitHub issue with the `needs-decision` label and stop" would help, but this is aspirational rather than current practice.
 
-**Overall AI-readiness rating: Amber-Green.** The admin JS modularisation (#175) removes the single biggest practical friction point — agents can now target individual feature modules rather than reasoning about an 18KB monolith. Remaining friction: no architecture diagram, jQuery/vanilla JS coexistence, and context window pressure in long sessions. These are real but not session-blockers.
+**Overall AI-readiness rating: Amber-Green.** The admin JS modularisation (#175) and the addition of `docs/ARCHITECTURE.md` (#308) have removed the two biggest practical friction points. Remaining friction: jQuery/vanilla JS coexistence in non-admin files (`script.js`, `blog.js`, `travel-post.js`), and context window pressure in long sessions. These are real but not session-blockers.
 
 ---
 
@@ -152,15 +153,22 @@ This is an unusual section for a project assessment, but it is directly relevant
 
 These are ordered by impact-to-effort ratio, considering both operational risk and agent friction.
 
-**High priority (operational + agent enablement):**
+**Resolved (no longer blocking):**
 1. ✅ **Done — `docs/INFRASTRUCTURE.md` written** (Compose service names, Nginx config paths, cert locations, ddclient config and other server-specific facts). Now complemented by `docs/TERMINOLOGY.md`. Keep both current.
-2. ✅ **Done — production containerised** (migrated off the Raspberry Pi to Ubuntu Server, Docker Compose; #165/#171/#179). Dev and prod environments are now aligned. Residual risk is operational (script-driven deploys — ROADMAP §3.5).
-3. ✅ **Done — `/health` endpoint** (internal-only, `/api/health` public alias removed; health check used by Docker and deploy verification script; #279, Release 2026-05-18).
+2. ✅ **Done — production containerised** (migrated off the Raspberry Pi to Ubuntu Server, Docker Compose; #165/#171/#179). Dev and prod environments are now aligned.
+3. ✅ **Done — `/health` endpoint** (internal-only; #279, Release 2026-05-18).
+4. ✅ **Done — CSP and security headers** (`nginx-security-headers.conf`; #210/#211, Release 2026-05-18).
+5. ✅ **Done — staging environment live** (`dev.andykeys.me:3001`, LAN-only; #151/#159).
 
-**High priority (security + agent friction):**
-4. ✅ **Done — CSP and security headers** (`nginx-security-headers.conf`; CSP, HSTS, X-Frame-Options, Referrer-Policy all set; #210/#211, Release 2026-05-18).
+**Still outstanding (in priority order):**
 
-**Note on backups:** Database backups are critically important. The Ubuntu Server migration (#171) is complete, but a hardened backup + offsite strategy is still outstanding — tracked in ROADMAP §4.5 (pgBackRest / `pg_dump` + restic/rclone).
+1. **Offsite database backups** — Local daily `pg_dump` cron exists, but all backups live on the same disk as the data. A disk failure or host loss loses everything. Configure rclone offsite sync and add restore verification. This is the single most important remaining operational risk. Tracked in ROADMAP §4.5.
+
+2. **Uploaded files served from same origin** — A malicious SVG upload could execute script in the browser. Consider serving uploads from a separate origin or enforcing a `Content-Security-Policy` sandbox on the uploads path.
+
+3. **jQuery removal from non-admin files** — `script.js`, `blog.js`, `travel-post.js` still use jQuery. Admin is clean (#176); these three files are the remaining jQuery/vanilla JS inconsistency. ~4–6 hours of focused work per file. Good agent task.
+
+4. **Frontend test coverage** — Zero frontend unit or integration tests. UI regressions are caught by manual smoke test scripts only. Adding Playwright E2E for the core public flows (blog list, travel list, login) would close the most important gap without requiring a build step.
 
 ---
 
@@ -178,6 +186,7 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-27** — Full codebase reassessment (read architecture, routes, deploy scripts, tests, security config, backups, monitoring). §1: staging resolved; backup description corrected (local daily cron exists, offsite missing); graceful shutdown + env preflight noted as strengths. §2: docs rated Green explicitly. §3: deploy pipeline complexity noted as a DX pain point. §4: host monitor.sh documented; backup status corrected; overall rating updated. §5: secret redaction noted as a strength; uploaded-file risk called out specifically. §7: improvement opportunities reordered with offsite backups as #1. Earlier: staging environment marked resolved; jQuery note scoped to non-admin; ARCHITECTURE.md friction point resolved.
 - **2026-05-26** — Admin JS modularisation (#175) shipped. Updated §2 codebase health (admin monolith resolved), §6 agent friction (admin friction substantially resolved), AI-readiness rating upgraded Amber → Amber-Green. High-risk table updated to reflect modular structure.
 - **2026-05-19** — Post Release 2026-05-18 audit. Marked as resolved: health endpoint (#279), structured logging (#153), rate limiting on auth endpoints (#237), CSP/security headers (#210/#211), deploy output/verification (#276/#263), WebAuthn registration guard (#274), Outlook OAuth2 email (#241). Updated §4 (reliability/observability) rating from Red-Amber to Amber. Updated §5 (security) rating from Amber to Amber-Green. §3 pain points revised to reflect deploy improvements. §7 improvement opportunities #3 and #4 marked complete.
 - **2026-05-16** — Post-migration reassessment. Corrected statements that the earlier terminology pass left factually stale: §4 now describes Docker Compose (not PM2) as the process supervisor, consistent with the completed migration; the performance subsection now reflects that the Raspberry Pi resource ceiling is gone and the Ubuntu Server has substantial headroom, downgrading image-optimisation from a capacity risk to a UX/bandwidth concern. Removed the "SSH from Windows is not frictionless" DX pain point — key auth has stabilised and is now reliable.
