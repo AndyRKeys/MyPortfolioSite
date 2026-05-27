@@ -67,6 +67,7 @@ function applyTravelView(view) {
     var grid = document.getElementById('travel-grid');
     var timeline = document.getElementById('travel-timeline');
 
+    if (!mapEl || !grid || !timeline) return;
     mapEl.classList.add('hidden');
     grid.classList.add('hidden');
     timeline.classList.add('hidden');
@@ -238,7 +239,8 @@ function loadPublicTravelPosts() {
             initTravelMap(memories);
             initViewToggle();
         })
-        .catch(function () {
+        .catch(function (err) {
+            console.error('loadPublicTravelPosts failed:', err && (err.message || String(err)), err && err.stack);
             document.getElementById('travel-empty').classList.remove('hidden');
             document.getElementById('travel-map').classList.add('hidden');
             document.querySelectorAll('.travel-view-toggle').forEach(function (el) { el.classList.add('hidden'); });

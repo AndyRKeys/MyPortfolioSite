@@ -21,6 +21,7 @@ function buildBlogPostCard(post) {
 function applyBlogView(view) {
     var postsList = document.getElementById('posts-list');
     var blogTimeline = document.getElementById('blog-timeline');
+    if (!postsList || !blogTimeline) return;
     if (view === 'timeline') {
         postsList.classList.add('hidden');
         blogTimeline.classList.remove('hidden');
@@ -88,7 +89,7 @@ function loadPosts() {
             initBlogViewToggle();
         })
         .catch(function (err) {
-            console.error('loadPosts failed:', err);
+            console.error('loadPosts failed:', err && (err.message || String(err)), err && err.stack);
             document.getElementById('posts-list').innerHTML = '<p class="hint" style="color:var(--color-error)">Could not load posts.</p>';
         });
 }
