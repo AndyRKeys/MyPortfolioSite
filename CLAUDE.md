@@ -277,6 +277,22 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
   - Same deploy step → move to deploy-lib.sh function
   - Same HTML structure → extract to a shared template or builder function
 
+### .env files
+
+**Never read `.env` files directly.** A `permissions.deny` rule hard-blocks direct reads; a PreToolUse hook provides a fallback message. Both live in `.claude/settings.json`.
+
+To inspect `.env` contents safely, use `redact_env` from `scripts/deploy/deploy-lib.sh` — keys matching `SECRET|TOKEN|PASS|KEY|REFRESH|CREDENTIAL|EMAIL|_ID` are shown as `[redacted]`, everything else passes through:
+
+```bash
+# Dev .env
+bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh && redact_env /home/modnar3/MyPortfolioSite-dev/.env'
+
+# Prod .env (even more sensitive — never read directly)
+bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh && redact_env /home/modnar3/MyPortfolioSite/.env'
+```
+
+`.env.example` and `.env.dev-server.example` files are templates with no real secrets and can be read freely.
+
 ### Debugging & Logging
 
 **Build observability into every change — it is part of the implementation, not a follow-up.** Deployment bugs and blind debugging have been the biggest recent time sink (ops-first priority — `docs/ROADMAP.md` §3.5).
