@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(/home/modnar3/MyPortfolioSite-dev/.env)",
+      "Read(/home/modnar3/MyPortfolioSite/.env)",
+      "Read(/home/modnar3/MyPortfolioSite/.env.bak*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/modnar3/MyPortfolioSite-dev/.claude/redact-env-hook.py",
+            "statusMessage": "Checking file access policy..."
+          }
+        ]
+      }
+    ]
+  }
+}

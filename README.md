@@ -8,7 +8,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | HTML5, CSS3, vanilla JS, jQuery |
+| Frontend | HTML5, CSS3, vanilla JS |
 | Fonts | Space Grotesk (headings), Inter (body) via Google Fonts |
 | Backend | Node.js, Express (ES modules) |
 | Auth | WebAuthn/FIDO2 passkeys + email magic links, JWT |

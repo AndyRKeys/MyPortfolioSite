@@ -48,7 +48,7 @@ This document is a frank self-assessment of the current state of MyPortfolioSite
 
 - **`admin/index.html` JS is now modularised (#175).** The admin panel JS has been split into per-feature modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point. `admin/travel.js` remains the largest module (495 lines) and warrants care when modifying.
 - **`index.html` is also large (23KB).** The main page has grown by accretion. Some of this is unavoidable (it is a portfolio page with many sections), but it is worth periodically reviewing whether JavaScript logic belongs in a separate module.
-- **Legacy jQuery partially removed.** The admin panel no longer uses jQuery (#176, Release 2026-05-26) — all admin JS is now vanilla DOM APIs and `fetch`. jQuery is still present in `script.js`, `blog.js`, and `travel-post.js`. The jQuery/vanilla coexistence creates inconsistency for agents working on those files; `docs/AI.md` documents the rule ("jQuery only for legacy compatibility") but the uncertainty won't fully resolve until those files are migrated too.
+- **jQuery fully removed (#176, #385).** All JS is now vanilla DOM APIs and `fetch`. Admin panel migrated in Release 2026-05-26 (#176); public pages (`script.js`, `blog.js`, `travel.js`, `travel-post.js`, `utils/dom.js`) migrated in #385. No jQuery/vanilla coexistence friction remains.
 - **`backend/routes/auth.js` is the most complex file at 12KB.** WebAuthn + JWT + magic links in one file is a lot of state to hold. It works correctly and is tested, but it is the highest-risk file to modify. Agents should treat it with extra caution and read it fully before any changes.
 - **Frontend test coverage is essentially zero.** The Vitest suite covers backend utilities and some API routes, but there are no frontend tests at all. UI regressions are caught manually via smoke test scripts (`Test-PRN.ps1`), which is better than nothing, but fragile for a codebase growing in complexity. Adding frontend tests (e.g., Playwright) would help but requires a significant architectural decision — no build step means test infrastructure needs careful thought.
 - **`test-results/` is committed to the repo.** Test output artefacts should not be in version control. This is minor but messy.
@@ -145,7 +145,7 @@ This is an unusual section for a project assessment, but it is directly relevant
 - **Context window pressure in long sessions.** The doc suite is thorough but also long. In extended sessions, earlier context (especially specific file contents read at the start) can be lost. This is a fundamental LLM constraint, not a fixable problem, but it means breaking work into smaller issues (which the project already does well) is especially important here.
 - **No structured way for agents to flag "I am not sure about this."** When an agent is uncertain, it either proceeds (risky) or asks (slows things down). A convention like "if in doubt, raise a GitHub issue with the `needs-decision` label and stop" would help, but this is aspirational rather than current practice.
 
-**Overall AI-readiness rating: Amber-Green.** The admin JS modularisation (#175) and the addition of `docs/ARCHITECTURE.md` (#308) have removed the two biggest practical friction points. Remaining friction: jQuery/vanilla JS coexistence in non-admin files (`script.js`, `blog.js`, `travel-post.js`), and context window pressure in long sessions. These are real but not session-blockers.
+**Overall AI-readiness rating: Amber-Green → Green.** The admin JS modularisation (#175), `docs/ARCHITECTURE.md` (#308), and full jQuery removal (#385) have cleared the three biggest practical friction points. Remaining friction: context window pressure in long sessions (fundamental LLM constraint). The codebase is now fully consistent vanilla ES modules throughout.
 
 ---
 
@@ -166,7 +166,7 @@ These are ordered by impact-to-effort ratio, considering both operational risk a
 
 2. **Uploaded files served from same origin** — A malicious SVG upload could execute script in the browser. Consider serving uploads from a separate origin or enforcing a `Content-Security-Policy` sandbox on the uploads path.
 
-3. **jQuery removal from non-admin files** — `script.js`, `blog.js`, `travel-post.js` still use jQuery. Admin is clean (#176); these three files are the remaining jQuery/vanilla JS inconsistency. ~4–6 hours of focused work per file. Good agent task.
+3. ✅ **Done — jQuery fully removed (#385).** `script.js`, `blog.js`, `travel.js`, `travel-post.js`, and `utils/dom.js` migrated to vanilla DOM APIs. No jQuery remains anywhere in the codebase.
 
 4. **Frontend test coverage** — Zero frontend unit or integration tests. UI regressions are caught by manual smoke test scripts only. Adding Playwright E2E for the core public flows (blog list, travel list, login) would close the most important gap without requiring a build step.
 
@@ -186,6 +186,7 @@ It should **not** be updated for every PR or minor fix. It is a baseline snapsho
 
 ## 9. Change log
 
+- **2026-05-27 (updated)** — jQuery fully removed (#385): §1 jQuery note updated to "fully removed", §6 AI-readiness rating upgraded to Green, §7 opportunity #3 marked done. README, AI.md, ARCHITECTURE.md updated to remove jQuery references.
 - **2026-05-27** — Full codebase reassessment (read architecture, routes, deploy scripts, tests, security config, backups, monitoring). §1: staging resolved; backup description corrected (local daily cron exists, offsite missing); graceful shutdown + env preflight noted as strengths. §2: docs rated Green explicitly. §3: deploy pipeline complexity noted as a DX pain point. §4: host monitor.sh documented; backup status corrected; overall rating updated. §5: secret redaction noted as a strength; uploaded-file risk called out specifically. §7: improvement opportunities reordered with offsite backups as #1. Earlier: staging environment marked resolved; jQuery note scoped to non-admin; ARCHITECTURE.md friction point resolved.
 - **2026-05-26** — Admin JS modularisation (#175) shipped. Updated §2 codebase health (admin monolith resolved), §6 agent friction (admin friction substantially resolved), AI-readiness rating upgraded Amber → Amber-Green. High-risk table updated to reflect modular structure.
 - **2026-05-19** — Post Release 2026-05-18 audit. Marked as resolved: health endpoint (#279), structured logging (#153), rate limiting on auth endpoints (#237), CSP/security headers (#210/#211), deploy output/verification (#276/#263), WebAuthn registration guard (#274), Outlook OAuth2 email (#241). Updated §4 (reliability/observability) rating from Red-Amber to Amber. Updated §5 (security) rating from Amber to Amber-Green. §3 pain points revised to reflect deploy improvements. §7 improvement opportunities #3 and #4 marked complete.

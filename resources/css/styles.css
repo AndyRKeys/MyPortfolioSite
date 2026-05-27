@@ -1393,11 +1393,12 @@ footer {
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
     box-shadow: 0 2px 12px var(--color-shadow);
-    transition: box-shadow 0.3s ease;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .timeline-content:hover {
-    box-shadow: 0 4px 20px var(--color-shadow-hover);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .timeline-date {

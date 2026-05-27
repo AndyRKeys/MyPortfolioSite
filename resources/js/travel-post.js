@@ -1,37 +1,51 @@
 import { API_BASE } from './config.js';
 
-// ── Lightbox state ──────────────────────────────────────────────────────────────────────────────
+// ── Lightbox state ────────────────────────────────────────────────────────────
+
 var lightboxItems = [];
 var lightboxIndex = 0;
 
 function openLightbox(items, startIndex, title) {
     lightboxItems = items;
     lightboxIndex = startIndex || 0;
-    $('#travel-lightbox .lightbox-title').text(title || '');
+    var titleEl = document.querySelector('#travel-lightbox .lightbox-title');
+    if (titleEl) titleEl.textContent = title || '';
     renderLightboxItem();
-    $('#travel-lightbox').removeClass('hidden');
+    document.getElementById('travel-lightbox').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 }
 
 function closeLightbox() {
-    $('#travel-lightbox').addClass('hidden');
+    document.getElementById('travel-lightbox').classList.add('hidden');
     document.body.style.overflow = '';
-    $('#travel-lightbox video').each(function () { this.pause(); });
+    document.querySelectorAll('#travel-lightbox video').forEach(function (v) { v.pause(); });
 }
 
 function renderLightboxItem() {
     var item = lightboxItems[lightboxIndex];
     if (!item) return;
+    var mediaContainer = document.querySelector('#travel-lightbox .lightbox-media');
     var mediaEl;
     if (item.type && item.type.indexOf('video') === 0) {
-        mediaEl = $('<video controls playsinline></video>').attr('src', item.url);
+        mediaEl = document.createElement('video');
+        mediaEl.controls = true;
+        mediaEl.playsInline = true;
+        mediaEl.src = item.url;
     } else {
-        mediaEl = $('<img alt="Gallery image">').attr('src', item.url);
+        mediaEl = document.createElement('img');
+        mediaEl.alt = 'Gallery image';
+        mediaEl.src = item.url;
     }
-    $('#travel-lightbox .lightbox-media').empty().append(mediaEl);
-    $('#travel-lightbox .lightbox-counter').text((lightboxIndex + 1) + ' / ' + lightboxItems.length);
-    $('#travel-lightbox .lightbox-prev').toggleClass('hidden', lightboxIndex === 0);
-    $('#travel-lightbox .lightbox-next').toggleClass('hidden', lightboxIndex === lightboxItems.length - 1);
+    mediaContainer.innerHTML = '';
+    mediaContainer.appendChild(mediaEl);
+
+    var counter = document.querySelector('#travel-lightbox .lightbox-counter');
+    if (counter) counter.textContent = (lightboxIndex + 1) + ' / ' + lightboxItems.length;
+
+    var prevBtn = document.querySelector('#travel-lightbox .lightbox-prev');
+    var nextBtn = document.querySelector('#travel-lightbox .lightbox-next');
+    if (prevBtn) prevBtn.classList.toggle('hidden', lightboxIndex === 0);
+    if (nextBtn) nextBtn.classList.toggle('hidden', lightboxIndex === lightboxItems.length - 1);
 }
 
 function initLightbox() {
@@ -85,7 +99,8 @@ function initLightbox() {
     });
 }
 
-// ── Page loader ─────────────────────────────────────────────────────────────────────────────
+// ── Page loader ───────────────────────────────────────────────────────────────
+
 function getId() {
     var params = new URLSearchParams(window.location.search);
     return params.get('id');
@@ -112,8 +127,7 @@ function loadTravelPost() {
         })
         .then(function (travel) {
             renderTravelPost(travel);
-            // Fire-and-forget visit counter — only on a successful post load,
-            // not on 404s or network errors. Swallow errors so stats never break the page.
+            // Fire-and-forget visit counter — only on a successful post load.
             fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
         })
         .catch(function () { showError(); });
@@ -128,32 +142,37 @@ function renderTravelPost(travel) {
     var locationText = travel.location ? locationPrefix + travel.location : '';
     document.getElementById('post-location').textContent = locationText;
 
-    var dateText = formatVisitDate(travel.post_date);
-    document.getElementById('post-date').textContent = dateText;
+    document.getElementById('post-date').textContent = formatVisitDate(travel.post_date);
 
     var allMedia = Array.isArray(travel.media) && travel.media.length
         ? travel.media
         : (travel.media_url ? [{ url: travel.media_url, type: travel.media_type }] : []);
 
-    var gallery = $('#post-media-gallery');
-    gallery.empty();
+    var gallery = document.getElementById('post-media-gallery');
+    gallery.innerHTML = '';
     if (allMedia.length > 0) {
         allMedia.forEach(function (item, idx) {
-            var thumb = $('<div class="gallery-thumb"></div>');
+            var thumb = document.createElement('div');
+            thumb.className = 'gallery-thumb';
             if (item.type && item.type.indexOf('video') === 0) {
-                thumb.append($('<video muted></video>').attr('src', item.url));
+                var video = document.createElement('video');
+                video.muted = true;
+                video.src = item.url;
+                thumb.appendChild(video);
             } else {
-                thumb.append($('<img alt="Travel media">').attr('src', item.url));
+                var img = document.createElement('img');
+                img.alt = 'Travel media';
+                img.src = item.url;
+                thumb.appendChild(img);
             }
-            thumb.on('click', function () {
+            thumb.addEventListener('click', function () {
                 openLightbox(allMedia, idx, travel.title);
             });
-            gallery.append(thumb);
+            gallery.appendChild(thumb);
         });
     }
 
-    var notesEl = document.getElementById('post-notes');
-    notesEl.textContent = travel.notes || '';
+    document.getElementById('post-notes').textContent = travel.notes || '';
 
     document.getElementById('post-loading').classList.add('hidden');
     document.getElementById('post-body').classList.remove('hidden');
@@ -180,7 +199,7 @@ function showError() {
     document.getElementById('post-error').classList.remove('hidden');
 }
 
-// Modules are deferred by default — DOM is ready and jQuery/$ is available
-// because the jQuery <script> tag runs before this module.
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+
 initLightbox();
 loadTravelPost();
