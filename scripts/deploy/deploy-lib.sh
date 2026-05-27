@@ -113,8 +113,19 @@ dstatus() {
   local msg="[deploy:${phase}] step=${DEPLOY_STEP} $*"
   # No colour codes — these lines are parsed by print_deploy_report
   echo "$msg" | tee -a "$LOG_FILE"
-  # Also print a coloured human-friendly echo in verbose mode
-  _verbose && echo -e "${DEPLOY_BOLD}${DEPLOY_CYAN}📋 checkpoint:${DEPLOY_RESET} ${msg}" || true
+  if _verbose; then
+    echo -e "${DEPLOY_BOLD}${DEPLOY_CYAN}📋 checkpoint:${DEPLOY_RESET} ${msg}"
+  else
+    # In quiet mode show a single tick/cross per step so progress is visible
+    local _status; _status=$(echo "$*" | grep -oP '(?<=status=)\S+' || true)
+    case "$_status" in
+      ok|up-to-date|exists|cloned|created|migrated|cleaned|rebuilt|wrapper-managed|skipped|updated|installed|detected|free)
+        echo -e "${DEPLOY_GREEN}${DEPLOY_BOLD}  ✔  ${DEPLOY_RESET}[${phase}] ${_status}" ;;
+      failed|missing|error|blocked|low|warn|mismatch)
+        echo -e "${DEPLOY_RED}${DEPLOY_BOLD}  ✘  ${DEPLOY_RESET}[${phase}] ${_status}" ;;
+      *) true ;;
+    esac
+  fi
 }
 
 # Suppress verbose output when DEPLOY_QUIET=1. Only dstatus, dwarn, dfail, and ddie
