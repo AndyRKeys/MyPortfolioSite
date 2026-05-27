@@ -141,7 +141,16 @@ resources/
 │   ├── script.js           ← Homepage only (GitHub widget, contact form, visit counter)
 │   ├── blog.js             ← Blog listing page
 │   ├── travel.js           ← Travel listing page (map, cards, timeline, lightbox)
-│   ├── admin.js            ← Admin panel (18KB, monolithic — highest risk)
+│   ├── admin.js            ← Admin panel entry point (thin orchestrator)
+│   ├── admin/
+│   │   ├── posts.js        ← Blog post CRUD
+│   │   ├── travel.js       ← Travel memory CRUD, geocoding, EXIF, map
+│   │   ├── deploy.js       ← Deployment console
+│   │   ├── cv.js           ← CV upload + file browser
+│   │   ├── auth.js         ← Auth session handling
+│   │   ├── passkeys.js     ← Passkey management
+│   │   ├── stats.js        ← Visit/error stats
+│   │   └── notes.js        ← Notes section
 │   ├── darkmode.js         ← Theme toggle
 │   ├── nav.js              ← Navigation menu toggle
 │   └── utils/
@@ -178,9 +187,9 @@ Root level (served as static files by Nginx):
 As an example of how the system works end-to-end:
 
 1. **User (admin) visits `/admin/index.html`** in browser
-2. Browser loads `admin.js` (ES module)
+2. Browser loads `admin.js` (entry point), which imports feature modules from `admin/`
 3. User fills out blog post form, clicks "Publish"
-4. `admin.js` calls `fetch('/api/posts', { method: 'POST', body: { title, date, content, ... } })`
+4. `admin/posts.js` calls `fetch('/api/posts', { method: 'POST', body: { title, date, content, ... } })`
 5. Request includes JWT in `Authorization` header
 6. Nginx routes to backend
 7. Backend middleware validates JWT
@@ -215,7 +224,7 @@ As an example of how the system works end-to-end:
 ### Why single `admin/index.html` instead of separate pages?
 
 - All admin functions in one place: easier to access as a single-user dashboard
-- Trade-off: file is monolithic and hard to modify safely; refactoring planned (#175)
+- JS logic is split across per-feature modules in `resources/js/admin/` (#175 — shipped)
 
 ### Why parameterised SQL everywhere?
 
@@ -235,7 +244,7 @@ As an example of how the system works end-to-end:
 
 | Component | Risk | Impact | Mitigation |
 |-----------|------|--------|-----------|
-| `admin/index.html` | Large, monolithic, high-risk to modify | Changes risk breaking multiple features | Refactoring planned (#175) |
+| `resources/js/admin/travel.js` | Largest admin module (495 lines); geocoding, EXIF, map | Read full file before editing; test travel CRUD + map flows |
 | `auth.js` | Complex WebAuthn + JWT state machine | Auth bugs have security implications | High test coverage, careful code review |
 | PostgreSQL (single instance) | No replication, no backup | Data loss if the server disk fails | Backup hardening outstanding — see ROADMAP §4.5 (#164) |
 | Nginx reverse proxy | Single point of failure | If Nginx breaks, entire site is down | Keep Nginx config simple and tested |

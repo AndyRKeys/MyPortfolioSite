@@ -128,7 +128,7 @@ function renderTravelPost(travel) {
     var locationText = travel.location ? locationPrefix + travel.location : '';
     document.getElementById('post-location').textContent = locationText;
 
-    var dateText = formatVisitDate(travel.visit_date);
+    var dateText = formatVisitDate(travel.post_date);
     document.getElementById('post-date').textContent = dateText;
 
     var allMedia = Array.isArray(travel.media) && travel.media.length

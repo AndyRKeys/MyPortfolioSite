@@ -182,8 +182,8 @@ function loadPublicTravelPosts() {
             });
 
             var sorted = memories.slice().sort(function (a, b) {
-                var da = a.visit_date ? String(a.visit_date).slice(0, 10) : '';
-                var db = b.visit_date ? String(b.visit_date).slice(0, 10) : '';
+                var da = a.post_date ? String(a.post_date).slice(0, 10) : '';
+                var db = b.post_date ? String(b.post_date).slice(0, 10) : '';
                 return db < da ? -1 : db > da ? 1 : 0;
             });
             var timelineEl = $('#travel-timeline');
@@ -194,7 +194,7 @@ function loadPublicTravelPosts() {
                 var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
 
                 var item = buildTimelineItem({
-                    dateStr: formatVisitDate(travel.visit_date),
+                    dateStr: formatVisitDate(travel.post_date),
                     title: travel.title,
                     location: travel.location,
                     notes: travel.notes,

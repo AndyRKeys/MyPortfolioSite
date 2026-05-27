@@ -26,7 +26,7 @@ describe('POST /travel', () => {
     const res = await request(app)
       .post('/travel')
       .set('Authorization', `Bearer ${makeToken()}`)
-      .send({ visitDate: '2026-04-01' });
+      .send({ post_date: '2026-04-01' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/title/i);
   });
@@ -38,11 +38,11 @@ describe('PUT /travel/:id', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 400 when visitDate format is invalid', async () => {
+  it('returns 400 when post_date format is invalid', async () => {
     const res = await request(app)
       .put('/travel/some-id')
       .set('Authorization', `Bearer ${makeToken()}`)
-      .send({ title: 'Paris', visitDate: '01-04-2026' });
+      .send({ title: 'Paris', post_date: '01-04-2026' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/YYYY-MM-DD/i);
   });

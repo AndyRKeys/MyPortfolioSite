@@ -23,7 +23,8 @@
  * Uses NGINX_URL (docker-internal, e.g. https://nginx:3001) so Puppeteer can
  * reach nginx directly.
  *
- * Warn-only: non-zero exit triggers a deploy warning but not a rollback.
+ * Hard fail: non-zero exit blocks the deploy and triggers a rollback.
+ * CSP violations have previously broken site functionality in production.
  *
  * Usage:
  *   node test-admin-e2e-csp.js <base-url>
