@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
-import { skipIfServiceKey } from '../utils/serviceKey.js';
+import { exemptIfServiceAccount } from '../utils/serviceKey.js';
 import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 
@@ -11,7 +11,7 @@ const contactRateLimit = createRateLimiter({
   limit: 3,
   windowMs: 60 * 60 * 1000, // 1 hour
   message: 'Too many requests. Please try again later.',
-  skip: skipIfServiceKey,
+  skip: exemptIfServiceAccount,
 });
 
 // lgtm[js/missing-rate-limiting] -- contactRateLimit middleware applied

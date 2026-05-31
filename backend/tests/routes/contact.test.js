@@ -56,10 +56,10 @@ describe('POST /contact', () => {
   });
 });
 
-describe('POST /contact — SERVICE_KEY rate-limit bypass', () => {
+describe('POST /contact — SERVICE_KEY service account exemption', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Simulate rate limit exceeded so bypass behaviour is observable
+    // Simulate rate limit exceeded so exemption behaviour is observable
     const { pool } = vi.mocked(await import('../../db/pool.js'));
     pool.query.mockResolvedValue({ rows: [{ count: 4 }] });
   });
@@ -85,18 +85,18 @@ describe('POST /contact — SERVICE_KEY rate-limit bypass', () => {
     expect(res.status).toBe(429);
   });
 
-  it('bypasses rate limit and reaches validation when correct service key sent', async () => {
+  it('exempts service account and reaches validation when correct service key sent', async () => {
     process.env.SERVICE_KEY = 'test-secret';
     const res = await request(app)
       .post('/contact')
       .set('X-Service-Key', 'test-secret')
       .send({ name: 'Alice', email: 'not-an-email', message: 'Hi' });
-    // Rate limiter skipped — validation fires and rejects the bad email with 400, not 429
+    // Service account exempted — validation fires and rejects the bad email with 400, not 429
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/email/i);
   });
 
-  it('does not bypass rate limit when SERVICE_KEY env var is unset', async () => {
+  it('does not exempt when SERVICE_KEY env var is unset', async () => {
     // SERVICE_KEY deliberately not set
     const res = await request(app)
       .post('/contact')
