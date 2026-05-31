@@ -1,5 +1,31 @@
 # Release Notes
 
+## Release 2026-05-31-2
+
+**Released:** 2026-05-31
+**Branch:** release/2026-05-31-2
+**Closes:** [#406](https://github.com/AndyRKeys/MyPortfolioSite/issues/406)
+
+### Summary
+
+Mini-release following the 2026-05-31 prod rollback. The regression suite caused a false failure by hitting the contact form rate limit during the post-deploy smoke tests, triggering an automatic rollback. This release adds a service account key bypass to all rate limiters and redesigns the regression test order so rate-limit behaviour is tested deliberately (with a clean reset) rather than accidentally. All 2026-05-31 changes are included via the base branch.
+
+### Bug Fixes
+
+- **fix(#406):** `SERVICE_KEY` env var + `X-Service-Key` header bypass added to all four rate limiters (contact, email auth, passkey auth, debug) via shared `skipIfServiceKey()` utility. Regression tests auto-derive the key from the container and send it on baseline contact checks.
+
+### Ops / Testing
+
+- **ops(#406):** Rate-limit test section runs first in the regression suite (no service key, real limiter exercised), followed by a targeted reset that deletes only loopback/runner IP rows — real user counters are never cleared. Previously the reset cleared the entire `rate_limits` table.
+- **ops(#406):** `RESOLVE_IP` extracted from `--resolve` so the targeted reset covers the LAN IP used by dev (not just `127.0.0.1`, which only applies to prod).
+
+### Deployment Notes
+
+- **Required:** add `SERVICE_KEY=$(openssl rand -hex 32)` to the prod `.env` before deploying — the regression script warns if it is missing but degrades gracefully.
+- No DB schema changes. No new dependencies.
+
+---
+
 ## Release 2026-05-31
 
 **Released:** 2026-05-31
