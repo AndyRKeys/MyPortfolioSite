@@ -60,8 +60,10 @@ done
 # Needed because the server cannot route to its own public DNS name (no NAT
 # hairpin), but the deploy must still test via the real hostname.
 RESOLVE_ARGS=()
+RESOLVE_IP=""
 if [ -n "$RESOLVE" ]; then
   RESOLVE_ARGS=(--resolve "$RESOLVE")
+  RESOLVE_IP="${RESOLVE##*:}"  # hostname:port:ip — extract the connect IP
 fi
 
 if [ -z "$BASE_URL" ]; then
@@ -118,13 +120,12 @@ TMPERR=$(mktemp)
 # locked out. Failing open matches the rate-limit middleware's own behaviour.
 reset_rate_limits() {
   [ -n "$COMPOSE_FILE" ] || return 0
-  if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node --input-type=module -e "
+  if docker compose -f "$COMPOSE_FILE" exec -T -e "RESOLVE_IP=${RESOLVE_IP}" "$SERVICE" node --input-type=module -e "
     import('./db/pool.js')
       .then(async ({ pool }) => {
-        await pool.query(
-          'DELETE FROM rate_limits WHERE ip = ANY(\$1)',
-          [['127.0.0.1', '::1', '::ffff:127.0.0.1']]
-        );
+        const ips = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+        if (process.env.RESOLVE_IP) ips.push(process.env.RESOLVE_IP);
+        await pool.query('DELETE FROM rate_limits WHERE ip = ANY(\$1)', [ips]);
         await pool.end();
       })
       .then(() => process.exit(0))
