@@ -107,31 +107,53 @@ fi
 SKEY_HEADER=()
 [ -n "$SERVICE_KEY" ] && SKEY_HEADER=(-H "X-Service-Key: $SERVICE_KEY")
 
+# ── Docker bridge gateway detection (#410) ───────────────────────────────────────
+# When curl connects to the host via loopback (e.g. 127.0.0.1:443 on prod),
+# Docker's NAT rewrites the source IP before the nginx container sees it, so
+# the backend stores the bridge gateway (e.g. 172.20.0.1) rather than loopback.
+# Detect it by reading the default route inside the container.
+DOCKER_GW=""
+if [ -n "$COMPOSE_FILE" ]; then
+  DOCKER_GW=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" \
+    sh -c "ip route show default 2>/dev/null | awk '/default/ {print \$3}' | head -1" \
+    2>/dev/null | tr -d '\r\n' || true)
+  if [ -n "$DOCKER_GW" ]; then
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Docker bridge gateway detected: $DOCKER_GW"
+  else
+    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not detect Docker bridge gateway — rate-limit reset may be incomplete"
+  fi
+fi
+
 # ── Helpers ──────────────────────────────────────────────────────────────────────
 
 PASS=0; FAIL=0; SKIP=0
 TMPFILE=$(mktemp)
 TMPERR=$(mktemp)
 
-# Deletes rate-limit rows for loopback addresses only (127.0.0.1 / ::1 /
-# ::ffff:127.0.0.1) — the IPs the regression runner uses when connecting via
-# --resolve. Real user counters are left intact. Called before and after the
-# rate-limit section: before for a clean window, after so prod is not left
-# locked out. Failing open matches the rate-limit middleware's own behaviour.
+# Deletes rate-limit rows for all IPs the regression runner may appear as:
+# loopback (127.0.0.1 / ::1 / ::ffff:127.0.0.1), RESOLVE_IP (LAN IP on dev),
+# and the Docker bridge gateway (the IP nginx sees when curl connects via
+# loopback NAT on prod). Real user counters on other IPs are left intact.
+# Called before and after the rate-limit section. Failing open matches the
+# rate-limit middleware's own behaviour.
 reset_rate_limits() {
   [ -n "$COMPOSE_FILE" ] || return 0
-  if docker compose -f "$COMPOSE_FILE" exec -T -e "RESOLVE_IP=${RESOLVE_IP}" "$SERVICE" node --input-type=module -e "
+  if docker compose -f "$COMPOSE_FILE" exec -T \
+      -e "RESOLVE_IP=${RESOLVE_IP}" \
+      -e "DOCKER_GW=${DOCKER_GW}" \
+      "$SERVICE" node --input-type=module -e "
     import('./db/pool.js')
       .then(async ({ pool }) => {
         const ips = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
         if (process.env.RESOLVE_IP) ips.push(process.env.RESOLVE_IP);
+        if (process.env.DOCKER_GW)  ips.push(process.env.DOCKER_GW);
         await pool.query('DELETE FROM rate_limits WHERE ip = ANY(\$1)', [ips]);
         await pool.end();
       })
       .then(() => process.exit(0))
       .catch((e) => { process.stderr.write(String(e) + '\n'); process.exit(1); });
   " >/dev/null 2>&1; then
-    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Loopback rate-limit counters reset"
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Rate-limit counters reset"
   else
     echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not reset rate-limit counters — continuing"
   fi
@@ -196,11 +218,13 @@ check_auth() {
 if [ "$QUIET" != "1" ]; then
   _reg_token_text=$([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')
   _reg_skey_text=$([ -n "$SERVICE_KEY" ] && echo 'loaded from container' || echo 'not set — contact tests may be flaky')
+  _reg_gw_text=$([ -n "$DOCKER_GW" ] && echo "$DOCKER_GW" || echo 'not detected — reset may be incomplete')
   _print_multi_box "${C_CYAN}${C_BOLD}" 60 \
     "🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')" \
     "Base URL    : $BASE_URL" \
     "Token       : $_reg_token_text" \
-    "Service key : $_reg_skey_text"
+    "Service key : $_reg_skey_text" \
+    "Bridge GW   : $_reg_gw_text"
 fi
 
 # ── Rate limiting ────────────────────────────────────────────────────────────────
