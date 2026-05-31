@@ -203,9 +203,9 @@ strong {
 }
 
 
-/* Nav box */
+/* Nav box — scoped to direct child so admin-subnav <nav> is not affected */
 
-nav {
+body > nav {
     display: flex;
     flex-direction: column;
     width: 100%;
