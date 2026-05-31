@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script type="module" src="/resources/js/error-logger.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Posts | Admin | AK Portfolio</title>
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>Admin</h2>
+    </header>
+    <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
+        <ul class="nav">
+            <li><a href="/">Home</a></li>
+            <li><a href="/blog/" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
+            <li><a href="/travel/" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
+            <li><a href="/login/" id="logout-link">Logout</a></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
+        </ul>
+    </nav>
+
+    <main class="admin-page">
+        <section class="sec-cont admin-panel">
+            <div class="admin-card">
+                <h2 class="admin-card-title">Blog posts</h2>
+                <form id="post-form">
+                    <input type="hidden" id="post-edit-id" value="" />
+                    <label>Title
+                        <input id="post-title" type="text" placeholder="Post title" />
+                    </label>
+                    <label>Date
+                        <input id="post-date" type="date" />
+                    </label>
+                    <label>Body (Markdown)
+                        <textarea id="post-body" rows="10" placeholder="Write in Markdown…"></textarea>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" id="post-save-btn" class="btn-primary">Save draft</button>
+                        <button type="submit" id="post-publish-btn" class="btn-primary">Publish</button>
+                        <button type="button" id="post-template-btn" class="btn-secondary">Insert template</button>
+                        <button type="button" id="post-clear-btn" class="btn-secondary">Clear</button>
+                        <button type="button" id="post-cancel-btn" class="btn-secondary hidden">Cancel edit</button>
+                    </div>
+                </form>
+                <p id="post-message" class="admin-message"></p>
+                <div class="saved-memories">
+                    <h3 class="saved-list-title">All posts</h3>
+                    <div id="posts-admin-list">
+                        <p class="hint">Loading…</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
+    <script src="/resources/js/admin-subnav.js"></script>
+    <script src="/resources/js/admin-init.js"></script>
+    <script type="module" src="/resources/js/admin-posts-page.js"></script>
+</body>
+</html>
