@@ -19,6 +19,7 @@
  * table and trigger false alert emails.
  */
 
+import https from 'https';
 import puppeteer from 'puppeteer';
 
 const baseUrl = process.argv[2];
@@ -27,7 +28,33 @@ if (!baseUrl) {
   process.exit(1);
 }
 
-const PAGES = ['/', '/blog/', '/travel/', '/login/'];
+// Static pages always included — individual content pages added dynamically below.
+const STATIC_PAGES = ['/', '/blog/', '/travel/', '/login/', '/setup/'];
+
+// ── Dynamic slug discovery ────────────────────────────────────────────────────
+
+// Fetch the first item from an API endpoint and return the value of `field`.
+// Uses rejectUnauthorized:false so the self-signed dev cert is accepted.
+// Returns null if the request fails or no item is found.
+function fetchFirstField(apiPath, field) {
+  return new Promise((resolve) => {
+    const url = `${baseUrl}${apiPath}`;
+    const agent = new https.Agent({ rejectUnauthorized: false });
+    https.get(url, { agent, headers: { Accept: 'application/json' } }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const items = JSON.parse(data);
+          const found = Array.isArray(items) ? items.find((i) => i[field]) : null;
+          resolve(found ? found[field] : null);
+        } catch { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
+
+// ── Test runner ───────────────────────────────────────────────────────────────
 
 let browser;
 const results = { passed: [], failed: [] };
@@ -85,6 +112,30 @@ async function run() {
   console.log(`\n🧪 Public Pages — JS Runtime Error Check`);
   console.log(`📍 Base URL: ${baseUrl}\n`);
 
+  // Discover live content slugs/ids so post pages are exercised too (#397).
+  const [blogSlug, travelId] = await Promise.all([
+    fetchFirstField('/api/posts', 'slug'),
+    fetchFirstField('/api/travel', 'id'),
+  ]);
+
+  const pages = [...STATIC_PAGES];
+
+  if (blogSlug) {
+    pages.push(`/blog/post/?slug=${encodeURIComponent(blogSlug)}`);
+    console.log(`  ℹ️  blog post discovered: /blog/post/?slug=${blogSlug}`);
+  } else {
+    console.log('  ⚠️  no published blog post found — /blog/post/ skipped');
+  }
+
+  if (travelId) {
+    pages.push(`/travel/post/?id=${encodeURIComponent(travelId)}`);
+    console.log(`  ℹ️  travel post discovered: /travel/post/?id=${travelId}`);
+  } else {
+    console.log('  ⚠️  no travel memory found — /travel/post/ skipped');
+  }
+
+  console.log('');
+
   try {
     browser = await puppeteer.launch({
       headless: 'new',
@@ -96,7 +147,7 @@ async function run() {
       ],
     });
 
-    for (const path of PAGES) {
+    for (const path of pages) {
       const page = await browser.newPage();
       await testPage(page, path);
       await page.close();
@@ -107,7 +158,7 @@ async function run() {
   } finally {
     if (browser) await browser.close();
 
-    const total = PAGES.length;
+    const total = pages.length;
     console.log(`\n${'='.repeat(50)}`);
     console.log(`✅ Passed: ${results.passed.length} / ${total}`);
     if (results.failed.length) {

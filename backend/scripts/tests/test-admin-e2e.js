@@ -152,10 +152,14 @@ try {
     req.continue();
   });
 
-  // Collect console errors from the page for smoke checks.
+  // Collect console errors and unhandled JS exceptions for smoke checks (#397).
   const consoleErrors = [];
+  const pageErrors = [];
   page.on('console', msg => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', err => {
+    if (!err.message.includes('-extension://')) pageErrors.push(err.message);
   });
 
   // Auto-accept all confirm() dialogs (delete confirmations, etc.).
@@ -184,6 +188,10 @@ try {
   // Filter known noise (zlib warning from exifr is cosmetic and not a code error)
   const realErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('No JS console errors on page load', realErrors.length === 0, realErrors.join('; '));
+
+  // S2b: no unhandled JS exceptions on load (#397)
+  smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
+  const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
 
   // S3–S8: each section present in DOM
   const sections = [
@@ -329,6 +337,15 @@ try {
   } catch (e) {
     interact('Deploy fetch — output appeared', false, e.message);
   }
+
+  // S-final: no unhandled JS exceptions fired during interactions (#397)
+  // Uses pageErrorsAtLoad snapshot so errors already reported in S2b aren't double-counted.
+  const interactionPageErrors = pageErrors.slice(pageErrorsAtLoad);
+  smoke(
+    'No unhandled JS exceptions during interactions',
+    interactionPageErrors.length === 0,
+    interactionPageErrors.join('; '),
+  );
 
 } catch (err) {
   console.error('\n💥 Test runner crashed:', err.message);

@@ -102,8 +102,8 @@ Puppeteer scripts run automatically inside the backend container after every dev
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 | `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
 | `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
-| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175) |
-| `test-public-pages.js` | `test:public-pages` | All public pages load without unhandled JS exceptions (`/`, `/blog/`, `/travel/`, `/login/`) — catches null dereferences and import failures invisible to curl-based checks (#390) |
+| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175); also checks for unhandled JS exceptions on load and during interactions (#397) |
+| `test-public-pages.js` | `test:public-pages` | All public pages load without unhandled JS exceptions (`/`, `/blog/`, `/travel/`, `/login/`, `/setup/`, plus dynamically discovered blog post and travel post pages) — catches null dereferences and import failures invisible to curl-based checks (#390, #397) |
 
 > **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`, `test-admin-e2e.js`, `test-public-pages.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
 
