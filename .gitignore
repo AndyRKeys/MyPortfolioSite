@@ -9,3 +9,7 @@ __MACOSX/
 uploads/*
 !uploads/.gitkeep
 test-results/
+backend/coverage/
+scripts/config/certs/
+.env.bak-*
+/~/

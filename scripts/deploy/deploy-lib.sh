@@ -387,6 +387,10 @@ load_env() {
       if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
         value="${BASH_REMATCH[1]}"
       fi
+      # Expand a leading ~/ to $HOME/ for path variables. Pure substitution —
+      # does not execute bash code, so complex passwords with ~ in other positions
+      # are unaffected.
+      [[ "$value" == "~/"* ]] && value="$HOME/${value:2}"
       export "$key=$value"
     fi
   done < "$ENV_FILE"

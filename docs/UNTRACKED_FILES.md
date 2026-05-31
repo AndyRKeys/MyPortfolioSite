@@ -159,17 +159,20 @@ docker compose -f docker-compose.dev-server.yml up -d --build
 - `uploads/` (user data)
 
 **Always use .gitignore:**
-These are already in `.gitignore`:
+These are in `.gitignore`:
 ```
 .env
-.env.local
 scripts/config/certs/
 uploads/
 node_modules/
 .DS_Store
+.env.bak-*          # deploy script .env backups
+backend/coverage/   # vitest coverage output
 ```
 
 Verify with: `git check-ignore .env`
+
+**Note on `BACKUP_DIR=~/backups/dev` in `.env`:** The deploy script reads `.env` verbatim (not via `source`), so `~` is expanded to `$HOME` by deploy-lib.sh itself. If a `~/` directory ever appears inside the repo root, it means a deploy ran before this expansion fix was in place — move any backups to `$HOME/backups/dev/` and delete the directory.
 
 ## Reference: How Variables Flow
 
