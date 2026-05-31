@@ -1268,6 +1268,11 @@ compose_up_with_rollback() {
   dinfo "Stopping existing stack before rebuild..."
   docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | _log_cmd || true
 
+  # Pass commit SHA to nginx container so sub_filter can cache-bust JS module imports in HTML
+  DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "dev")
+  export DEPLOY_VERSION
+  dinfo "DEPLOY_VERSION=$DEPLOY_VERSION"
+
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
 
   if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | _log_cmd; then

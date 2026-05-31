@@ -1,7 +1,7 @@
 # Nginx config for dev environment on Ubuntu Server.
 # HTTPS on port 3001 with self-signed certificate for WebAuthn support.
 # HTTP on port 80 redirects to HTTPS on port 3001.
-# Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST
+# Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST, DEPLOY_VERSION
 
 # HTTP → HTTPS redirect
 server {
@@ -65,8 +65,11 @@ server {
         try_files $uri =404;
     }
 
-    # Static files
+    # Static files — rewrite .js src attrs with version hash to bust ES module cache after deploy
     location / {
+        sub_filter '.js"' '.js?v=${DEPLOY_VERSION}"';
+        sub_filter_once off;
+        add_header Cache-Control "no-store";
         try_files $uri $uri/ $uri.html =404;
     }
 }
