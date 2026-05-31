@@ -193,30 +193,17 @@ try {
   smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
   const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
 
-  // S3–S8: each section present in DOM
-  const sections = [
-    ['Travel form',       '#travel-form'],
-    ['Posts form',        '#post-form'],
-    ['Deploy section',    '#deploy-section'],
-    ['CV section',        '#cv-status-badge'],
-    ['Stats section',     '#stats-list'],
-    ['Notes section',     '#private-notes'],
-    ['Passkeys section',  '#passkey-list'],
-  ];
-  for (const [label, sel] of sections) {
-    const exists = await page.$(sel) !== null;
-    smoke(`${label} present`, exists, `${sel} not found`);
+  // S3: admin sub-nav present and Dashboard is the active item (#378)
+  const subnavExists = await page.$('.admin-subnav') !== null;
+  smoke('Admin sub-nav present', subnavExists, '.admin-subnav not found');
+  if (subnavExists) {
+    const activeLabel = await page.$eval('.admin-subnav-item.active', el => el.textContent.trim()).catch(() => '');
+    smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
 
-  // S9: deploy status loaded (not crashing — text is not the loading placeholder)
-  try {
-    await waitForText(page, '#deploy-status-row', '?', 5000)
-      .catch(() => {}); // may already have content
-    const statusText = await page.$eval('#deploy-status-row', el => el.textContent.trim());
-    smoke('Deploy status row has content', statusText.length > 0, 'empty status row');
-  } catch (e) {
-    smoke('Deploy status row has content', false, e.message);
-  }
+  // S4: all 6 dashboard navigation cards present (#378)
+  const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
+  smoke('Dashboard has 6 navigation cards', cardCount === 6, `found ${cardCount}`);
 
   // ── Interaction tests ────────────────────────────────────────────────────
 
@@ -224,6 +211,7 @@ try {
 
   // ── I1: create a blog post ───────────────────────────────────────────────
   console.log('\n📝 I1 — create blog post');
+  await page.goto(`${baseUrl}/admin/posts.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#post-title', { timeout: 5000 });
     await page.$eval('#post-title', el => { el.value = ''; });
@@ -273,6 +261,7 @@ try {
 
   // ── I3: create a travel memory ───────────────────────────────────────────
   console.log('\n🌍 I3 — create travel memory');
+  await page.goto(`${baseUrl}/admin/travel.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#travel-title', { timeout: 5000 });
     await page.$eval('#travel-title', el => { el.value = ''; });
@@ -319,6 +308,7 @@ try {
 
   // ── I5: deploy fetch streams output ──────────────────────────────────────
   console.log('\n📡 I5 — deploy fetch (git fetch origin)');
+  await page.goto(`${baseUrl}/admin/deploy.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#fetch-btn:not([disabled])', { timeout: 8000 });
     await page.click('#fetch-btn');
