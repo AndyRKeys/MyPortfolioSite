@@ -1,10 +1,10 @@
 /**
- * optionalAuthenticate middleware unit tests.
+ * resolveUser middleware unit tests.
  * No DB or HTTP server required — tests the middleware function directly.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
-import { optionalAuthenticate } from '../../middleware/optionalAuthenticate.js';
+import { resolveUser } from '../../middleware/resolveUser.js';
 
 const JWT_SECRET = 'test-secret-test-secret-test-secret-32';
 
@@ -15,7 +15,7 @@ function makeReq(authHeader) {
 function run(req) {
   let nextCalled = false;
   const res = {};
-  optionalAuthenticate(req, res, () => { nextCalled = true; });
+  resolveUser(req, res, () => { nextCalled = true; });
   return { nextCalled };
 }
 
@@ -27,7 +27,7 @@ afterEach(() => {
   delete process.env.JWT_SECRET;
 });
 
-describe('optionalAuthenticate', () => {
+describe('resolveUser', () => {
   it('always calls next()', () => {
     const req = makeReq(undefined);
     const { nextCalled } = run(req);

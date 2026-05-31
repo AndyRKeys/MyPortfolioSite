@@ -1,10 +1,11 @@
 import jwt from 'jsonwebtoken';
 
-// Verifies the JWT from Authorization: Bearer if present and sets req.user, then
-// always calls next(). Does not gate access — unauthenticated requests proceed
-// normally and will still be subject to any rate limiter further down the chain.
+// Resolves the caller's identity from Authorization: Bearer if present and sets
+// req.user, then always calls next(). Does not gate access — requests with no
+// token or an invalid token proceed normally and will still be subject to any
+// rate limiter further down the chain.
 // Place before a rate limiter so exemptIfTrusted can check req.user.
-export function optionalAuthenticate(req, _res, next) {
+export function resolveUser(req, _res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);

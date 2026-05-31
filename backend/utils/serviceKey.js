@@ -10,7 +10,7 @@ export const exemptIfServiceAccount = (req) => {
 };
 
 // Returns true when the request is from a trusted caller: a verified JWT session
-// (set by optionalAuthenticate) or a valid service account key.
+// (set by resolveUser) or a valid service account key.
 // Use this as the `skip` function on application routes (contact, debug/errors).
 // Auth endpoints must keep exemptIfServiceAccount — JWT exemption is inappropriate
 // there (a stolen JWT must not bypass magic-link or passkey rate limits).
