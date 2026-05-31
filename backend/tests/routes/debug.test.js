@@ -1,8 +1,9 @@
 /**
  * Debug route tests — error ingestion, sanitisation, GET pagination, rate limit.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { createApp } from '../../app.js';
 
 // ── DB mock ───────────────────────────────────────────────────────────────────
@@ -146,5 +147,59 @@ describe('GET /debug/errors', () => {
     await request(app).get('/debug/errors?limit=9999');
     const selectCall = mockQuery.mock.calls.find(([sql]) => sql.includes('LIMIT'));
     expect(selectCall[1][0]).toBe(200);
+  });
+});
+
+// ── POST /debug/errors — rate limit exemption ─────────────────────────────────
+
+describe('POST /debug/errors — JWT authenticated session exemption', () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    // Simulate rate limit exceeded so exemption behaviour is observable
+    mockQuery.mockResolvedValue({ rows: [{ count: 51 }] });
+  });
+
+  afterEach(() => {
+    delete process.env.SERVICE_KEY;
+  });
+
+  it('returns 429 when rate limit exceeded and no credentials sent', async () => {
+    const res = await request(app)
+      .post('/debug/errors')
+      .send({ type: 'TypeError', message: 'test' });
+    expect(res.status).toBe(429);
+  });
+
+  it('exempts authenticated session when valid JWT sent', async () => {
+    const token = jwt.sign({ userId: 1 }, process.env.JWT_SECRET);
+    // Reset mock so the INSERT after rate-limit exemption succeeds
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ rows: [] });
+    const res = await request(app)
+      .post('/debug/errors')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ type: 'TypeError', message: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.received).toBe(true);
+  });
+
+  it('still rate limits when JWT is invalid', async () => {
+    const res = await request(app)
+      .post('/debug/errors')
+      .set('Authorization', 'Bearer not.a.valid.jwt')
+      .send({ type: 'TypeError', message: 'test' });
+    expect(res.status).toBe(429);
+  });
+
+  it('exempts service account when correct SERVICE_KEY sent', async () => {
+    process.env.SERVICE_KEY = 'test-key';
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ rows: [] });
+    const res = await request(app)
+      .post('/debug/errors')
+      .set('X-Service-Key', 'test-key')
+      .send({ type: 'TypeError', message: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.received).toBe(true);
   });
 });

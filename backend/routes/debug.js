@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { optionalAuthenticate } from '../middleware/optionalAuthenticate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
-import { exemptIfServiceAccount } from '../utils/serviceKey.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { isEmailConfigured, sendErrorAlertEmail } from '../utils/email.js';
 
 const router = Router();
@@ -16,7 +17,7 @@ const debugRateLimit = createRateLimiter({
   limit: 50,
   windowMs: 60 * 1000,
   message: 'Rate limited',
-  skip: exemptIfServiceAccount,
+  skip: exemptIfTrusted,
 });
 
 // ── Alert threshold ───────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ function isValidUuid(v) {
  * POST /debug/errors — Receive frontend errors from error-logger.js.
  * Persists to client_errors table and triggers threshold alerting (#333).
  */
-router.post('/errors', debugRateLimit, async (req, res) => {
+router.post('/errors', optionalAuthenticate, debugRateLimit, async (req, res) => {
   const { type, message, timestamp, url, filename, lineno, colno, stack, sessionId, requestId } = req.body;
 
   if (!type || !message) {
@@ -135,7 +136,7 @@ router.post('/errors', debugRateLimit, async (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports.
  */
-router.post('/csp-violations', debugRateLimit, async (req, res) => {
+router.post('/csp-violations', optionalAuthenticate, debugRateLimit, async (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 
