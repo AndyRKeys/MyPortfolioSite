@@ -203,9 +203,9 @@ strong {
 }
 
 
-/* Nav box */
+/* Nav box — exclude admin-subnav so its flex-direction:row is not overridden */
 
-nav {
+nav:not(.admin-subnav) {
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -300,6 +300,92 @@ ul.nav {
     padding: 10px;
     display: inline-block;
     line-height: 1.5em;
+}
+
+/* ── Admin sub-navigation (#378) ────────────────────────────────────────── */
+
+.admin-subnav {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    padding: 0 1.25rem;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.admin-subnav::-webkit-scrollbar { display: none; }
+
+.admin-subnav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.75rem 0.9rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.admin-subnav-item:hover {
+    color: var(--color-text);
+}
+
+.admin-subnav-item.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+    font-weight: 600;
+}
+
+@media (max-width: 600px) {
+    .admin-subnav { padding: 0 0.75rem; justify-content: flex-start; }
+    .admin-subnav-item { padding: 0.65rem 0.65rem; font-size: 0.8rem; }
+}
+
+/* ── Admin dashboard (#378) ─────────────────────────────────────────────── */
+
+.admin-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem 0 0.5rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.admin-dashboard-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.25rem 1.25rem 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--color-text);
+    box-shadow: 0 1px 4px var(--color-shadow);
+    transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.admin-dashboard-card:hover {
+    box-shadow: 0 3px 12px var(--color-shadow-hover);
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+}
+
+.admin-dashboard-card-icon { font-size: 1.4rem; line-height: 1; margin-bottom: 0.15rem; }
+.admin-dashboard-card-title { font-weight: 600; font-size: 0.95rem; }
+.admin-dashboard-card-desc { font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.4; }
+
+@media (max-width: 480px) {
+    .admin-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .admin-page {
@@ -739,19 +825,25 @@ footer a:hover {
 
 /* Projects Grid */
 .projects-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1.5rem;
-    max-width: 1200px;
+    width: 100%;
+    max-width: 1100px;
     margin: 0 auto;
+    padding: 0 1rem;
 }
 
 .project-card {
+    flex: 1 1 300px;
+    max-width: 420px;
+    text-align: left;
     background: var(--color-surface);
     border-radius: 10px;
     padding: 1.75rem;
     box-shadow: 0 2px 12px var(--color-shadow);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
     border-left: 4px solid var(--color-border-strong);
 }
 
@@ -801,18 +893,27 @@ footer a:hover {
 
 /* Skills section */
 .skills-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 2rem;
     max-width: 1100px;
     margin: 0 auto;
 }
 
 .skill-category {
+    flex: 1 1 280px;
+    max-width: 480px;
     background: var(--color-surface);
     padding: 1.75rem;
     border-radius: 10px;
     box-shadow: 0 2px 12px var(--color-shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.skill-category:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .skill-category h3 {
@@ -1114,17 +1215,26 @@ footer {
 }
 
 .ai-dev-points {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1.25rem;
     margin-top: 1.5rem;
 }
 
 .ai-point {
+    flex: 1 1 220px;
+    max-width: 300px;
     background: var(--color-surface-alt);
     border-radius: 8px;
     padding: 1.25rem;
     border-left: 3px solid var(--color-border-strong);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ai-point:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .ai-point h3 {
@@ -1164,6 +1274,12 @@ footer {
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
     box-shadow: 0 2px 12px var(--color-shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.cert-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .cert-info {
@@ -1281,11 +1397,6 @@ footer {
 
     .about-text {
         text-align: center;
-    }
-
-    .projects-grid,
-    .skills-container {
-        grid-template-columns: 1fr;
     }
 
     .contact-wrapper {
@@ -1484,8 +1595,9 @@ footer {
 /* ── GitHub activity widget (Issue #5) ─────────────────────────────────────── */
 
 .github-repos-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1rem;
     max-width: 1100px;
     margin: 0 auto 1.5rem;
@@ -1493,6 +1605,8 @@ footer {
 }
 
 .github-repo-card {
+    flex: 1 1 260px;
+    max-width: 380px;
     display: block;
     background: var(--color-surface);
     border-radius: 10px;

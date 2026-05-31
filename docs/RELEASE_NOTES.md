@@ -1,5 +1,61 @@
 # Release Notes
 
+## Release 2026-05-31
+
+**Released:** 2026-05-31
+**Branch:** release/2026-05-31
+**Closes:** [#244](https://github.com/AndyRKeys/MyPortfolioSite/issues/244), [#282](https://github.com/AndyRKeys/MyPortfolioSite/issues/282), [#283](https://github.com/AndyRKeys/MyPortfolioSite/issues/283), [#322](https://github.com/AndyRKeys/MyPortfolioSite/issues/322), [#346](https://github.com/AndyRKeys/MyPortfolioSite/issues/346), [#378](https://github.com/AndyRKeys/MyPortfolioSite/issues/378), [#385](https://github.com/AndyRKeys/MyPortfolioSite/issues/385), [#387](https://github.com/AndyRKeys/MyPortfolioSite/issues/387), [#390](https://github.com/AndyRKeys/MyPortfolioSite/issues/390), [#391](https://github.com/AndyRKeys/MyPortfolioSite/issues/391), [#399](https://github.com/AndyRKeys/MyPortfolioSite/issues/399)
+
+### Summary
+
+Frontend modernisation, admin UX, auth hardening, and deploy reliability release. Removes jQuery from all public pages (87KB, −1,575 lines), refactors the admin panel into dedicated sub-pages with responsive navigation, retires the POST /auth/setup endpoint in favour of magic-link bootstrapping, and adds JS runtime checks for all pages on every deploy. Also reduces public travel coordinate precision to ~1km for privacy, fixes stale JS after deploys, protects dev certs from branch-switch deletions, and corrects a regression-script bug that was rate-locking the admin IP after every deploy.
+
+### Features
+
+**Admin sub-pages with responsive subnav (#378)**
+- Monolithic `admin/index.html` replaced with a dashboard and six dedicated sub-pages (posts, travel, deploy, CV, stats, notes/auth/passkeys)
+- `admin-subnav.js` injects a shared responsive horizontal navigation bar across all admin pages
+- Each page loads only its own JS module entry point — no unrelated code runs on load
+- E2E test updated to navigate sub-pages; JS runtime check extended to cover all admin pages
+
+**Puppeteer JS runtime check for all public pages (#390)**
+- `test-public-pages.js` added to the deploy pipeline: loads `/`, `/blog/`, `/travel/`, `/login/`, `/setup/`, and dynamically discovered blog/travel post pages after every deploy
+- Fails the deploy (warn-only) on any unhandled JS exception on public pages
+- `test-admin-e2e.js` extended with `pageerror` tracking during CRUD interactions
+- All Puppeteer API calls use browser-page fetch so `--ignore-certificate-errors` covers self-signed dev certs without Node-level overrides
+
+**Travel coordinate privacy (#244)**
+- Public endpoints `GET /travel` and `GET /travel/:id` now return coordinates rounded to 2 decimal places (~1km precision)
+- Admin endpoints (`GET /travel/all`, `GET /travel/admin/:id`) retain full 6-decimal precision for editing
+- Query-layer only via `TRAVEL_COLS_PUBLIC` constant — no schema changes
+
+### Changed
+
+**jQuery removed from all public pages (#385)**
+- `script.js`, `blog.js`, `travel.js`, `travel-post.js`, and `utils/dom.js` migrated to vanilla DOM APIs
+- `jquery-3.5.1.min.js` (87KB) removed from all public pages — no external JS dependency on the public site
+- Net: −1,575 lines; no behaviour change
+- Also adds hover lift to timeline cards and improves error logging in blog/travel catch handlers
+
+**Auth setup endpoint retired (#282, #283)**
+- `POST /auth/setup` returns 410 Gone; account creation now happens automatically on the first magic-link send via the existing upsert in `POST /api/auth/email/send`
+- `setup/index.html` replaces the account-creation form with a redirect to `/login/`
+- Deleting the last passkey now shows a warning that magic-link sign-in remains available
+
+### Bug Fixes
+
+- **fix(#391, #346, PR #395):** Three deploy-hygiene fixes: (1) `Cache-Control: no-cache` added for `*.js` in all nginx templates — browsers revalidate JS after every deploy, eliminating stale-module bugs; (2) `scripts/config/certs/` gitignored so `git clean -fd` during branch switches no longer deletes dev certs; (3) leading `~/` in `BACKUP_DIR` now expanded to `$HOME/` in `load_env`, preventing a literal `~/` directory from being created inside the repo
+- **fix(#387, PR #388):** Rate-limit reset and JWT generation in the regression test script were silently failing because `node -e` inline scripts were missing `--input-type=module`; rate-limit counters now clear correctly after the smoke suite, preventing admin IP lockout after every deploy
+- **fix(#399, PR #400):** Overflow cards (`.projects-grid`, `.ai-dev-points`, `.github-repos-grid`) converted from auto-fit grid to flexbox with `justify-content: center`; consistent hover lift added to `.skill-category`, `.ai-point`, and `.cert-card`
+- **fix(#322, PR #401):** `.projects-grid` constrained with `width: 100%` and `padding: 0 1rem` to prevent horizontal overflow inside the column-flex container at narrow viewports
+
+### Breaking Changes / Deployment Notes
+
+- `POST /api/auth/setup` is removed and returns 410 Gone; admin bootstrap now goes through `POST /api/auth/email/send` followed by the magic-link flow at `/login/`
+- No DB schema changes required
+
+---
+
 ## Release 2026-05-26
 
 **Released:** 2026-05-26

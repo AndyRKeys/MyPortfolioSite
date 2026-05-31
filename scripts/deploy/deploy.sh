@@ -124,6 +124,7 @@ case "$DEPLOY_ENV" in
     RUN_DEV_CERTS=1      # dev uses self-signed certs (no certbot); must be generated before nginx starts
     RUN_VITEST=1         # unified image includes devDependencies; run tests against the live container post-deploy
     RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger checks post-deploy
+    RUN_PUBLIC_PAGES=1   # puppeteer check for unhandled JS errors on all public pages (#390)
     RUN_ADMIN_E2E=1      # smoke + interaction tests for admin panel — hard fail (admin is required for content management)
     RUN_DDNS_CHECK=0     # no public DNS in dev; site is LAN-only
     RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
@@ -143,6 +144,7 @@ case "$DEPLOY_ENV" in
     RUN_DEV_CERTS=0      # prod uses Let's Encrypt certs managed by certbot, not self-signed
     RUN_VITEST=1         # unified image includes devDependencies; run tests post-deploy on prod too
     RUN_ERROR_LOGGER=1   # unified image includes Chromium/puppeteer; run error-logger on prod too
+    RUN_PUBLIC_PAGES=1   # puppeteer check for unhandled JS errors on all public pages (#390)
     RUN_ADMIN_E2E=1      # smoke + interaction tests for admin panel — hard fail (admin is required for content management)
     RUN_DDNS_CHECK=1     # prod is public; verify DNS points to this server before deploying
     RUN_BACKUP_CHECK=1   # warn if local backups are absent or stale
@@ -387,6 +389,7 @@ if [ "$DRY_RUN" = "1" ]; then
   dinfo "  health URL:   $HEALTH_URL"
   [ "$RUN_VITEST"        = "1" ] && dinfo "  vitest:        would run after health check"
   [ "$RUN_ERROR_LOGGER"  = "1" ] && dinfo "  error-logger:  would run after vitest (incl. CSP violation scan)"
+  [ "$RUN_PUBLIC_PAGES"  = "1" ] && dinfo "  public-pages:  would check all public pages for JS runtime errors"
   [ "$SKIP_REGRESSION"   = "0" ] && dinfo "  regression:    would run smoke tests"
   [ "$RUN_BACKUP_CHECK"  = "1" ] && dinfo "  backup check:  would warn if backups absent/stale"
   dinfo ""
@@ -418,6 +421,7 @@ check_outlook_token "$BACKEND_SERVICE"
 
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_all_pages
 [ "$RUN_ERROR_LOGGER" = "1" ] && test_error_logger_contracts
+[ "$RUN_PUBLIC_PAGES" = "1" ] && check_public_page_js
 [ "$RUN_ERROR_LOGGER" = "1" ] && check_csp_violations
 [ "$RUN_ERROR_LOGGER" = "1" ] && check_admin_e2e_csp
 [ "$RUN_ADMIN_E2E"    = "1" ] && check_admin_e2e

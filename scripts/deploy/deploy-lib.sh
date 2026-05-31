@@ -387,6 +387,10 @@ load_env() {
       if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
         value="${BASH_REMATCH[1]}"
       fi
+      # Expand a leading ~/ to $HOME/ for path variables. Pure substitution —
+      # does not execute bash code, so complex passwords with ~ in other positions
+      # are unaffected.
+      [[ "$value" == "~/"* ]] && value="$HOME/${value:2}"
       export "$key=$value"
     fi
   done < "$ENV_FILE"
@@ -1499,6 +1503,41 @@ test_error_logger_contracts() {
     dwarn "Error logger contract test output:"
     echo "$test_output" | tee -a "$LOG_FILE"
     dwarn "Frontend error-logger contracts failed — output above"
+  fi
+}
+
+# ── Public Page JS Runtime Error Check (#390) ────────────────────────────────
+
+# Load every public page in a real browser and fail if any unhandled JS
+# exception fires (null dereferences, failed imports, etc.). Catches the class
+# of errors invisible to curl-based smoke tests — first caught during #389
+# (jQuery removal), where page JS errors weren't surfaced until a browser ran.
+# Warn-only — surfaces loudly but does not roll back the deploy.
+check_public_page_js() {
+  dsection "Frontend tests — public pages JS runtime errors (#390)"
+
+  local base_url="${NGINX_URL:-}"
+  if [ -z "$base_url" ]; then
+    dwarn "NGINX_URL not set — skipping public page JS runtime check"
+    dstatus public-pages suite=frontend status=skipped reason=no-nginx-url
+    return
+  fi
+
+  dinfo "Loading public pages in headless browser to check for unhandled JS errors..."
+
+  local test_output rc
+  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" \
+      npm run test:public-pages -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[public-pages\]' | tail -1 || true)
+  local passed failed total
+  passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed); total=$(_kv_num "$sline" total)
+  if [ "$rc" -eq 0 ]; then
+    dstatus public-pages suite=frontend status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dok "Public pages JS check passed — ${passed:-0}/${total:-0} ✓"
+  else
+    dstatus public-pages suite=frontend status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    printf '%s\n' "$test_output" | tee -a "$LOG_FILE"
+    dwarn "JS runtime errors detected on public pages — see output above"
   fi
 }
 

@@ -152,10 +152,14 @@ try {
     req.continue();
   });
 
-  // Collect console errors from the page for smoke checks.
+  // Collect console errors and unhandled JS exceptions for smoke checks (#397).
   const consoleErrors = [];
+  const pageErrors = [];
   page.on('console', msg => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', err => {
+    if (!err.message.includes('-extension://')) pageErrors.push(err.message);
   });
 
   // Auto-accept all confirm() dialogs (delete confirmations, etc.).
@@ -185,30 +189,21 @@ try {
   const realErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('No JS console errors on page load', realErrors.length === 0, realErrors.join('; '));
 
-  // S3–S8: each section present in DOM
-  const sections = [
-    ['Travel form',       '#travel-form'],
-    ['Posts form',        '#post-form'],
-    ['Deploy section',    '#deploy-section'],
-    ['CV section',        '#cv-status-badge'],
-    ['Stats section',     '#stats-list'],
-    ['Notes section',     '#private-notes'],
-    ['Passkeys section',  '#passkey-list'],
-  ];
-  for (const [label, sel] of sections) {
-    const exists = await page.$(sel) !== null;
-    smoke(`${label} present`, exists, `${sel} not found`);
+  // S2b: no unhandled JS exceptions on load (#397)
+  smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
+  const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
+
+  // S3: admin sub-nav present and Dashboard is the active item (#378)
+  const subnavExists = await page.$('.admin-subnav') !== null;
+  smoke('Admin sub-nav present', subnavExists, '.admin-subnav not found');
+  if (subnavExists) {
+    const activeLabel = await page.$eval('.admin-subnav-item.active', el => el.textContent.trim()).catch(() => '');
+    smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
 
-  // S9: deploy status loaded (not crashing — text is not the loading placeholder)
-  try {
-    await waitForText(page, '#deploy-status-row', '?', 5000)
-      .catch(() => {}); // may already have content
-    const statusText = await page.$eval('#deploy-status-row', el => el.textContent.trim());
-    smoke('Deploy status row has content', statusText.length > 0, 'empty status row');
-  } catch (e) {
-    smoke('Deploy status row has content', false, e.message);
-  }
+  // S4: all 6 dashboard navigation cards present (#378)
+  const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
+  smoke('Dashboard has 6 navigation cards', cardCount === 6, `found ${cardCount}`);
 
   // ── Interaction tests ────────────────────────────────────────────────────
 
@@ -216,6 +211,7 @@ try {
 
   // ── I1: create a blog post ───────────────────────────────────────────────
   console.log('\n📝 I1 — create blog post');
+  await page.goto(`${baseUrl}/admin/posts.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#post-title', { timeout: 5000 });
     await page.$eval('#post-title', el => { el.value = ''; });
@@ -265,6 +261,7 @@ try {
 
   // ── I3: create a travel memory ───────────────────────────────────────────
   console.log('\n🌍 I3 — create travel memory');
+  await page.goto(`${baseUrl}/admin/travel.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#travel-title', { timeout: 5000 });
     await page.$eval('#travel-title', el => { el.value = ''; });
@@ -311,6 +308,7 @@ try {
 
   // ── I5: deploy fetch streams output ──────────────────────────────────────
   console.log('\n📡 I5 — deploy fetch (git fetch origin)');
+  await page.goto(`${baseUrl}/admin/deploy.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   try {
     await page.waitForSelector('#fetch-btn:not([disabled])', { timeout: 8000 });
     await page.click('#fetch-btn');
@@ -330,46 +328,58 @@ try {
     interact('Deploy fetch — output appeared', false, e.message);
   }
 
+  // S-final: no unhandled JS exceptions fired during interactions (#397)
+  // Uses pageErrorsAtLoad snapshot so errors already reported in S2b aren't double-counted.
+  const interactionPageErrors = pageErrors.slice(pageErrorsAtLoad);
+  smoke(
+    'No unhandled JS exceptions during interactions',
+    interactionPageErrors.length === 0,
+    interactionPageErrors.join('; '),
+  );
+
 } catch (err) {
   console.error('\n💥 Test runner crashed:', err.message);
   failures.push('runner crash: ' + err.message);
 } finally {
   // ── Cleanup: delete any [E2E] test data the tests didn't clean up ─────────
-  // Uses the API directly with the test token — no browser page needed.
-  // Best-effort: failures here don't affect the test result.
-  try {
-    const headers = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
-    const https = await import('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
-
-    const checkAndDelete = async (listUrl, deleteBase) => {
-      try {
-        const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
-        if (!fetch) return; // node-fetch not available — skip best-effort cleanup
-        const r = await fetch(listUrl, { headers, agent });
-        if (!r.ok) return;
-        const items = await r.json();
-        for (const item of items) {
-          if (item.title?.startsWith(TEST_PREFIX)) {
-            await fetch(`${deleteBase}/${item.id}`, { method: 'DELETE', headers, agent });
-            console.log(`  cleaned up: ${item.title}`);
-          }
-        }
-      } catch { /* best effort */ }
-    };
-
-    await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
-    await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
-  } catch { /* best effort */ }
-
+  // Uses the browser page (still open) to make authenticated API calls so the
+  // browser's --ignore-certificate-errors covers the self-signed dev cert —
+  // no rejectUnauthorized bypass in Node code. Best-effort: failures here
+  // don't affect the test result.
   if (browser) {
     try {
+      const cleanupPage = await browser.newPage();
+      const authHeaders = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
+
+      const checkAndDelete = async (listUrl, deleteBase) => {
+        try {
+          const items = await cleanupPage.evaluate(async (url, headers) => {
+            try {
+              const r = await fetch(url, { headers });
+              return r.ok ? r.json() : [];
+            } catch { return []; }
+          }, listUrl, authHeaders);
+          for (const item of (items || [])) {
+            if (item.title?.startsWith(TEST_PREFIX)) {
+              await cleanupPage.evaluate(async (url, headers) => {
+                try { await fetch(url, { method: 'DELETE', headers }); } catch {}
+              }, `${deleteBase}/${item.id}`, authHeaders);
+              console.log(`  cleaned up: ${item.title}`);
+            }
+          }
+        } catch { /* best effort */ }
+      };
+
+      await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
+      await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
+
       const pages = await browser.pages();
       for (const p of pages) {
         await p.evaluate(() => {
           try { localStorage.removeItem('adminToken'); } catch {}
         }).catch(() => {});
       }
+      await cleanupPage.close();
     } catch {}
     await browser.close();
   }
