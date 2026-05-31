@@ -87,10 +87,9 @@ if [ -z "$TOKEN" ] && [ -n "$COMPOSE_FILE" ]; then
 fi
 
 # ── Service key auto-derivation (#406) ───────────────────────────────────────────
-# Read SERVICE_KEY from the container so contact baseline tests can include the
-# X-Service-Key header and bypass the rate limiter deterministically. Without
-# this, two back-to-back contact requests risk a 429 if prior deploys consumed
-# slots in the same window.
+# Read SERVICE_KEY from the container so contact baseline tests can identify as
+# the trusted service account and be exempt from rate limiting. Without this,
+# back-to-back contact requests risk a 429 if prior test runs consumed slots.
 
 SERVICE_KEY=""
 if [ -n "$COMPOSE_FILE" ]; then
@@ -99,7 +98,7 @@ if [ -n "$COMPOSE_FILE" ]; then
   if [ -n "$SERVICE_KEY" ]; then
     say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Service key loaded from $SERVICE container"
   else
-    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  SERVICE_KEY not set in container — contact rate-limit bypass disabled; add SERVICE_KEY to .env"
+    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  SERVICE_KEY not set in container — service account not authenticated; contact tests may be rate-limited; add SERVICE_KEY to .env"
   fi
 fi
 
@@ -228,8 +227,8 @@ if [ "$QUIET" != "1" ]; then
 fi
 
 # ── Rate limiting ────────────────────────────────────────────────────────────────
-# Runs first, before the service key is in use, so the real limiter is exercised
-# without any bypass. /api/contact is limited to 3 requests/hour; the limiter
+# Runs first, without the service account header, so the real limiter is exercised
+# against an anonymous caller. /api/contact is limited to 3 requests/hour; the limiter
 # fires before validation so invalid payloads still increment the counter (no
 # emails sent). Targeted reset before (clean window) and after (leave prod clean —
 # only loopback IPs deleted, real user counters are untouched).
