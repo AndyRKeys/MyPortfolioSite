@@ -1,5 +1,5 @@
 import { API_BASE } from './config.js';
-import { isAdminSession } from './auth-utils.js';
+import { isAdminSession, getToken } from './auth-utils.js';
 import { buildRepoCard } from './utils/dom.js';
 
 // ── Horizontal scroll carousel ────────────────────────────────────────────────
@@ -114,9 +114,13 @@ function initContactForm() {
             website: document.getElementById('contact-website').value,
         };
 
+        var token = getToken();
         fetch(API_BASE + '/contact', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: Object.assign(
+                { 'Content-Type': 'application/json' },
+                token ? { 'Authorization': 'Bearer ' + token } : {}
+            ),
             body: JSON.stringify(payload),
         })
             .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
