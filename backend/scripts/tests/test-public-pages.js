@@ -19,7 +19,6 @@
  * table and trigger false alert emails.
  */
 
-import https from 'https';
 import puppeteer from 'puppeteer';
 
 const baseUrl = process.argv[2];
@@ -34,24 +33,25 @@ const STATIC_PAGES = ['/', '/blog/', '/travel/', '/login/', '/setup/'];
 // ── Dynamic slug discovery ────────────────────────────────────────────────────
 
 // Fetch the first item from an API endpoint and return the value of `field`.
-// Uses rejectUnauthorized:false so the self-signed dev cert is accepted.
+// Uses a puppeteer page so the browser's --ignore-certificate-errors flag
+// handles the self-signed dev cert — no Node-level TLS bypass needed.
 // Returns null if the request fails or no item is found.
-function fetchFirstField(apiPath, field) {
-  return new Promise((resolve) => {
-    const url = `${baseUrl}${apiPath}`;
-    const agent = new https.Agent({ rejectUnauthorized: false });
-    https.get(url, { agent, headers: { Accept: 'application/json' } }, (res) => {
-      let data = '';
-      res.on('data', (c) => { data += c; });
-      res.on('end', () => {
-        try {
-          const items = JSON.parse(data);
-          const found = Array.isArray(items) ? items.find((i) => i[field]) : null;
-          resolve(found ? found[field] : null);
-        } catch { resolve(null); }
-      });
-    }).on('error', () => resolve(null));
-  });
+async function fetchFirstField(browser, apiPath, field) {
+  const page = await browser.newPage();
+  try {
+    const items = await page.evaluate(async (url) => {
+      try {
+        const res = await fetch(url);
+        return res.ok ? res.json() : null;
+      } catch { return null; }
+    }, `${baseUrl}${apiPath}`);
+    const found = Array.isArray(items) ? items.find((i) => i[field]) : null;
+    return found ? found[field] : null;
+  } catch {
+    return null;
+  } finally {
+    await page.close();
+  }
 }
 
 // ── Test runner ───────────────────────────────────────────────────────────────
@@ -112,30 +112,6 @@ async function run() {
   console.log(`\n🧪 Public Pages — JS Runtime Error Check`);
   console.log(`📍 Base URL: ${baseUrl}\n`);
 
-  // Discover live content slugs/ids so post pages are exercised too (#397).
-  const [blogSlug, travelId] = await Promise.all([
-    fetchFirstField('/api/posts', 'slug'),
-    fetchFirstField('/api/travel', 'id'),
-  ]);
-
-  const pages = [...STATIC_PAGES];
-
-  if (blogSlug) {
-    pages.push(`/blog/post/?slug=${encodeURIComponent(blogSlug)}`);
-    console.log(`  ℹ️  blog post discovered: /blog/post/?slug=${blogSlug}`);
-  } else {
-    console.log('  ⚠️  no published blog post found — /blog/post/ skipped');
-  }
-
-  if (travelId) {
-    pages.push(`/travel/post/?id=${encodeURIComponent(travelId)}`);
-    console.log(`  ℹ️  travel post discovered: /travel/post/?id=${travelId}`);
-  } else {
-    console.log('  ⚠️  no travel memory found — /travel/post/ skipped');
-  }
-
-  console.log('');
-
   try {
     browser = await puppeteer.launch({
       headless: 'new',
@@ -146,6 +122,32 @@ async function run() {
         '--ignore-certificate-errors',
       ],
     });
+
+    // Discover live content slugs/ids so post pages are exercised too (#397).
+    // Done via a browser page so --ignore-certificate-errors covers the self-signed
+    // dev cert — no rejectUnauthorized bypass in Node code.
+    const [blogSlug, travelId] = await Promise.all([
+      fetchFirstField(browser, '/api/posts', 'slug'),
+      fetchFirstField(browser, '/api/travel', 'id'),
+    ]);
+
+    const pages = [...STATIC_PAGES];
+
+    if (blogSlug) {
+      pages.push(`/blog/post/?slug=${encodeURIComponent(blogSlug)}`);
+      console.log(`  ℹ️  blog post discovered: /blog/post/?slug=${blogSlug}`);
+    } else {
+      console.log('  ⚠️  no published blog post found — /blog/post/ skipped');
+    }
+
+    if (travelId) {
+      pages.push(`/travel/post/?id=${encodeURIComponent(travelId)}`);
+      console.log(`  ℹ️  travel post discovered: /travel/post/?id=${travelId}`);
+    } else {
+      console.log('  ⚠️  no travel memory found — /travel/post/ skipped');
+    }
+
+    console.log('');
 
     for (const path of pages) {
       const page = await browser.newPage();
@@ -158,7 +160,7 @@ async function run() {
   } finally {
     if (browser) await browser.close();
 
-    const total = pages.length;
+    const total = results.passed.length + results.failed.length;
     console.log(`\n${'='.repeat(50)}`);
     console.log(`✅ Passed: ${results.passed.length} / ${total}`);
     if (results.failed.length) {

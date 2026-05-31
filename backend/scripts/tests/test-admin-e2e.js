@@ -352,41 +352,44 @@ try {
   failures.push('runner crash: ' + err.message);
 } finally {
   // ── Cleanup: delete any [E2E] test data the tests didn't clean up ─────────
-  // Uses the API directly with the test token — no browser page needed.
-  // Best-effort: failures here don't affect the test result.
-  try {
-    const headers = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
-    const https = await import('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
-
-    const checkAndDelete = async (listUrl, deleteBase) => {
-      try {
-        const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
-        if (!fetch) return; // node-fetch not available — skip best-effort cleanup
-        const r = await fetch(listUrl, { headers, agent });
-        if (!r.ok) return;
-        const items = await r.json();
-        for (const item of items) {
-          if (item.title?.startsWith(TEST_PREFIX)) {
-            await fetch(`${deleteBase}/${item.id}`, { method: 'DELETE', headers, agent });
-            console.log(`  cleaned up: ${item.title}`);
-          }
-        }
-      } catch { /* best effort */ }
-    };
-
-    await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
-    await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
-  } catch { /* best effort */ }
-
+  // Uses the browser page (still open) to make authenticated API calls so the
+  // browser's --ignore-certificate-errors covers the self-signed dev cert —
+  // no rejectUnauthorized bypass in Node code. Best-effort: failures here
+  // don't affect the test result.
   if (browser) {
     try {
+      const cleanupPage = await browser.newPage();
+      const authHeaders = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
+
+      const checkAndDelete = async (listUrl, deleteBase) => {
+        try {
+          const items = await cleanupPage.evaluate(async (url, headers) => {
+            try {
+              const r = await fetch(url, { headers });
+              return r.ok ? r.json() : [];
+            } catch { return []; }
+          }, listUrl, authHeaders);
+          for (const item of (items || [])) {
+            if (item.title?.startsWith(TEST_PREFIX)) {
+              await cleanupPage.evaluate(async (url, headers) => {
+                try { await fetch(url, { method: 'DELETE', headers }); } catch {}
+              }, `${deleteBase}/${item.id}`, authHeaders);
+              console.log(`  cleaned up: ${item.title}`);
+            }
+          }
+        } catch { /* best effort */ }
+      };
+
+      await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
+      await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
+
       const pages = await browser.pages();
       for (const p of pages) {
         await p.evaluate(() => {
           try { localStorage.removeItem('adminToken'); } catch {}
         }).catch(() => {});
       }
+      await cleanupPage.close();
     } catch {}
     await browser.close();
   }
