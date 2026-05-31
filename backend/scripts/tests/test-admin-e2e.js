@@ -152,10 +152,14 @@ try {
     req.continue();
   });
 
-  // Collect console errors from the page for smoke checks.
+  // Collect console errors and unhandled JS exceptions for smoke checks (#397).
   const consoleErrors = [];
+  const pageErrors = [];
   page.on('console', msg => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', err => {
+    if (!err.message.includes('-extension://')) pageErrors.push(err.message);
   });
 
   // Auto-accept all confirm() dialogs (delete confirmations, etc.).
@@ -184,6 +188,10 @@ try {
   // Filter known noise (zlib warning from exifr is cosmetic and not a code error)
   const realErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('No JS console errors on page load', realErrors.length === 0, realErrors.join('; '));
+
+  // S2b: no unhandled JS exceptions on load (#397)
+  smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
+  const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
 
   // S3–S8: each section present in DOM
   const sections = [
@@ -330,46 +338,58 @@ try {
     interact('Deploy fetch — output appeared', false, e.message);
   }
 
+  // S-final: no unhandled JS exceptions fired during interactions (#397)
+  // Uses pageErrorsAtLoad snapshot so errors already reported in S2b aren't double-counted.
+  const interactionPageErrors = pageErrors.slice(pageErrorsAtLoad);
+  smoke(
+    'No unhandled JS exceptions during interactions',
+    interactionPageErrors.length === 0,
+    interactionPageErrors.join('; '),
+  );
+
 } catch (err) {
   console.error('\n💥 Test runner crashed:', err.message);
   failures.push('runner crash: ' + err.message);
 } finally {
   // ── Cleanup: delete any [E2E] test data the tests didn't clean up ─────────
-  // Uses the API directly with the test token — no browser page needed.
-  // Best-effort: failures here don't affect the test result.
-  try {
-    const headers = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
-    const https = await import('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
-
-    const checkAndDelete = async (listUrl, deleteBase) => {
-      try {
-        const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
-        if (!fetch) return; // node-fetch not available — skip best-effort cleanup
-        const r = await fetch(listUrl, { headers, agent });
-        if (!r.ok) return;
-        const items = await r.json();
-        for (const item of items) {
-          if (item.title?.startsWith(TEST_PREFIX)) {
-            await fetch(`${deleteBase}/${item.id}`, { method: 'DELETE', headers, agent });
-            console.log(`  cleaned up: ${item.title}`);
-          }
-        }
-      } catch { /* best effort */ }
-    };
-
-    await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
-    await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
-  } catch { /* best effort */ }
-
+  // Uses the browser page (still open) to make authenticated API calls so the
+  // browser's --ignore-certificate-errors covers the self-signed dev cert —
+  // no rejectUnauthorized bypass in Node code. Best-effort: failures here
+  // don't affect the test result.
   if (browser) {
     try {
+      const cleanupPage = await browser.newPage();
+      const authHeaders = { Authorization: `Bearer ${testToken}`, 'Content-Type': 'application/json' };
+
+      const checkAndDelete = async (listUrl, deleteBase) => {
+        try {
+          const items = await cleanupPage.evaluate(async (url, headers) => {
+            try {
+              const r = await fetch(url, { headers });
+              return r.ok ? r.json() : [];
+            } catch { return []; }
+          }, listUrl, authHeaders);
+          for (const item of (items || [])) {
+            if (item.title?.startsWith(TEST_PREFIX)) {
+              await cleanupPage.evaluate(async (url, headers) => {
+                try { await fetch(url, { method: 'DELETE', headers }); } catch {}
+              }, `${deleteBase}/${item.id}`, authHeaders);
+              console.log(`  cleaned up: ${item.title}`);
+            }
+          }
+        } catch { /* best effort */ }
+      };
+
+      await checkAndDelete(`${baseUrl}/api/posts/all`, `${baseUrl}/api/posts`);
+      await checkAndDelete(`${baseUrl}/api/travel/all`, `${baseUrl}/api/travel`);
+
       const pages = await browser.pages();
       for (const p of pages) {
         await p.evaluate(() => {
           try { localStorage.removeItem('adminToken'); } catch {}
         }).catch(() => {});
       }
+      await cleanupPage.close();
     } catch {}
     await browser.close();
   }

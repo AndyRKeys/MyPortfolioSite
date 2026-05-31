@@ -102,9 +102,10 @@ Puppeteer scripts run automatically inside the backend container after every dev
 | `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
 | `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
 | `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
-| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175) |
+| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175); also checks for unhandled JS exceptions on load and during interactions (#397) |
+| `test-public-pages.js` | `test:public-pages` | All public pages load without unhandled JS exceptions (`/`, `/blog/`, `/travel/`, `/login/`, `/setup/`, plus dynamically discovered blog post and travel post pages) — catches null dereferences and import failures invisible to curl-based checks (#390, #397) |
 
-> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`, `test-admin-e2e.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
+> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`, `test-admin-e2e.js`, `test-public-pages.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
 
 ### Contract test (`test-error-logger-browser.js`)
 
@@ -472,7 +473,7 @@ Mounts each router against the full Express app via Supertest with the `pg` pool
 | Email delivery (nodemailer) | Requires real SMTP credentials; nodemailer is mocked — the send path is covered by the contact route tests |
 | Contact form in local dev | When `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` are not set, the route logs the submission to the backend console and returns `{ success: true }` — no email is sent. This is the expected behaviour in the Docker dev environment; the form UI will appear to succeed. Check the backend container logs (`docker compose logs backend`) to see the submitted values. |
 | Database queries | Integration tests mock the pg pool; real DB behaviour is covered by manual smoke testing against the dev Docker DB |
-| Frontend JavaScript | Out of scope for the backend suite; covered by manual browser testing |
+| Frontend JavaScript (unit/integration) | Out of scope for the backend suite; JS runtime errors on public pages are caught by `test-public-pages.js` (puppeteer, runs every deploy) |
 
 ---
 
