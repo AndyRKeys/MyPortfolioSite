@@ -28,7 +28,12 @@ if (!baseUrl) {
 }
 
 // Static pages always included — individual content pages added dynamically below.
-const STATIC_PAGES = ['/', '/blog/', '/travel/', '/login/', '/setup/'];
+const STATIC_PAGES = [
+    '/', '/blog/', '/travel/', '/login/', '/setup/',
+    // Admin sub-pages (#378) — unauthenticated load still runs all page JS before the auth redirect
+    '/admin/', '/admin/posts.html', '/admin/travel.html', '/admin/deploy.html',
+    '/admin/media.html', '/admin/stats.html', '/admin/settings.html',
+];
 
 // ── Dynamic slug discovery ────────────────────────────────────────────────────
 

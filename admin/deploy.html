@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script type="module" src="/resources/js/error-logger.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Deploy | Admin | AK Portfolio</title>
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>Admin</h2>
+    </header>
+    <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
+        <ul class="nav">
+            <li><a href="/">Home</a></li>
+            <li><a href="/blog/" target="_blank" rel="noopener noreferrer">✏ Blog</a></li>
+            <li><a href="/travel/" target="_blank" rel="noopener noreferrer">✈ Travel</a></li>
+            <li><a href="/login/" id="logout-link">Logout</a></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
+        </ul>
+    </nav>
+
+    <main class="admin-page">
+        <section class="sec-cont admin-panel">
+            <div class="admin-card" id="deploy-section">
+                <h2 class="admin-card-title">Deployment</h2>
+                <div id="deploy-status-row" class="deploy-status-row">
+                    <span class="hint">Loading…</span>
+                </div>
+                <div class="form-actions" style="margin-top:1rem">
+                    <button type="button" id="fetch-btn" class="btn-secondary" disabled>Fetch</button>
+                    <button type="button" id="deploy-btn" class="btn-primary" disabled>Deploy latest</button>
+                    <button type="button" id="rollback-btn" class="btn-secondary" disabled>Rollback…</button>
+                </div>
+                <div id="rollback-picker" class="hidden" style="margin-top:0.75rem">
+                    <label>Roll back to
+                        <select id="rollback-sha-select"></select>
+                    </label>
+                    <div class="form-actions" style="margin-top:0.5rem">
+                        <button type="button" id="rollback-confirm-btn" class="btn-small btn-danger">Confirm rollback</button>
+                        <button type="button" id="rollback-cancel-btn" class="btn-secondary">Cancel</button>
+                    </div>
+                </div>
+                <pre id="deploy-output" class="deploy-output hidden"></pre>
+                <p id="deploy-message" class="admin-message"></p>
+                <div id="deploy-log-section" style="margin-top:1.5rem">
+                    <h3 style="font-size:0.9rem;color:var(--color-text-muted);margin-bottom:0.5rem">Deploy history</h3>
+                    <div id="deploy-log-list"><p class="hint">Loading…</p></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
+    <script src="/resources/js/admin-subnav.js"></script>
+    <script type="module" src="/resources/js/admin-deploy-page.js"></script>
+</body>
+</html>

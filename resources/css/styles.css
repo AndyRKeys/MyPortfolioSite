@@ -302,6 +302,97 @@ ul.nav {
     line-height: 1.5em;
 }
 
+/* ── Admin sub-navigation (#378) ────────────────────────────────────────── */
+
+.admin-subnav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 1.25rem;
+    background: var(--color-surface-alt);
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.admin-subnav::-webkit-scrollbar { display: none; }
+
+.admin-subnav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    border: 1px solid transparent;
+}
+
+.admin-subnav-item:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+.admin-subnav-item.active {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
+}
+
+[data-theme="dark"] .admin-subnav-item.active {
+    color: #fff;
+}
+
+@media (max-width: 600px) {
+    .admin-subnav { padding: 0.4rem 0.75rem; }
+    .admin-subnav-item { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+}
+
+/* ── Admin dashboard (#378) ─────────────────────────────────────────────── */
+
+.admin-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem 0 0.5rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.admin-dashboard-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.25rem 1.25rem 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--color-text);
+    box-shadow: 0 1px 4px var(--color-shadow);
+    transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.admin-dashboard-card:hover {
+    box-shadow: 0 3px 12px var(--color-shadow-hover);
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+}
+
+.admin-dashboard-card-icon { font-size: 1.4rem; line-height: 1; margin-bottom: 0.15rem; }
+.admin-dashboard-card-title { font-weight: 600; font-size: 0.95rem; }
+.admin-dashboard-card-desc { font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.4; }
+
+@media (max-width: 480px) {
+    .admin-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 .admin-page {
     padding: 20px 0;
 }
