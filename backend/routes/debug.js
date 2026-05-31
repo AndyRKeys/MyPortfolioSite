@@ -3,7 +3,7 @@ import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
-import { skipIfServiceKey } from '../utils/serviceKey.js';
+import { exemptIfServiceAccount } from '../utils/serviceKey.js';
 import { isEmailConfigured, sendErrorAlertEmail } from '../utils/email.js';
 
 const router = Router();
@@ -16,7 +16,7 @@ const debugRateLimit = createRateLimiter({
   limit: 50,
   windowMs: 60 * 1000,
   message: 'Rate limited',
-  skip: skipIfServiceKey,
+  skip: exemptIfServiceAccount,
 });
 
 // ── Alert threshold ───────────────────────────────────────────────────────────
