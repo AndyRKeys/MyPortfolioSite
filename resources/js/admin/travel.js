@@ -272,6 +272,20 @@ function hasValidGps(lat, lng) {
     return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 }
 
+// Build canonical "City, Country" from a Nominatim address object.
+// Falls back to the first two comma-separated parts of display_name if address
+// lacks city-level data (e.g. remote areas that only resolve to a state).
+function normaliseLocation(address, displayName) {
+    if (address) {
+        const city    = address.city || address.town || address.village || address.hamlet || address.county || address.state_district || address.state || '';
+        const country = address.country || '';
+        const result  = [city, country].filter(Boolean).join(', ');
+        if (result) return result;
+    }
+    const parts = displayName ? displayName.split(',').map(p => p.trim()).filter(Boolean) : [];
+    return parts.slice(0, 2).join(', ') || null;
+}
+
 // Reverse geocode lat/lng to a human-readable location string using Nominatim.
 // Only populates the Location field if it is currently empty.
 async function reverseGeocodeToLocation(lat, lng) {
@@ -281,11 +295,7 @@ async function reverseGeocodeToLocation(lat, lng) {
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         if (!res.ok) return;
         const data = await res.json();
-        if (!data.address) return;
-        const a = data.address;
-        const city    = a.city || a.town || a.village || a.hamlet || a.county || a.state_district || a.state || '';
-        const country = a.country || '';
-        const locationStr = [city, country].filter(Boolean).join(', ');
+        const locationStr = normaliseLocation(data.address, data.display_name);
         if (locationStr) document.getElementById('travel-location').value = locationStr;
     } catch {
         // Reverse geocode failure is non-fatal — silently ignore
@@ -360,15 +370,25 @@ async function geocodeLocation() {
     btn.textContent = 'Looking up…';
     setMessage('');
     try {
-        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=' + encodeURIComponent(q);
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         const results = await res.json();
         if (!results.length) { setMessage('Location not found — try a more specific name.', true); return; }
-        const { lat, lon, display_name } = results[0];
+        const { lat, lon, display_name, address } = results[0];
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lon);
         document.getElementById('travel-lat').value = parsedLat.toFixed(6);
         document.getElementById('travel-lng').value = parsedLng.toFixed(6);
+
+        // Normalise location field to canonical City, Country format
+        const normalised = normaliseLocation(address, display_name);
+        if (normalised) {
+            const locationInput = document.getElementById('travel-location');
+            locationInput.value = normalised;
+            locationInput.style.outline = '2px solid var(--color-success)';
+            setTimeout(() => { locationInput.style.outline = ''; }, 1500);
+        }
+
         setMessage(`Coordinates set — confirm pin location on the map below (matched: ${display_name.split(',').slice(0, 3).join(',')}).`, false, true);
         updateGeoconfirmMap(parsedLat, parsedLng);
     } catch {
