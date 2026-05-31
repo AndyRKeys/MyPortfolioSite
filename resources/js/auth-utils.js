@@ -1,6 +1,10 @@
+function getToken() {
+    return localStorage.getItem('adminToken') || null;
+}
+
 // Check if the current user is logged in as admin (has valid JWT token)
 function isAdminSession() {
-    var token = localStorage.getItem('adminToken');
+    var token = getToken();
     if (!token) return false;
     try {
         var payload = JSON.parse(atob(token.split('.')[1]));
@@ -10,5 +14,4 @@ function isAdminSession() {
     }
 }
 
-// Export for ES module usage
-export { isAdminSession };
+export { getToken, isAdminSession };

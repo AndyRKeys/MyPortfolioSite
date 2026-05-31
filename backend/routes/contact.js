@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
-import { exemptIfServiceAccount } from '../utils/serviceKey.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { resolveUser } from '../middleware/resolveUser.js';
 import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 
@@ -11,11 +12,13 @@ const contactRateLimit = createRateLimiter({
   limit: 3,
   windowMs: 60 * 60 * 1000, // 1 hour
   message: 'Too many requests. Please try again later.',
-  skip: exemptIfServiceAccount,
+  skip: exemptIfTrusted,
 });
 
-// lgtm[js/missing-rate-limiting] -- contactRateLimit middleware applied
-router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => {
+// lgtm[js/missing-rate-limiting] -- resolveUser runs a cheap jwt.verify so exemptIfTrusted
+// can identify the session; contactRateLimit is applied immediately after and enforces the
+// limit for all unauthenticated requests. resolveUser never gates access.
+router.post('/', resolveUser, contactRateLimit, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
     return res.json({ success: true });

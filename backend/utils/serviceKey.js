@@ -8,3 +8,14 @@ export const exemptIfServiceAccount = (req) => {
   const key = process.env.SERVICE_KEY;
   return !!key && req.headers['x-service-key'] === key;
 };
+
+// Returns true when the request is from a trusted caller: a verified JWT session
+// (set by resolveUser) or a valid service account key.
+// Use this as the `skip` function on application routes (contact, debug/errors).
+// Auth endpoints must keep exemptIfServiceAccount — JWT exemption is inappropriate
+// there (a stolen JWT must not bypass magic-link or passkey rate limits).
+// See: issue #415.
+export const exemptIfTrusted = (req) => {
+  if (req.user) return true;
+  return exemptIfServiceAccount(req);
+};
