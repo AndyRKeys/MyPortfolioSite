@@ -273,14 +273,16 @@ function hasValidGps(lat, lng) {
 }
 
 // Build canonical "City, Country" from a Nominatim address object.
-// Falls back to the first two comma-separated parts of display_name if address
-// lacks city-level data (e.g. remote areas that only resolve to a state).
+// Falls back to the first two comma-separated parts of display_name when the
+// address object lacks a city-level field (e.g. Tokyo returns addresstype
+// "province", not "city", so address.province must be checked explicitly).
 function normaliseLocation(address, displayName) {
     if (address) {
-        const city    = address.city || address.town || address.village || address.hamlet || address.county || address.state_district || address.state || '';
+        const city    = address.city || address.town || address.village || address.hamlet ||
+                        address.municipality || address.province ||
+                        address.county || address.state_district || address.state || '';
         const country = address.country || '';
-        const result  = [city, country].filter(Boolean).join(', ');
-        if (result) return result;
+        if (city && country) return `${city}, ${country}`;
     }
     const parts = displayName ? displayName.split(',').map(p => p.trim()).filter(Boolean) : [];
     return parts.slice(0, 2).join(', ') || null;
