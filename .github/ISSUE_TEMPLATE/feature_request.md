@@ -18,9 +18,9 @@ labels: enhancement
 
 ## Acceptance Criteria
 
-- [ ] 
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
+- [ ]
 
 ## Out of Scope
 

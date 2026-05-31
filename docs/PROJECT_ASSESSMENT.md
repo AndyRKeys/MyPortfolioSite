@@ -154,6 +154,7 @@ This is an unusual section for a project assessment, but it is directly relevant
 These are ordered by impact-to-effort ratio, considering both operational risk and agent friction.
 
 **Resolved (no longer blocking):**
+
 1. ✅ **Done — `docs/INFRASTRUCTURE.md` written** (Compose service names, Nginx config paths, cert locations, ddclient config and other server-specific facts). Now complemented by `docs/TERMINOLOGY.md`. Keep both current.
 2. ✅ **Done — production containerised** (migrated off the Raspberry Pi to Ubuntu Server, Docker Compose; #165/#171/#179). Dev and prod environments are now aligned.
 3. ✅ **Done — `/health` endpoint** (internal-only; #279, Release 2026-05-18).

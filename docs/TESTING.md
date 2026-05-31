@@ -11,6 +11,7 @@ The dev server at `http://<LAN_IP>:3001` is the canonical test environment. Depl
 ### Workflow
 
 1. **Deploy your branch** to the dev server:
+
    ```powershell
    git checkout fix/your-issue
    .\scripts\deploy\dev-deploy.ps1
@@ -22,6 +23,7 @@ The dev server at `http://<LAN_IP>:3001` is the canonical test environment. Depl
    - Check for regressions in related features
 
 3. **View server logs** if something fails:
+
    ```bash
    docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml logs -f backend
    ```
@@ -120,7 +122,8 @@ Uses Puppeteer request interception to capture POSTs to `/api/debug/errors` and 
 | 5 | No browser hang when five errors fire against a failing backend | #331 |
 
 It prints a machine-parseable summary line collected into the deploy report:
-```
+
+```text
 [error-logger-browser] status=OK passed=8 failed=0
 ```
 
@@ -144,7 +147,8 @@ docker compose -f docker-compose.yml -p portfolio_dev exec -T backend \
 Loads every served page (`/`, `/blog/`, `/travel/`, `/login/`, `/admin/`, `/setup/`) in a real browser and listens for `securitypolicyviolation` events (#341). Reports any blocked resource with the directive, source, and remediation instruction. ISP-injected inline-script noise is expected; maintainers can record known-noise patterns in the `KNOWN_NOISE` array inside the script to suppress specific entries.
 
 Machine-parseable summary:
-```
+
+```text
 [csp-violations] status=OK pages=6 violations=0
 ```
 
@@ -161,7 +165,8 @@ Loads `/admin/` as an authenticated session (JWT minted from `JWT_SECRET` and in
 Any `securitypolicyviolation` event during these interactions fails the check. This is the Nominatim `connect-src` path that was the root cause of the original #330 breakage.
 
 Machine-parseable summary:
-```
+
+```text
 [admin-e2e-csp] status=OK interactions=3 violations=0
 ```
 
@@ -182,11 +187,13 @@ Test records are prefixed `[E2E]` and cleaned up at the start and end of each ru
 **Failure policy: hard-fail.** An assertion failure rolls the deploy back (same as Vitest). If Puppeteer fails to launch (e.g. missing Chromium), the test is skipped with a warning and the deploy proceeds.
 
 Machine-parseable summary:
-```
+
+```text
 [admin-e2e] status=OK tests=5 passed=5 failed=0
 ```
 
 Run manually:
+
 ```bash
 cd ~/MyPortfolioSite-dev
 docker compose -f docker-compose.yml exec -T \
@@ -200,6 +207,7 @@ docker compose -f docker-compose.yml exec -T \
 - Manually after any change to `resources/js/error-logger.js` or `backend/routes/debug.js`
 - Manually after adding or moving any external resource (script, style, font, image, API origin) — verifies the CSP allowlist update is correct
 - Run the admin E2E scan after any change to the admin travel form or any new external fetch:
+
   ```bash
   cd ~/MyPortfolioSite-dev
   docker compose -f docker-compose.yml exec -T \
@@ -256,7 +264,7 @@ bash ~/MyPortfolioSite-dev/scripts/tests/test-regression.sh \
 
 Every deploy ends with a structured report block that collects all `[deploy:*]` checkpoint lines. The three test suites report in a consistent shape — each tagged with `suite=backend|frontend|regression` and normalised `tests/passed/failed` counts (CSP scans keep their native `pages`/`interactions`/`violations` metrics, since a violation isn't a 1:1 test):
 
-```
+```text
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║  Deploy Report — dev — 2026-05-17 13:30:00                                 ║
 ╠════════════════════════════════════════════════════════════════════════════╣
@@ -316,6 +324,7 @@ The regression baseline is now handled server-side by `test-regression.sh` as pa
 ### Script template — Test-PR\<N\>.ps1
 
 When creating a `Test-PR<N>.ps1` script for a new PR, place it in `scripts/tests/` and use this as the starting point. The key requirements are:
+
 1. **`Start-Transcript` / `Stop-Transcript`** — output always captured without the caller needing flags
 2. **Auto-generate JWT** from the container — no hardcoded secrets, no manual token passing
 3. **`$PSScriptRoot '../..' 'test-results'`** path — resolves correctly from `scripts/tests/`
@@ -423,7 +432,7 @@ Name the script `scripts/tests/Test-PR<N>.ps1` and replace the two `<N>` placeho
 
 All test files live under `backend/tests/`, mirroring the source structure.
 
-```
+```text
 backend/
 └── tests/
     ├── middleware/
@@ -444,6 +453,7 @@ New test files should follow the same path convention: `tests/<layer>/<source-fi
 ### Priority 1 — Validation middleware (`validate.test.js`)
 
 Unit tests for every Zod schema exported from `middleware/validate.js`. Each schema is tested with:
+
 - A valid input that should pass through with `next()` called
 - Invalid inputs that should return `400 { error }` with a meaningful message
 - Coercion and default behaviour (e.g. lat/lng string → number, `body_markdown` defaulting to `''`)
@@ -451,6 +461,7 @@ Unit tests for every Zod schema exported from `middleware/validate.js`. Each sch
 ### Priority 2 — Route integration tests
 
 Mounts each router against the full Express app via Supertest with the `pg` pool mocked. Verifies:
+
 - `401` is returned for missing or invalid JWT on all protected routes
 - `400` is returned with the correct `{ error }` shape when required fields are missing
 - The DB query spy is **not** called when validation rejects a request (proves validation fires before DB)

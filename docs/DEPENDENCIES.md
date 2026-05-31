@@ -36,6 +36,7 @@ Justification: [brief explanation of why this dependency is needed]"
 ```
 
 **Always use caret ranges** in package.json:
+
 - ✅ `^1.2.3` — Allows minor and patch updates (safe for breaking changes)
 - ❌ `1.2.3` — Pinned to exact version (prevents updates)
 - ❌ `*` — Any version (unpredictable)
@@ -67,12 +68,14 @@ Dependabot automatically suggests dependency updates:
 3. **Merge when ready** — Use auto-merge or manual merge
 
 **Major version updates** require:
+
 - ✅ Full test suite passing
 - ✅ Manual testing of affected features
 - ✅ Review of breaking change documentation
 - ✅ Explicit approval before merge
 
 **Minor/patch updates** can merge faster:
+
 - ✅ Tests passing
 - ✅ Quick skim of changelog
 - ✅ No manual testing usually needed

@@ -8,7 +8,7 @@ This document describes the system architecture at a high level — how the piec
 
 ## System Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Browser                                  │
 │                  (user visits andykeys.me)                      │
@@ -89,7 +89,7 @@ This document describes the system architecture at a high level — how the piec
 
 ### Top-level directories
 
-```
+```text
 MyPortfolioSite/
 ├── backend/                ← Node.js/Express application
 ├── resources/              ← Frontend (HTML, CSS, JS)
@@ -105,7 +105,7 @@ MyPortfolioSite/
 
 ### Backend structure
 
-```
+```text
 backend/
 ├── server.js               ← Express app setup, middleware, route registration
 ├── routes/
@@ -134,7 +134,7 @@ backend/
 
 ### Frontend structure
 
-```
+```text
 resources/
 ├── java/                   ← JavaScript ES modules
 │   ├── config.js           ← API_BASE, environment detection
@@ -167,7 +167,7 @@ resources/
 
 ### HTML pages
 
-```
+```text
 Root level (served as static files by Nginx):
 ├── index.html              ← Homepage (23KB, sections for projects, timeline, contact)
 ├── blog/index.html               ← Blog listing page
@@ -243,7 +243,7 @@ As an example of how the system works end-to-end:
 
 | Component | Risk | Impact | Mitigation |
 |-----------|------|--------|-----------|
-| `resources/js/admin/travel.js` | Largest admin module (495 lines); geocoding, EXIF, map | Read full file before editing; test travel CRUD + map flows |
+| `resources/js/admin/travel.js` | Largest admin module (495 lines); geocoding, EXIF, map | All travel admin features break if incorrectly modified | Read full file before editing; test travel CRUD + map flows |
 | `auth.js` | Complex WebAuthn + JWT state machine | Auth bugs have security implications | High test coverage, careful code review |
 | PostgreSQL (single instance) | No replication, no backup | Data loss if the server disk fails | Backup hardening outstanding — see ROADMAP §4.5 (#164) |
 | Nginx reverse proxy | Single point of failure | If Nginx breaks, entire site is down | Keep Nginx config simple and tested |
@@ -253,7 +253,7 @@ As an example of how the system works end-to-end:
 
 ## Deployment Pipeline
 
-```
+```text
 Feature branch
     ↓
 Create PR to `dev`
