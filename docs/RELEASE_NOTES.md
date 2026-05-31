@@ -1,5 +1,32 @@
 # Release Notes
 
+## Release 2026-05-31-3
+
+**Released:** 2026-05-31
+**Branch:** release/2026-05-31-3
+**PR:** [#415](https://github.com/AndyRKeys/MyPortfolioSite/pull/415)
+**Closes:** [#410](https://github.com/AndyRKeys/MyPortfolioSite/issues/410), [#413](https://github.com/AndyRKeys/MyPortfolioSite/issues/413)
+
+### Summary
+
+Second follow-up mini-release to 2026-05-31. Fixes the regression rate-limit reset on prod (the Docker bridge gateway IP was never being cleared, causing 429s in the no-auth baseline despite a reset running), wires `SERVICE_KEY` into `docker-compose.yml` so the service account exemption actually reaches the backend container, and reframes all "bypass" language to "service account exemption" to reflect the correct mental model (rate limiting applies to untrusted callers; authenticated service accounts are simply not in scope).
+
+### Bug Fixes
+
+- **fix(#410):** Regression rate-limit reset now detects the Docker bridge gateway IP (`172.20.x.x`) dynamically via `ip route show default` inside the container and includes it in the targeted DELETE. Previously loopback-only deletes missed the gateway IP that Docker NAT writes when curl connects via loopback, leaving stale counters that caused 429s in the no-auth baseline.
+- **fix(#410):** `SERVICE_KEY` added to `docker-compose.yml` backend `environment:` block — it was set in `.env` but never passed through to the container, silently disabling the service account exemption on all Docker-deployed environments.
+
+### Refactoring
+
+- **refactor(#413):** `skipIfServiceKey` renamed to `exemptIfServiceAccount` across all routes, tests, and the regression script. Surrounding comments and log messages updated to reflect the correct model: rate limits protect against untrusted callers; authenticated service accounts are exempt by identity, not by circumventing a control.
+
+### Deployment Notes
+
+- No `.env` changes required — `SERVICE_KEY` was already added in the 2026-05-31-2 deployment.
+- No DB schema changes. No new dependencies.
+
+---
+
 ## Release 2026-05-31-2
 
 **Released:** 2026-05-31
