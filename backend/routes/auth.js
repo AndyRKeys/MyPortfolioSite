@@ -10,6 +10,7 @@ import {
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
+import { skipIfServiceKey } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -31,12 +32,14 @@ const emailRateLimit = createRateLimiter({
   limit: 5,
   windowMs: 60 * 60 * 1000, // 5 per hour
   message: 'Too many login attempts. Please try again later.',
+  skip: skipIfServiceKey,
 });
 
 const passkeyRateLimit = createRateLimiter({
   limit: 10,
   windowMs: 60 * 60 * 1000, // 10 per hour
   message: 'Too many authentication attempts. Please try again later.',
+  skip: skipIfServiceKey,
 });
 
 function signJWT(user) {
