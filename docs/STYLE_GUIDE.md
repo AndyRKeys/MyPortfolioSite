@@ -391,7 +391,7 @@ See **[docs/TESTING.md](docs/TESTING.md)** for the full guide, including the smo
 
 Test files mirror the source tree under `backend/tests/`:
 
-```
+```text
 backend/tests/
   middleware/validate.test.js
   middleware/errorHandler.test.js
@@ -435,7 +435,7 @@ Every PR that touches backend code must include a `scripts/tests/Test-PRN.ps1` (
 
 Follow the imperative style documented in [docs/AI.md](docs/AI.md) → Commit Conventions:
 
-```
+```text
 feat(#78): add travel post detail page
 fix(#81): use /api as API_BASE in blog-post.js
 refactor: extract formatDate to shared utils

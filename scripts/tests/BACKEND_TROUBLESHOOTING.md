@@ -22,6 +22,7 @@ docker compose ps
 ```
 
 You should see:
+
 - `backend` — running on port 8080
 - `postgres` — running on port 5432
 
@@ -40,6 +41,7 @@ docker compose logs backend --tail 100
 ```
 
 Look for:
+
 - `ECONNREFUSED` — postgres not ready yet (wait a few seconds and retry)
 - `Error: ENOENT: no such file or directory, open '/app/backend/.env'` — .env file missing
 - `git: command not found` — git isn't installed in the container (expected in some dev setups; /deploy endpoints degrade gracefully)
@@ -126,6 +128,7 @@ curl http://localhost:8080/api/health
 ```
 
 If problems persist, check that:
+
 - `.env` exists in `backend/` with `JWT_SECRET` set
 - Docker has enough disk space (`docker system df`)
 - No firewall rules blocking localhost:8080

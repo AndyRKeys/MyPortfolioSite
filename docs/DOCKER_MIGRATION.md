@@ -3,6 +3,7 @@
 This document describes how to migrate the MyPortfolioSite dev/prod servers from Docker installed via **snap** to Docker CE installed via **apt**, using the helper scripts under `scripts/setup/`.
 
 The goals are:
+
 - Eliminate snap/AppArmor-related `permission denied` issues when stopping containers.
 - Standardise on Docker CE using `/var/lib/docker`.
 - Preserve dev and prod environment configuration files (`.env`).
@@ -168,7 +169,7 @@ The following were encountered during the first live migration run and are docum
 
 After Docker CE is installed and `systemctl status docker` looks healthy, all `docker` commands may still fail with:
 
-```
+```text
 Cannot connect to the Docker daemon at unix:///run/docker.sock
 ```
 
