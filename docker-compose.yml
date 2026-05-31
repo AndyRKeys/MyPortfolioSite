@@ -71,6 +71,7 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_KEY: ${SERVICE_KEY:-}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads
