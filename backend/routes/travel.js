@@ -23,6 +23,23 @@ const TRAVEL_COLS = `
   ) AS media
 `;
 
+// Public variant: coordinates rounded to ~1km precision for privacy
+const TRAVEL_COLS_PUBLIC = `
+  p.id, p.title, p.slug, p.location,
+  p.body_markdown AS notes,
+  p.media_url, p.media_type, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
+  p.post_date,
+  p.location_estimated, p.published_at, p.created_at,
+  COALESCE(
+    (SELECT json_agg(
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       ORDER BY pm.order_index, pm.created_at
+     )
+     FROM post_media pm WHERE pm.post_id = p.id
+    ), '[]'::json
+  ) AS media
+`;
+
 async function replaceMedia(client, postId, mediaItems) {
   await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
   if (!mediaItems || !mediaItems.length) {
@@ -48,7 +65,7 @@ async function replaceMedia(client, postId, mediaItems) {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT ${TRAVEL_COLS}
+      `SELECT ${TRAVEL_COLS_PUBLIC}
        FROM posts p
        WHERE p.post_type = 'travel' AND p.published_at IS NOT NULL
        ORDER BY p.post_date DESC, p.created_at DESC`
@@ -95,7 +112,7 @@ router.get('/admin/:id', authenticate, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT ${TRAVEL_COLS} FROM posts p
+      `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
        WHERE p.id = $1 AND p.post_type = 'travel' AND p.published_at IS NOT NULL`,
       [req.params.id]
     );
