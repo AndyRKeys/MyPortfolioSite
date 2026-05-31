@@ -1962,7 +1962,6 @@ run_regression_tests() {
       --compose-file "$COMPOSE_FILE" \
       --service "$BACKEND_SERVICE" \
       --insecure \
-      --reset-rate-limits \
       2>&1) || REGRESSION_RC=1
   elif [ -n "${DOMAIN:-}" ]; then
     reg_out=$(bash "${REPO_DIR}/scripts/tests/test-regression.sh" \

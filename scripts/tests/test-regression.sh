@@ -42,8 +42,6 @@ COMPOSE_FILE=""
 SERVICE="backend"
 INSECURE=""
 RESOLVE=""
-RESET_RL=0
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-url)           BASE_URL="$2";      shift 2 ;;
@@ -52,7 +50,7 @@ while [[ $# -gt 0 ]]; do
     --service)            SERVICE="$2";       shift 2 ;;
     --insecure)           INSECURE="-k";      shift   ;;
     --resolve)            RESOLVE="$2";       shift 2 ;;
-    --reset-rate-limits)  RESET_RL=1;         shift   ;;
+    --reset-rate-limits)                      shift   ;; # no-op: reset now runs unconditionally
     *) shift ;;
   esac
 done
@@ -86,26 +84,53 @@ if [ -z "$TOKEN" ] && [ -n "$COMPOSE_FILE" ]; then
   fi
 fi
 
+# ── Service key auto-derivation (#406) ───────────────────────────────────────────
+# Read SERVICE_KEY from the container so contact baseline tests can include the
+# X-Service-Key header and bypass the rate limiter deterministically. Without
+# this, two back-to-back contact requests risk a 429 if prior deploys consumed
+# slots in the same window.
+
+SERVICE_KEY=""
+if [ -n "$COMPOSE_FILE" ]; then
+  SERVICE_KEY=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" \
+    printenv SERVICE_KEY 2>/dev/null | tr -d '\r\n' || true)
+  if [ -n "$SERVICE_KEY" ]; then
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Service key loaded from $SERVICE container"
+  else
+    echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  SERVICE_KEY not set in container — contact rate-limit bypass disabled; add SERVICE_KEY to .env"
+  fi
+fi
+
+# Array form so it expands to nothing when SERVICE_KEY is empty
+SKEY_HEADER=()
+[ -n "$SERVICE_KEY" ] && SKEY_HEADER=(-H "X-Service-Key: $SERVICE_KEY")
+
 # ── Helpers ──────────────────────────────────────────────────────────────────────
 
 PASS=0; FAIL=0; SKIP=0
 TMPFILE=$(mktemp)
 TMPERR=$(mktemp)
 
-# Best-effort reset of the DB-backed rate-limit counters via the backend
-# container's own pool (same mechanism as JWT generation). Dev-only — never
-# called for prod, where clearing real visitors' counters is undesirable.
-# Failing open (warn + continue) matches the rate-limit middleware itself.
+# Deletes rate-limit rows for loopback addresses only (127.0.0.1 / ::1 /
+# ::ffff:127.0.0.1) — the IPs the regression runner uses when connecting via
+# --resolve. Real user counters are left intact. Called before and after the
+# rate-limit section: before for a clean window, after so prod is not left
+# locked out. Failing open matches the rate-limit middleware's own behaviour.
 reset_rate_limits() {
-  [ "$RESET_RL" = "1" ] || return 0
   [ -n "$COMPOSE_FILE" ] || return 0
   if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" node --input-type=module -e "
     import('./db/pool.js')
-      .then(async ({ pool }) => { await pool.query('DELETE FROM rate_limits'); await pool.end(); })
+      .then(async ({ pool }) => {
+        await pool.query(
+          'DELETE FROM rate_limits WHERE ip = ANY(\$1)',
+          [['127.0.0.1', '::1', '::ffff:127.0.0.1']]
+        );
+        await pool.end();
+      })
       .then(() => process.exit(0))
       .catch((e) => { process.stderr.write(String(e) + '\n'); process.exit(1); });
   " >/dev/null 2>&1; then
-    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Rate-limit counters reset (dev)"
+    say "  ${C_CYAN}${C_BOLD}ℹ  [INFO]${C_RESET}  Loopback rate-limit counters reset"
   else
     echo -e "  ${C_YELLOW}${C_BOLD}⚠️  [WARN]${C_RESET}  Could not reset rate-limit counters — continuing"
   fi
@@ -169,17 +194,43 @@ check_auth() {
 
 if [ "$QUIET" != "1" ]; then
   _reg_token_text=$([ -n "$TOKEN" ] && echo 'auto-generated from container' || echo 'not provided — auth tests skipped')
+  _reg_skey_text=$([ -n "$SERVICE_KEY" ] && echo 'loaded from container' || echo 'not set — contact tests may be flaky')
   _print_multi_box "${C_CYAN}${C_BOLD}" 60 \
     "🧪 Regression Test Run — $(date '+%Y-%m-%d %H:%M:%S')" \
-    "Base URL : $BASE_URL" \
-    "Token    : $_reg_token_text"
+    "Base URL    : $BASE_URL" \
+    "Token       : $_reg_token_text" \
+    "Service key : $_reg_skey_text"
 fi
 
-# Clean slate so contact validation checks aren't tripped by counters left
-# over from earlier deploys within the rate-limit window (dev only).
+# ── Rate limiting ────────────────────────────────────────────────────────────────
+# Runs first, before the service key is in use, so the real limiter is exercised
+# without any bypass. /api/contact is limited to 3 requests/hour; the limiter
+# fires before validation so invalid payloads still increment the counter (no
+# emails sent). Targeted reset before (clean window) and after (leave prod clean —
+# only loopback IPs deleted, real user counters are untouched).
+
+say "${C_CYAN}${C_BOLD}🔷 ── Rate limiting ─────────────────────────────────────────${C_RESET}"
 reset_rate_limits
 
+for n in 1 2 3; do
+  check "POST /api/contact #$n within limit returns 400" \
+    POST "$BASE_URL/api/contact" 400 "" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"bad","message":"x"}'
+done
+
+check "POST /api/contact #4 over limit returns 429" \
+  POST "$BASE_URL/api/contact" 429 "Too many requests" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bad","message":"x"}'
+
+reset_rate_limits  # targeted cleanup — loopback rows only
+
+say ""
+
 # ── No-auth baseline ─────────────────────────────────────────────────────────────
+# Service key is active for contact checks so they are never rate-limited by prior
+# test runs or real traffic sharing the same window.
 
 say "${C_CYAN}${C_BOLD}🔷 ── No-auth baseline ──────────────────────────────────────${C_RESET}"
 
@@ -188,11 +239,13 @@ check "GET /api/posts returns 200" \
 
 check "POST /api/contact missing name returns 400" \
   POST "$BASE_URL/api/contact" 400 "" \
+  "${SKEY_HEADER[@]}" \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","message":"hello"}'
 
 check "POST /api/contact invalid email returns 400" \
   POST "$BASE_URL/api/contact" 400 "" \
+  "${SKEY_HEADER[@]}" \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","email":"not-an-email","message":"hello"}'
 
@@ -270,31 +323,6 @@ check "GET /api/stats/visits without auth returns 401" \
   GET "$BASE_URL/api/stats/visits" 401
 
 say ""
-
-# ── Rate limiting (dev only) ──────────────────────────────────────────────────────
-# /api/contact is limited to 3 requests/hour. The limiter runs BEFORE validation,
-# so invalid payloads still increment the counter (no emails sent). Reset first
-# for a deterministic window, then prove the 4th request is blocked with 429.
-# Gated on --reset-rate-limits so it only runs where we can reset (dev).
-
-if [ "$RESET_RL" = "1" ]; then
-  say "${C_CYAN}${C_BOLD}🔷 ── Rate limiting ─────────────────────────────────────────${C_RESET}"
-  reset_rate_limits
-
-  for n in 1 2 3; do
-    check "POST /api/contact #$n within limit returns 400" \
-      POST "$BASE_URL/api/contact" 400 "" \
-      -H "Content-Type: application/json" \
-      -d '{"email":"bad","message":"x"}'
-  done
-
-  check "POST /api/contact #4 over limit returns 429" \
-    POST "$BASE_URL/api/contact" 429 "Too many requests" \
-    -H "Content-Type: application/json" \
-    -d '{"email":"bad","message":"x"}'
-
-  say ""
-fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────────
 
