@@ -43,6 +43,7 @@ The goals for the project are:
 ### 3.1 ✅ Dual-environment hosting — SHIPPED (~Release 2026-05-18)
 
 Both environments run on `ak-home-server`:
+
 - Production on `main` — public, port 443, Let's Encrypt TLS.
 - Dev/staging on `dev` branch — LAN-only, `dev.andykeys.me:3001`, self-signed TLS.
 

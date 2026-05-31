@@ -26,6 +26,7 @@ For high-level direction and current priorities, AI models may treat `ROADMAP.md
 **The owner's strong preference is always a proper fix.** Workarounds — commenting out checks, skipping pipeline steps, adding bypass flags, or patching over symptoms — are a last resort reserved for genuine site-down emergencies where there is no time for a correct fix.
 
 If a workaround is unavoidable:
+
 1. Apply the minimum workaround needed to restore service
 2. Raise a GitHub issue immediately documenting what was bypassed and why
 3. Treat the proper fix as the next highest-priority task — do not move on to other work first
@@ -54,6 +55,7 @@ Whenever a file is added, moved, renamed, or removed, update all relevant docume
 - Any other doc that contains the old path or filename
 
 This applies to:
+
 - Scripts being added or reorganised (e.g. moving `scripts/foo.ps1` → `scripts/tests/foo.ps1`)
 - Source files being renamed or relocated
 - New docs or config files being introduced
@@ -75,7 +77,7 @@ Use this rule consistently throughout this file and in all docs written by the A
 
 This project follows a three-tier branching model:
 
-```
+```text
 main (production)
  ↑
 dev (integration)
@@ -84,6 +86,7 @@ feature/* or fix/* (per GitHub issue)
 ```
 
 **Branch naming:**
+
 - `feature/issue-N-short-description` — for new features
 - `fix/issue-N-short-description` — for bug fixes
 - `release/YYYY-MM-DD` — for production releases (with optional `-N` suffix for same-day releases)
@@ -91,6 +94,7 @@ feature/* or fix/* (per GitHub issue)
 - One branch per GitHub issue only
 
 **Critical guardrails:**
+
 - **One branch at a time for ops and security work.** Do not open or develop multiple branches simultaneously when the work touches deployment/infrastructure or security (auth, tokens, secrets, rate limiting). These changes are interdependent and easy to get subtly wrong in parallel — finish, PR, and get one merged before starting the next. Independent low-risk work (e.g. a docs tweak, an unrelated UI fix) may still proceed in parallel; this restriction is specific to ops/security.
 - **Always develop on a feature or fix branch** (`feature/issue-N-*` or `fix/issue-N-*`). Never commit directly to `dev` or `main`.
 - **Pull requests** go `feature|fix/* → dev` for integration testing and review.
@@ -103,7 +107,9 @@ feature/* or fix/* (per GitHub issue)
 ## Expected AI Workflow
 
 ### 1. Issue Creation
+
 If the issue doesn't exist yet, create it on GitHub with:
+
 - Clear title and description
 - Steps to reproduce (for bugs)
 - Expected vs actual behaviour
@@ -134,13 +140,16 @@ Always apply both a **state label** and any relevant **type labels**:
 The AI is responsible for adding/removing these labels as the issue moves through its lifecycle; do not wait for a separate prompt to update them.
 
 ### 2. Planning
+
 Before writing code:
+
 1. Read the issue and any linked context
 2. Examine existing code patterns and architecture
 3. Comment a plan on the issue before starting work
 4. Ask for clarification if requirements are ambiguous
 
 ### 3. Implementation
+
 1. Create a `feature/issue-N-*` or `fix/issue-N-*` branch from `dev`
 2. Commit regularly with clear messages
 3. Keep changes focused — one issue per branch
@@ -152,6 +161,7 @@ Before writing code:
 **PR creation is the default.** Once the work is committed and the branch is pushed, open the PR to `dev` automatically — do not ask "shall I open a PR?" first. The standing authorisation is: branch + push + complete work ⇒ open the PR. (You still do **not** merge it — review and merge remain the owner's.) Only skip or defer the PR if the owner explicitly says so for that piece of work, or the work is genuinely incomplete/experimental (say so explicitly).
 
 Once implementation is complete:
+
 1. Raise a PR from the branch → `dev`
 2. Link the issue number (`Closes #N`)
 3. Include a clear summary of what changed and why
@@ -164,6 +174,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 **Recommend a squash commit message with every PR.** After opening the PR, post (in the PR description or as a chat reply) a ready-to-copy squash commit message for the owner to paste when squash-merging on test completion. The repo merges via squash, so the PR's individual commits are discarded — this message becomes the permanent history entry. Format it the same as a normal commit: imperative summary ≤50 chars, blank line, a short body covering what changed and why, and the `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` footer. Present it in a fenced code block so it can be copied verbatim.
 
 **PR test plans must include:**
+
 - Specific steps to verify the happy path (e.g. exact URL, action, expected result)
 - Edge cases to check (e.g. empty state, error handling, mobile view)
 - Regression checks for related features that could have been affected
@@ -172,6 +183,7 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 - The documentation checklist: confirm `docs/CHANGELOG.md` updated and any relevant doc updated, or N/A
 
 **Test plan commands — mandatory rules:**
+
 - Every step that requires a terminal command must include the **exact, copy-paste command** — no placeholders left unexplained, no "run the usual command".
 - **Target the dev server first.** The dev server is the canonical test environment (real DB, auth, file uploads). Write the test plan for someone SSHed into `ak-home-server`. **Important:** `dev.andykeys.me` does not resolve from the server itself — use `https://localhost:3001` with `-k` (self-signed cert) for on-server curl commands. `dev.andykeys.me` works only from external machines (browser, Windows). Local Docker is a fallback only — if a step only makes sense locally, label it clearly as `# Local Docker fallback (if dev server unavailable)`.
 - Use the correct compose file and service name for the environment being tested: `docker-compose.yml` with services `backend` / `postgres` for the dev server (project `portfolio_dev`) and prod (project `portfolio_prod`); `docker-compose.local.yml` with services `backend` / `postgres` for local laptop dev.
@@ -183,11 +195,13 @@ The AI does not merge PRs — you will review, test locally, and merge when read
 ### 5. Release to Production
 
 When you are ready to release to production, instruct the AI with:
-```
+
+```text
 Create a release branch for today and raise a PR to main
 ```
 
 The AI will:
+
 1. Create a `release/YYYY-MM-DD` branch from `dev` (or `release/YYYY-MM-DD-2`, etc. if already released today)
 2. Fetch all commits since the last release
 3. Raise a PR from `release/YYYY-MM-DD` → `main` with a summary:
@@ -201,6 +215,7 @@ The AI will:
    - Change state label from `awaiting release` to `released`.
 
 You will:
+
 1. Review the release summary
 2. Test any critical paths on `release/YYYY-MM-DD` if needed
 3. Approve and merge the PR to `main` (the AI does not merge)
@@ -209,6 +224,7 @@ You will:
 ### 6. Hotfixes (Emergency Production Fixes)
 
 If a critical bug is discovered on production:
+
 1. Instruct the AI to create a hotfix: `Create hotfix/issue-N-short-description for the production bug`
 2. The AI will branch from `main`, fix, commit, and raise a PR → `main`
 3. You review and approve the hotfix PR
@@ -219,7 +235,7 @@ If a critical bug is discovered on production:
 
 ### Branching diagram
 
-```
+```text
 main  ←(you approve)── release/YYYY-MM-DD ←── dev ←── feature/issue-N-*
  ↑                                              ←── fix/issue-N-*
  └── hotfix/issue-N-* ────────────────────────(emergency fixes only)
@@ -279,7 +295,7 @@ The AI performs doc lifecycle steps **as part of the release PR commit**, so the
 
 Follow imperative style with optional Co-Authored-By:
 
-```
+```text
 Short imperative summary (50 chars max)
 
 Optional explanation if the why isn't obvious.
@@ -290,6 +306,7 @@ Co-Authored-By: AI Model Name <noreply@ai-provider.com>
 Replace "AI Model Name" with your actual model (e.g., `Claude Haiku`, `Perplexity Sonar`, `GPT-4`).
 
 **Examples:**
+
 - ✅ `fix(#81): use /api as API_BASE in blog-post.js`
 - ✅ `feat(#78): add travel-post detail page`
 - ✅ `refactor: simplify lightbox initialization`
@@ -323,17 +340,20 @@ Key points summarised here:
 ### Comments
 
 Keep comments **concise and rare**. Add them only when:
+
 - The logic is unusual or non-obvious
 - Explaining a workaround for a specific bug
 - Documenting a hidden constraint or invariant
 - The code does something surprising
 
 Do NOT comment:
+
 - What the code does (use clear variable names instead)
 - The current task (that belongs in PR descriptions)
 - Obvious operations
 
 **Examples:**
+
 ```javascript
 // Good: explains why, not what
 var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
@@ -345,6 +365,7 @@ var name = user.name; // Get the user's name
 ### HTML / CSS / JS
 
 **ES Modules & Code Organization**
+
 - Frontend uses ES modules for all JavaScript (no inline scripts except minimal setup)
 - Create shared utilities in `resources/js/utils/*` instead of duplicating functions
 - Example patterns: `escapeHtml()`, `formatVisitDate()`, `formatRelativeDate()` are shared exports
@@ -352,12 +373,14 @@ var name = user.name; // Get the user's name
 - Avoid copy-pasting logic across multiple files — extract to utils first
 
 **HTML & CSS**
+
 - Keep CSS organized by component/feature
 - Prefer editing existing files over creating new ones
 - Delete unused code completely (no `// removed` comments)
 - Use semantic HTML (`<article>`, `<header>`, `<nav>`, `<button>` with proper `aria-` attributes)
 
 **JavaScript**
+
 - Use vanilla JS — jQuery has been fully removed (#385)
 - Use `const/let` in modern ES modules
 - For security-critical operations (escaping, DOM manipulation), always use shared utilities
@@ -365,6 +388,7 @@ var name = user.name; // Get the user's name
 - Prevent SQL injection: use parameterized queries on backend (never string concatenation)
 
 **Design Patterns (Anti-Debt)**
+
 - **DRY (Don't Repeat Yourself):** Extract repeated logic to utilities or shared functions
 - **Single Responsibility:** Each function/module has one clear purpose
 - **No Quick Fixes:** If tempted to duplicate code, create a utility instead

@@ -83,7 +83,7 @@ cp ~/backups/YYYY-MM-DD/prod.env ~/MyPortfolioSite/.env
 cp ~/backups/YYYY-MM-DD/dev.env  ~/MyPortfolioSite-dev/.env
 ```
 
-3. **Restore PostgreSQL data**
+1. **Restore PostgreSQL data**
 
 After bringing up the stacks once to create the DB containers:
 
@@ -99,7 +99,7 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml exec -T postgres pg_r
 
 Adjust service names if they differ (see **docs/DEV_ENVIRONMENT.md** and **docs/PROD_ENVIRONMENT.md**).
 
-4. **Bring services up**
+1. **Bring services up**
 
 ```bash
 # Prod
@@ -111,9 +111,10 @@ cd ~/MyPortfolioSite-dev
 docker compose -f docker-compose.dev-server.yml up -d --build
 ```
 
-5. **Smoke test**
+1. **Smoke test**
 
 Use the runbook and testing docs to verify:
+
 - Homepage and key pages load
 - Basic API calls work
 - Admin login and deployment flows succeed
@@ -127,5 +128,6 @@ When backup automation is added (cron job, offsite sync, etc.), document it here
 For now, aim to run the manual backup steps before major changes and periodically (e.g. monthly).
 
 See also:
+
 - **[docs/INFRASTRUCTURE.md](./INFRASTRUCTURE.md)** for host-level details
 - **[docs/UNTRACKED_FILES.md](./UNTRACKED_FILES.md)** for other files not in git but required

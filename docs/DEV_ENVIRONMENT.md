@@ -52,7 +52,7 @@ bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev
 
 The script checks for a `.env` file. If one doesn't exist it copies `.env.dev-server.example` into place and stops with instructions:
 
-```
+```text
 [WARN]  .env created but not yet configured.
 [WARN]  Edit ~/MyPortfolioSite-dev/.env and set these values:
 [WARN]    LAN_IP           — your server LAN IP (ip -4 addr show)
@@ -66,6 +66,7 @@ The script checks for a `.env` file. If one doesn't exist it copies `.env.dev-se
 Edit `~/MyPortfolioSite-dev/.env`, fill in the values above, then re-run the deploy script. Everything else in the file can stay as defaulted.
 
 Generate secrets with:
+
 ```bash
 openssl rand -base64 32
 ```
@@ -74,7 +75,7 @@ openssl rand -base64 32
 
 The script validates `.env`, builds the containers, and polls the health endpoint. On success:
 
-```
+```text
 ╔══════════════════════════════════════════╗
 ║           Dev deploy complete ✓          ║
 ╚══════════════════════════════════════════╝
@@ -124,6 +125,7 @@ docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev rest
 **Health check fails after deploy**
 
 The deploy script automatically dumps container logs on failure. To investigate manually:
+
 ```bash
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs --tail=50 backend
 docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml -p portfolio_dev logs --tail=20 postgres
@@ -138,12 +140,14 @@ Fix: navigate directly to `https://dev.andykeys.me:3001/resources/js/nav.js` in 
 Permanent fix: import the cert into Firefox's certificate store — Preferences → Privacy & Security → Certificates → View Certificates → Import → select `scripts/config/certs/dev-server.crt`.
 
 **Port 3001 not reachable from other LAN devices**
+
 ```bash
 sudo ufw status        # confirm the allow rule is present
 sudo lsof -i :3001     # confirm nginx is listening
 ```
 
 **WebAuthn / passkey errors on the dev site**
+
 - Confirm `WEBAUTHN_RP_ID` in `.env` is the bare IP (no `http://`, no port)
 - Confirm `WEBAUTHN_ORIGIN` is exactly `http://<LAN_IP>:3001`
 - Passkeys registered on prod will not work on dev (different origin — expected)

@@ -21,6 +21,7 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 **Resolution:** Reverted CSP entirely (see issue #181 for proper implementation plan). Other security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) remained intact.
 
 **Lesson Learned:** CSP requires careful planning. Don't deploy restrictive CSP without:
+
 - Auditing all inline scripts in HTML
 - Identifying all external resources (APIs, CDNs)
 - Testing with actual external requests
@@ -37,10 +38,12 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 **Impact:** Certbot validation failed repeatedly. Nginx container crashed at startup.
 
 **Resolution:**
+
 - Killed Apache processes: `sudo killall -9 httpd`
 - Removed Nextcloud: `sudo snap remove nextcloud`
 
 **Lesson Learned:**
+
 - For fresh deployments, use a **clean Ubuntu Server installation** (minimal packages only)
 - If reusing an existing server, verify no conflicting services are installed
 - Pre-flight checks should detect and warn about:
@@ -60,10 +63,12 @@ The first production deployment to Ubuntu Server (2026-05-07) succeeded but enco
 **Impact:** Unnecessary manual file creation. Wasted time on workarounds.
 
 **What Actually Happened:**
+
 1. Certbot failed (no port forwarding) → we created files manually
 2. Could have simply: Fixed port forwarding → Re-run certbot → Files created automatically
 
 **Resolution (Correct Approach):**
+
 ```bash
 # After fixing port forwarding on router:
 sudo certbot certonly --standalone -d yourdomain.com
@@ -71,12 +76,14 @@ sudo certbot certonly --standalone -d yourdomain.com
 ```
 
 **Lesson Learned:**
+
 - **When certbot fails, re-run it after fixing the root cause — don't manually create files**
 - Certbot handles all file creation automatically on successful runs
 - The root causes (port forwarding, DNS resolution) matter more than file creation
 - Manual file creation should only be used if certbot repeatedly fails for unrelated reasons
 
 **For server-setup.sh:**
+
 - Don't pre-create certbot files
 - Verify port forwarding works before running certbot
 - Let certbot create all necessary files on first successful run
@@ -94,6 +101,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 **Resolution:** Manually configured port forwarding on router (not automated).
 
 **Lesson Learned:** Documentation should include:
+
 - Router port forwarding checklist
 - How to verify port accessibility: `curl http://<public-ip>/`
 - Alternative: document UPnP port mapping if router supports it
@@ -109,6 +117,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 **Impact:** Extended troubleshooting time (spent 45+ minutes trying incremental fixes). **Would have been resolved in 5 minutes with a system reboot.**
 
 **Troubleshooting Attempts That Failed:**
+
 - `sudo systemctl restart docker` → still failed
 - `docker rm -f <container>` → permission denied
 - Re-running `usermod -aG docker` → no effect
@@ -117,12 +126,14 @@ sudo certbot certonly --standalone -d yourdomain.com
 **Actual Resolution:** Full system reboot solved everything immediately.
 
 **Lesson Learned:**
+
 - **When Docker gets into permission/state issues, do a full system reboot FIRST, not last**
 - Don't spend time on incremental Docker daemon restarts — they often don't clear kernel state
 - User group membership changes require a full login session or reboot to take effect
 - The 45 minutes spent troubleshooting could have been 5 minutes with a reboot
 
 **Recommendation for server-setup.sh:**
+
 ```bash
 # After Docker installation and user group changes
 echo "System reboot recommended to apply Docker group membership..."
@@ -142,6 +153,7 @@ fi
 **Root Cause:** Part of the same Docker state issue (Issue #5). Not actually a database timing problem.
 
 **What We Tried:**
+
 - Added `sleep 15` waiting for postgres ❌ (didn't help)
 - Added health check retries ❌ (didn't help)
 - Increased timeouts ❌ (didn't help)
@@ -149,6 +161,7 @@ fi
 **Actual Resolution:** Full system reboot (which also fixed the Docker permission issues).
 
 **Lesson Learned:**
+
 - **Don't add delays and retries hoping they'll fix database issues** — if the backend can't connect after postgres is healthy, it's usually a Docker/OS state problem, not timing
 - The symptom looked like a timing issue but wasn't
 - System reboot fixes the underlying issue immediately, no delays needed
@@ -180,6 +193,7 @@ Lessons from the snap → Docker CE migration carried out on 2026-05-11.
 **Root Cause:** systemd socket activation — `docker.socket` had not been started, so the socket file was never created even though the service unit appeared active.
 
 **Resolution:**
+
 ```bash
 sudo systemctl stop docker docker.socket
 sudo systemctl start docker.socket
@@ -197,11 +211,13 @@ sudo systemctl start docker
 **Symptom:** Every `apt update` after the migration printed warnings about a duplicate apt source for `download.docker.com`.
 
 **Root Cause:** The migration script added a new apt source list entry, but a file created by a previous manual Docker CE install attempt was still present:
-```
+
+```text
 /etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
 ```
 
 **Resolution:**
+
 ```bash
 sudo rm /etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
 sudo apt update
@@ -216,6 +232,7 @@ sudo apt update
 **Symptom:** N/A — this went right tonight, but is worth making explicit.
 
 **Lesson Learned:** `sudo snap remove --purge docker` should only be run **after**:
+
 1. Both the dev and prod stacks are confirmed healthy under Docker CE (`docker compose ps`, `curl /health`)
 2. You are satisfied there is no rollback needed
 
@@ -226,10 +243,12 @@ Do not include snap removal in the automated migration flow. Keep it as a manual
 #### 8d. Health check response interpretation — 301 and empty body are healthy
 
 **Symptom:** Post-migration health checks returned responses that looked like failures:
+
 - **Prod** `curl https://andykeys.me/health` → `301 Moved Permanently`
 - **Dev** `curl http://192.168.68.81:3001/health` → security headers with no response body
 
 **Root Cause:** These are correct, expected responses:
+
 - The prod 301 is the HTTP → HTTPS redirect working as intended; `curl -L` or a direct HTTPS request shows the real health response
 - The dev empty body is nginx returning security headers for a request it can proxy correctly; the backend is reachable
 
@@ -245,41 +264,58 @@ Before running `server-setup.sh`, verify:
 
 - [ ] Fresh Ubuntu Server LTS (22.04+) with minimal packages
 - [ ] No conflicting web servers installed:
+
   ```bash
   dpkg -l | grep -E 'apache2|nginx|httpd'  # Should return nothing
   ```
+
 - [ ] No pre-installed snaps interfering:
+
   ```bash
   snap list | grep -E 'nextcloud|apache|nginx'  # Should return nothing
   ```
+
 - [ ] Ports 80 and 443 are free:
+
   ```bash
   sudo netstat -tlnp | grep -E ':80|:443'  # Should return nothing
   lsof -i :80 -i :443 2>/dev/null         # Alternative check
   ```
+
 - [ ] No systemd services using those ports:
+
   ```bash
   systemctl list-units --type=service | grep -E 'apache|httpd|nginx|nextcloud'
   ```
+
 - [ ] Port 80/443 accessible from internet (after router config):
+
   ```bash
   curl --connect-timeout 5 http://yourserver-ip/ || echo "NOT accessible"
   ```
+
 - [ ] Domain resolves correctly:
+
   ```bash
   nslookup yourdomain.com  # Should show server IP
   ```
+
 - [ ] Router port forwarding configured (80→server, 443→server)
 - [ ] Sufficient disk space:
+
   ```bash
   df -h /  # Should have 10GB+ free
   ```
+
 - [ ] Internet connectivity:
+
   ```bash
   ping -c 1 8.8.8.8
   ```
+
 - [ ] SSH access working and no known_hosts errors
 - [ ] Time synchronized:
+
   ```bash
   timedatectl status  # Should show "System clock synchronized"
   ```
@@ -291,6 +327,7 @@ Before running `server-setup.sh`, verify:
 Instead of attempting everything at once, deploy incrementally:
 
 ### Phase 1: Core Infrastructure (HTTP only)
+
 1. Run server-setup.sh (modified to skip SSL)
 2. Bring up docker compose with HTTP-only nginx
 3. Verify backend health: `curl http://localhost/health`
@@ -298,11 +335,13 @@ Instead of attempting everything at once, deploy incrementally:
 5. Test basic API: `curl http://localhost/api/posts`
 
 ### Phase 2: Verify DNS & Accessibility
+
 1. Verify domain points to server: `nslookup yourdomain.com`
 2. Test external access: `curl http://yourdomain.com/health` from another machine
 3. Verify port forwarding: `nmap -p 80 yourdomain.com` (should show open)
 
 ### Phase 3: SSL Certificates
+
 1. Run certbot: `sudo certbot certonly --standalone -d yourdomain.com`
 2. Verify files exist: `ls /etc/letsencrypt/live/yourdomain.com/`
 3. Create helpers if needed: `options-ssl-nginx.conf`, `ssl-dhparams.pem`
@@ -311,6 +350,7 @@ Instead of attempting everything at once, deploy incrementally:
 6. Verify HTTPS: `curl https://yourdomain.com/health`
 
 ### Phase 4: Final Verification
+
 1. Test all endpoints:
    - `/health` (system health)
    - `/api/posts` (public content)
@@ -326,6 +366,7 @@ Instead of attempting everything at once, deploy incrementally:
 ### server-setup.sh Enhancements
 
 1. **Pre-flight Checks — Installed Programs:**
+
    ```bash
    # Check for conflicting packages
    if dpkg -l | grep -qE 'apache2|nginx|httpd'; then
@@ -344,6 +385,7 @@ Instead of attempting everything at once, deploy incrementally:
    ```
 
 2. **Pre-flight Checks — Port Usage:**
+
    ```bash
    # Verify ports 80 and 443 are free
    check_port() {
@@ -369,6 +411,7 @@ Instead of attempting everything at once, deploy incrementally:
    ```
 
 3. **Pre-flight Checks — Disk Space:**
+
    ```bash
    # Verify sufficient disk space
    AVAILABLE=$(df / | awk 'NR==2 {print $4}')  # In 1K blocks
@@ -383,6 +426,7 @@ Instead of attempting everything at once, deploy incrementally:
    ```
 
 4. **Pre-flight Checks — Network:**
+
    ```bash
    # Verify internet connectivity
    if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
@@ -398,14 +442,16 @@ Instead of attempting everything at once, deploy incrementally:
    fi
    ```
 
-2. **Port Forwarding Validation:**
+5. **Port Forwarding Validation:**
+
    ```bash
    # After setup, test external accessibility
    curl --connect-timeout 5 http://$DOMAIN/ || \
      echo "WARNING: Port 80 not accessible from internet"
    ```
 
-3. **Certbot Helper File Creation:**
+6. **Certbot Helper File Creation:**
+
    ```bash
    # Create missing files if not present
    [ -f /etc/letsencrypt/options-ssl-nginx.conf ] || \
@@ -415,13 +461,14 @@ Instead of attempting everything at once, deploy incrementally:
      openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
    ```
 
-4. **Don't add excessive waiting/retries for database issues**
+7. **Don't add excessive waiting/retries for database issues**
    - If postgres is healthy but backend can't connect, it's a Docker state issue
    - Extra delays and retries won't fix underlying state problems
    - A system reboot fixes the issue immediately
    - Focus on preventing Docker state issues instead (see Issue #5)
 
-5. **Better Error Reporting:**
+8. **Better Error Reporting:**
+
    ```bash
    # Capture detailed errors for troubleshooting
    docker compose logs > /var/log/portfolio-setup-$(date +%s).log
@@ -456,6 +503,7 @@ If Docker gets into a bad state during setup:
 1. **First attempt:** `docker compose down && docker system prune -f`
 2. **Second attempt:** `sudo systemctl restart docker`
 3. **If still failing:** Don't spend more than 5 minutes trying fixes — **just reboot**
+
    ```bash
    sudo reboot
    ```
@@ -467,6 +515,7 @@ If Docker gets into a bad state during setup:
 ## Environment & Infrastructure Notes
 
 ### Server Configuration
+
 - **OS:** Ubuntu Server 22.04 LTS (fresh installation recommended)
 - **Architecture:** Moved from Raspberry Pi (initial Pi setup) to Ubuntu Server (production deployment)
 - **Docker:** Single docker-compose.yml for both local dev and production
@@ -474,12 +523,14 @@ If Docker gets into a bad state during setup:
 - **Reverse Proxy:** Nginx in Docker container (production) or direct backend (local dev)
 
 ### Environment Variables Handling
+
 - **Critical:** JWT_SECRET and DB_PASSWORD must be set before `docker compose up`
 - **File:** `.env.prod` contains production values; not checked into git
 - **Timing:** Environment vars needed at docker-compose startup, not during setup script runtime
 - **Secrets:** Keep passwords in `.env.prod` and `~/.env` files, never in docker-compose.yml
 
 ### Docker Compose Differences
+
 - **Local Dev:** docker-compose.yml with explicit bind mounts
 - **Production:** Same compose file with `.env.prod` overrides (BACKEND_HOST=127.0.0.1 instead of 'backend')
 - **Volume Mounts:** Use explicit `type: bind` for Windows path compatibility (MSYS translation issues)
@@ -535,6 +586,7 @@ ls -la /etc/letsencrypt/live/yourdomain.com/
 ```
 
 ### What Did NOT Help
+
 - ❌ Adding `sleep` delays to database checks — timing was not the issue
 - ❌ Restarting Docker daemon incrementally — kernel state issues require reboot
 - ❌ Manually creating certbot helper files — should have re-run certbot instead
@@ -542,6 +594,7 @@ ls -la /etc/letsencrypt/live/yourdomain.com/
 - ❌ Incremental docker-compose down/up cycles — didn't clear stale containers
 
 ### What Solved Problems
+
 - ✅ Full system reboot — immediately cleared Docker state issues
 - ✅ Checking port availability BEFORE anything else — prevented cascading failures
 - ✅ Re-running certbot after fixing port forwarding — created missing SSL files automatically
@@ -645,6 +698,7 @@ After implementing improvements, test the revised setup script:
 **Estimated time with improvements:** ~30-45 minutes
 
 **Risk mitigation:**
+
 - Phase-by-phase validation catches issues early
 - Pre-flight checks prevent common mistakes
 - Better error messages reduce troubleshooting time
