@@ -7,9 +7,12 @@ export function createRateLimiter(options = {}) {
     windowMs = 60 * 1000, // 1 minute
     keyGenerator = (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
     message = 'Too many requests. Please try again later.',
+    skip = () => false,
   } = options;
 
   return async (req, res, next) => {
+    if (skip(req)) return next();
+
     const key = keyGenerator(req);
     if (!key) {
       return next();
