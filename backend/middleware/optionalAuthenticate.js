@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
 
-// Verifies the JWT from Authorization: Bearer if present and sets req.user.
-// Always calls next() — never rejects unauthenticated requests.
-// Used before rate limiters on application routes so exemptIfTrusted can check req.user.
+// Verifies the JWT from Authorization: Bearer if present and sets req.user, then
+// always calls next(). Does not gate access — unauthenticated requests proceed
+// normally and will still be subject to any rate limiter further down the chain.
+// Place before a rate limiter so exemptIfTrusted can check req.user.
 export function optionalAuthenticate(req, _res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
