@@ -825,19 +825,23 @@ footer a:hover {
 
 /* Projects Grid */
 .projects-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1.5rem;
-    max-width: 1200px;
+    max-width: 1100px;
     margin: 0 auto;
 }
 
 .project-card {
+    flex: 1 1 300px;
+    max-width: 420px;
+    text-align: left;
     background: var(--color-surface);
     border-radius: 10px;
     padding: 1.75rem;
     box-shadow: 0 2px 12px var(--color-shadow);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
     border-left: 4px solid var(--color-border-strong);
 }
 
@@ -902,6 +906,12 @@ footer a:hover {
     padding: 1.75rem;
     border-radius: 10px;
     box-shadow: 0 2px 12px var(--color-shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.skill-category:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .skill-category h3 {
@@ -1203,17 +1213,26 @@ footer {
 }
 
 .ai-dev-points {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1.25rem;
     margin-top: 1.5rem;
 }
 
 .ai-point {
+    flex: 1 1 220px;
+    max-width: 300px;
     background: var(--color-surface-alt);
     border-radius: 8px;
     padding: 1.25rem;
     border-left: 3px solid var(--color-border-strong);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ai-point:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .ai-point h3 {
@@ -1253,6 +1272,12 @@ footer {
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
     box-shadow: 0 2px 12px var(--color-shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.cert-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px var(--color-shadow-hover);
 }
 
 .cert-info {
@@ -1370,11 +1395,6 @@ footer {
 
     .about-text {
         text-align: center;
-    }
-
-    .projects-grid,
-    .skills-container {
-        grid-template-columns: 1fr;
     }
 
     .contact-wrapper {
@@ -1573,8 +1593,9 @@ footer {
 /* ── GitHub activity widget (Issue #5) ─────────────────────────────────────── */
 
 .github-repos-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1rem;
     max-width: 1100px;
     margin: 0 auto 1.5rem;
@@ -1582,6 +1603,8 @@ footer {
 }
 
 .github-repo-card {
+    flex: 1 1 260px;
+    max-width: 380px;
     display: block;
     background: var(--color-surface);
     border-radius: 10px;
