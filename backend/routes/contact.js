@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { resolveUser } from '../middleware/resolveUser.js';
 import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 
@@ -15,7 +16,7 @@ const contactRateLimit = createRateLimiter({
 });
 
 // lgtm[js/missing-rate-limiting] -- contactRateLimit middleware applied
-router.post('/', contactRateLimit, validate(ContactSchema), async (req, res) => {
+router.post('/', resolveUser, contactRateLimit, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
     return res.json({ success: true });

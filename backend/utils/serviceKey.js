@@ -1,5 +1,3 @@
-import jwt from 'jsonwebtoken';
-
 // Returns true when the request carries a valid X-Service-Key header matching
 // the SERVICE_KEY env var. Used as the `skip` function in createRateLimiter to
 // exempt authenticated service accounts (e.g. the regression test runner) from
@@ -12,18 +10,12 @@ export const exemptIfServiceAccount = (req) => {
 };
 
 // Returns true when the request is from a trusted caller: a verified JWT session
-// or a valid service account key. Intended as the `skip` function on application
-// routes (contact, debug/errors). Auth endpoints must keep exemptIfServiceAccount —
-// JWT exemption is inappropriate there (a stolen JWT must not bypass magic-link or
-// passkey rate limits). See: issue #415.
+// (set by resolveUser) or a valid service account key.
+// Use this as the `skip` function on application routes (contact, debug/errors).
+// Auth endpoints must keep exemptIfServiceAccount — JWT exemption is inappropriate
+// there (a stolen JWT must not bypass magic-link or passkey rate limits).
+// See: issue #415.
 export const exemptIfTrusted = (req) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    try {
-      if (jwt.verify(authHeader.slice(7), process.env.JWT_SECRET)) return true;
-    } catch {
-      // invalid or expired — not trusted
-    }
-  }
+  if (req.user) return true;
   return exemptIfServiceAccount(req);
 };
