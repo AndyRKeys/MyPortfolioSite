@@ -1,5 +1,6 @@
 import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
+import { createMessenger } from '../utils/messenger.js';
 
 export function initDeploy() {
     let deployEnv = 'prod'; // fallback until status loads
@@ -16,10 +17,7 @@ export function initDeploy() {
     const statusRow       = document.getElementById('deploy-status-row');
     const logList         = document.getElementById('deploy-log-list');
 
-    function setMessage(msg, isError = false) {
-        message.textContent = msg;
-        message.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
-    }
+    const setMessage = createMessenger('deploy-message');
 
     function setBusy(busy) {
         fetchBtn.disabled        = busy;
