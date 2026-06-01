@@ -25,7 +25,7 @@ const router = Router();
 const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
 const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
 const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
-const JWT_EXPIRY = '24h';
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 
 // Rate limiters for sensitive auth endpoints (per IP)
 const emailRateLimit = createRateLimiter({
