@@ -36,7 +36,7 @@
                 var url = URL.createObjectURL(blob);
                 var a = document.createElement('a');
                 a.href = url;
-                a.download = 'Andrew_Keys_CV.pdf';
+                a.download = 'Andy_Keys_CV.pdf';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
