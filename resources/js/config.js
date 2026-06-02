@@ -10,7 +10,3 @@ export const API_BASE = '/api';
 
 // Deprecated alias remains:
 export const API = API_BASE;
-
-export function isAdminSession() {
-  return !!sessionStorage.getItem('adminToken');
-}
