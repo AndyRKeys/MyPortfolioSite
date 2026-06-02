@@ -1,11 +1,24 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// Separate keyType from posts (#445 — shared counters caused cross-route lockout).
+// Owner is exempt via resolveUser + exemptIfTrusted; cap targets anonymous scraping
+// and fuzz attempts against the protected CRUD surface.
+const travelRateLimit = createRateLimiter({
+  limit: 120,
+  windowMs: 60 * 1000,
+  keyType: 'travel',
+  skip: exemptIfTrusted,
+});
 
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
@@ -62,7 +75,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', async (req, res, next) => {
+router.get('/', resolveUser, travelRateLimit, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -78,7 +91,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', authenticate, async (req, res, next) => {
+router.get('/all', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -94,7 +107,7 @@ router.get('/all', authenticate, async (req, res, next) => {
 });
 
 // Admin: single travel post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res, next) => {
+router.get('/admin/:id', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1 AND p.post_type = 'travel'`,
@@ -109,7 +122,7 @@ router.get('/admin/:id', authenticate, async (req, res, next) => {
 });
 
 // Public: single published travel post by id
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', resolveUser, travelRateLimit, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
@@ -125,7 +138,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // Admin: create travel post
-router.post('/', authenticate, validate(CreateTravelSchema), async (req, res, next) => {
+router.post('/', resolveUser, travelRateLimit, authenticate, validate(CreateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -186,7 +199,7 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res, ne
 });
 
 // Admin: update travel post
-router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
+router.put('/:id', resolveUser, travelRateLimit, authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -240,7 +253,7 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res, 
 });
 
 // Admin: delete travel post (CASCADE removes post_media rows)
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
@@ -255,7 +268,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 });
 
 // Admin: delete a single media item from post_media
-router.delete('/:id/media/:mediaId', authenticate, async (req, res, next) => {
+router.delete('/:id/media/:mediaId', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,

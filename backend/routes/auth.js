@@ -9,8 +9,9 @@ import {
 } from '@simplewebauthn/server';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { resolveUser } from '../middleware/resolveUser.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
-import { exemptIfServiceAccount } from '../utils/serviceKey.js';
+import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -44,6 +45,17 @@ const passkeyRateLimit = createRateLimiter({
   skip: exemptIfServiceAccount,
 });
 
+// Account-management surface (/setup/status, /me, /passkeys, /passkeys/:id).
+// Owner is exempt via resolveUser → exemptIfTrusted; cap stops anonymous
+// scrapers polling /setup/status and blocks JWT-fuzz on protected endpoints.
+// Separate keyType from passkey/email (#445).
+const accountRateLimit = createRateLimiter({
+  limit: 60,
+  windowMs: 60 * 1000,
+  keyType: 'account',
+  skip: exemptIfTrusted,
+});
+
 function signJWT(user) {
   return jwt.sign(
     { id: user.id, email: user.email, username: user.username },
@@ -54,7 +66,7 @@ function signJWT(user) {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-router.get('/setup/status', async (req, res, next) => {
+router.get('/setup/status', resolveUser, accountRateLimit, async (req, res, next) => {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
     res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
@@ -76,7 +88,7 @@ router.post('/setup', (req, res) => {
 
 // ── Current user ──────────────────────────────────────────────────────────────
 
-router.get('/me', authenticate, async (req, res, next) => {
+router.get('/me', resolveUser, accountRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT id, email, username, created_at FROM users WHERE id = $1',
@@ -92,7 +104,6 @@ router.get('/me', authenticate, async (req, res, next) => {
 
 // ── Passkey registration ───────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -138,7 +149,6 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res, next) => {
   try {
     const { response, sessionKey, passkeyName } = req.body;
@@ -191,7 +201,6 @@ router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate
 
 // ── Passkey authentication ────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -234,7 +243,6 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
 router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res, next) => {
   try {
     const { response, sessionKey } = req.body;
@@ -294,7 +302,6 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
 
 // ── Email magic link ──────────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
 router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -358,7 +365,6 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
 router.get('/email/verify', emailRateLimit, async (req, res, next) => {
   try {
     const { token } = req.query;
@@ -439,7 +445,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
 
 // ── Passkey management ────────────────────────────────────────────────────────
 
-router.get('/passkeys', authenticate, async (req, res, next) => {
+router.get('/passkeys', resolveUser, accountRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, name, device_type, backed_up, created_at
@@ -453,7 +459,7 @@ router.get('/passkeys', authenticate, async (req, res, next) => {
   }
 });
 
-router.delete('/passkeys/:id', authenticate, async (req, res, next) => {
+router.delete('/passkeys/:id', resolveUser, accountRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       'DELETE FROM passkeys WHERE id = $1 AND user_id = $2 RETURNING id',

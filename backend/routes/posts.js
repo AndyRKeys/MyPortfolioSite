@@ -1,11 +1,25 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// Per-IP backstop against scraping and credential-stuffing fuzz on blog routes.
+// The owner is exempt via resolveUser → exemptIfTrusted, so legitimate admin
+// editing never throttles; the cap protects anonymous endpoints from abuse and
+// blocks attackers spamming protected routes with random JWTs.
+const postsRateLimit = createRateLimiter({
+  limit: 120,
+  windowMs: 60 * 1000,
+  keyType: 'posts',
+  skip: exemptIfTrusted,
+});
 
 // ── Helpers
 
@@ -40,7 +54,7 @@ async function tryInsertPost(post_type, title, body_markdown, post_date, publish
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', async (req, res, next) => {
+router.get('/', resolveUser, postsRateLimit, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -57,7 +71,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', authenticate, async (req, res, next) => {
+router.get('/all', resolveUser, postsRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -74,7 +88,7 @@ router.get('/all', authenticate, async (req, res, next) => {
 });
 
 // Admin: single blog post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res, next) => {
+router.get('/admin/:id', resolveUser, postsRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -90,7 +104,7 @@ router.get('/admin/:id', authenticate, async (req, res, next) => {
 });
 
 // Public: single blog post by slug
-router.get('/:slug', async (req, res, next) => {
+router.get('/:slug', resolveUser, postsRateLimit, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -107,7 +121,7 @@ router.get('/:slug', async (req, res, next) => {
 });
 
 // Admin: create blog post
-router.post('/', authenticate, validate(CreatePostSchema), async (req, res, next) => {
+router.post('/', resolveUser, postsRateLimit, authenticate, validate(CreatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -122,7 +136,7 @@ router.post('/', authenticate, validate(CreatePostSchema), async (req, res, next
 });
 
 // Admin: update blog post
-router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res, next) => {
+router.put('/:id', resolveUser, postsRateLimit, authenticate, validate(UpdatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -165,7 +179,7 @@ router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res, ne
 });
 
 // Admin: delete blog post
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', resolveUser, postsRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id`,

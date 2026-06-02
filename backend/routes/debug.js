@@ -81,9 +81,6 @@ function isValidUuid(v) {
  * POST /debug/errors — Receive frontend errors from error-logger.js.
  * Persists to client_errors table and triggers threshold alerting (#333).
  */
-// lgtm[js/missing-rate-limiting] -- resolveUser runs a cheap jwt.verify so exemptIfTrusted
-// can identify the session; debugRateLimit is applied immediately after and enforces the
-// limit for all unauthenticated requests. resolveUser never gates access.
 router.post('/errors', resolveUser, debugRateLimit, async (req, res) => {
   const { type, message, timestamp, url, filename, lineno, colno, stack, sessionId, requestId } = req.body;
 
@@ -140,7 +137,6 @@ router.post('/errors', resolveUser, debugRateLimit, async (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports.
  */
-// lgtm[js/missing-rate-limiting] -- see /errors above; same pattern applies
 router.post('/csp-violations', resolveUser, debugRateLimit, async (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;

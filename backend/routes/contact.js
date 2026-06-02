@@ -16,9 +16,6 @@ const contactRateLimit = createRateLimiter({
   skip: exemptIfTrusted,
 });
 
-// lgtm[js/missing-rate-limiting] -- resolveUser runs a cheap jwt.verify so exemptIfTrusted
-// can identify the session; contactRateLimit is applied immediately after and enforces the
-// limit for all unauthenticated requests. resolveUser never gates access.
 router.post('/', resolveUser, contactRateLimit, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
