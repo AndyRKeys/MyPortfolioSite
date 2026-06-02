@@ -5,6 +5,7 @@ export function createRateLimiter(options = {}) {
   const {
     limit = 10,
     windowMs = 60 * 1000, // 1 minute
+    keyType = 'default',
     keyGenerator = (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
     message = 'Too many requests. Please try again later.',
     skip = () => false,
@@ -23,20 +24,20 @@ export function createRateLimiter(options = {}) {
       const windowStart = new Date(now.getTime() - windowMs);
 
       const result = await pool.query(
-        `INSERT INTO rate_limits (ip, count, window_start)
-         VALUES ($1, 1, $2)
-         ON CONFLICT (ip) DO UPDATE
+        `INSERT INTO rate_limits (ip, key_type, count, window_start)
+         VALUES ($1, $2, 1, $3)
+         ON CONFLICT (ip, key_type) DO UPDATE
            SET
              count = CASE
-               WHEN rate_limits.window_start < $3 THEN 1
+               WHEN rate_limits.window_start < $4 THEN 1
                ELSE rate_limits.count + 1
              END,
              window_start = CASE
-               WHEN rate_limits.window_start < $3 THEN $2
+               WHEN rate_limits.window_start < $4 THEN $3
                ELSE rate_limits.window_start
              END
          RETURNING count`,
-        [key, now, windowStart]
+        [key, keyType, now, windowStart]
       );
 
       const count = result.rows[0].count;

@@ -1,12 +1,8 @@
 import { authFetch, getToken } from './auth.js';
 import { API_BASE } from '../config.js';
+import { createMessenger } from '../utils/messenger.js';
 
-function setMessage(msg, isError = false) {
-    const el = document.getElementById('cv-message');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
-}
+const setMessage = createMessenger('cv-message');
 
 function updateStatusBadge(exists) {
     const badge = document.getElementById('cv-status-badge');

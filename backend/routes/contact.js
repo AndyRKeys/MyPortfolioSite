@@ -11,6 +11,7 @@ const router = Router();
 const contactRateLimit = createRateLimiter({
   limit: 3,
   windowMs: 60 * 60 * 1000, // 1 hour
+  keyType: 'contact',
   message: 'Too many requests. Please try again later.',
   skip: exemptIfTrusted,
 });

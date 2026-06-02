@@ -16,6 +16,7 @@ const IS_DEV = process.env.NODE_ENV !== 'production';
 const debugRateLimit = createRateLimiter({
   limit: 50,
   windowMs: 60 * 1000,
+  keyType: 'debug',
   message: 'Rate limited',
   skip: exemptIfTrusted,
 });
