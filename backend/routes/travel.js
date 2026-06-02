@@ -62,7 +62,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -73,12 +73,12 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -89,12 +89,12 @@ router.get('/all', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: single travel post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res) => {
+router.get('/admin/:id', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1 AND p.post_type = 'travel'`,
@@ -104,12 +104,12 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Public: single published travel post by id
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
@@ -120,12 +120,12 @@ router.get('/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: create travel post
-router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) => {
+router.post('/', authenticate, validate(CreateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -179,14 +179,14 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: update travel post
-router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) => {
+router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -233,14 +233,14 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: delete travel post (CASCADE removes post_media rows)
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
@@ -250,12 +250,12 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: delete a single media item from post_media
-router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
+router.delete('/:id/media/:mediaId', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,
@@ -274,7 +274,7 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 

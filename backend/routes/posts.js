@@ -40,7 +40,7 @@ async function tryInsertPost(post_type, title, body_markdown, post_date, publish
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -52,12 +52,12 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -69,12 +69,12 @@ router.get('/all', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: single blog post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res) => {
+router.get('/admin/:id', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -85,12 +85,12 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Public: single blog post by slug
-router.get('/:slug', async (req, res) => {
+router.get('/:slug', async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -102,12 +102,12 @@ router.get('/:slug', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: create blog post
-router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
+router.post('/', authenticate, validate(CreatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -117,12 +117,12 @@ router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: update blog post
-router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) => {
+router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -160,12 +160,12 @@ router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) =>
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: delete blog post
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id`,
@@ -175,7 +175,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
