@@ -76,7 +76,12 @@ services:
     volumes:
       - uploads_data:/app/uploads
       - .:/repo  # repo root — needed by deploy route for git commands and deploy script
-      - /var/run/docker.sock:/var/run/docker.sock  # allows deploy route to run docker compose on the host daemon
+      # SECURITY: docker.sock grants the backend full control over the host Docker daemon.
+      # Required by the deploy route (backend/routes/deploy.js) to run docker compose
+      # commands from the admin panel. Trade-off accepted for a self-hosted hobby project,
+      # but represents a significant privilege escalation surface — any RCE in the backend
+      # container could escape to the host. Revisit with a dedicated deploy agent: #450.
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
