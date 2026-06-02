@@ -16,11 +16,11 @@ function makeRes() {
 }
 
 describe('errorHandler', () => {
-  it('returns { error } JSON with the error message', () => {
+  it('returns generic message for 5xx to avoid leaking DB details', () => {
     const res = makeRes();
     errorHandler(new Error('Something broke'), {}, res, () => {});
     expect(res._status).toBe(500);
-    expect(res._json).toEqual({ error: 'Something broke' });
+    expect(res._json).toEqual({ error: 'Internal server error' });
   });
 
   it('uses err.status when set', () => {
@@ -29,6 +29,14 @@ describe('errorHandler', () => {
     errorHandler(err, {}, res, () => {});
     expect(res._status).toBe(404);
     expect(res._json).toEqual({ error: 'Not found' });
+  });
+
+  it('sends err.message to client for 4xx errors', () => {
+    const res = makeRes();
+    const err = Object.assign(new Error('Validation failed'), { status: 422 });
+    errorHandler(err, {}, res, () => {});
+    expect(res._status).toBe(422);
+    expect(res._json).toEqual({ error: 'Validation failed' });
   });
 
   it('uses err.statusCode when err.status is absent', () => {
