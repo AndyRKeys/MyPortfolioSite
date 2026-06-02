@@ -25,12 +25,13 @@ const router = Router();
 const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
 const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
 const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
-const JWT_EXPIRY = '24h';
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 // Rate limiters for sensitive auth endpoints (per IP)
 const emailRateLimit = createRateLimiter({
   limit: 5,
   windowMs: 60 * 60 * 1000, // 5 per hour
+  keyType: 'email',
   message: 'Too many login attempts. Please try again later.',
   skip: exemptIfServiceAccount,
 });
@@ -38,6 +39,7 @@ const emailRateLimit = createRateLimiter({
 const passkeyRateLimit = createRateLimiter({
   limit: 10,
   windowMs: 60 * 60 * 1000, // 10 per hour
+  keyType: 'passkey',
   message: 'Too many authentication attempts. Please try again later.',
   skip: exemptIfServiceAccount,
 });

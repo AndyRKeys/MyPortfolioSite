@@ -1,6 +1,7 @@
 import exifr from 'https://esm.sh/exifr@7.1.3';
 import { authFetch, authFetchMultipart, todayIso } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
+import { createMessenger } from '../utils/messenger.js';
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -12,12 +13,7 @@ let geoconfirmMarker = null;
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 
-function setMessage(msg, isError = false, isHint = false) {
-    const el = document.getElementById('travel-message');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
-}
+const setMessage = createMessenger('travel-message');
 
 // ── Media list ────────────────────────────────────────────────────────────────
 

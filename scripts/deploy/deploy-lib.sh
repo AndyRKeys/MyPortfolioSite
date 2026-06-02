@@ -2006,14 +2006,18 @@ run_regression_tests() {
 check_backup_health() {
   dsection "Backup health check"
   local ok=1
-  local backup_dir="${BACKUP_DIR:-${HOME}/backups}"
+  # Scan the parent ~/backups tree rather than BACKUP_DIR from the deploy env.
+  # The cron job always runs from ~/MyPortfolioSite and resolves its own BACKUP_DIR
+  # from the prod .env — which may differ from the dev deploy env. Scanning the
+  # parent with maxdepth 2 finds files under prod/, dev/, or a flat layout.
+  local backup_dir="${HOME}/backups"
   local max_age_days=2
 
   # ── Check 1: cron/systemd timer configured ───────────────────────────────
   local cron_found=0
-  if crontab -l 2>/dev/null | grep -qi "backup"; then
+  if crontab -l 2>/dev/null | grep -q "db-backup"; then
     cron_found=1
-  elif systemctl list-timers --all 2>/dev/null | grep -qi "backup"; then
+  elif systemctl list-timers --all 2>/dev/null | grep -q "db-backup"; then
     cron_found=1
   fi
 
@@ -2034,8 +2038,15 @@ check_backup_health() {
 
     if [ "$install_cron" = "1" ]; then
       (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
-      dstatus backup-schedule status=installed
-      dok "Installed backup cron: ${cron_entry}"
+      if crontab -l 2>/dev/null | grep -q "db-backup"; then
+        dstatus backup-schedule status=installed
+        dok "Installed backup cron: ${cron_entry}"
+      else
+        dstatus backup-schedule status=warn
+        dwarn "Cron install attempted but could not be verified — add manually: crontab -e"
+        dwarn "  ${cron_entry}"
+        ok=0
+      fi
     else
       dstatus backup-schedule status=warn
       dwarn "No backup cron job found — add manually: crontab -e"
