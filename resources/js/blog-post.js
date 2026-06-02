@@ -1,5 +1,5 @@
 import { API_BASE } from './config.js';
-import DOMPurify from 'https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.es.mjs';
+import DOMPurify from 'https://cdn.jsdelivr.net/npm/dompurify@3.4.7/dist/purify.es.mjs';
 
 function getSlug() {
     var params = new URLSearchParams(window.location.search);
