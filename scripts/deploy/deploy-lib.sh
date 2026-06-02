@@ -2011,9 +2011,9 @@ check_backup_health() {
 
   # ── Check 1: cron/systemd timer configured ───────────────────────────────
   local cron_found=0
-  if crontab -l 2>/dev/null | grep -qi "backup"; then
+  if crontab -l 2>/dev/null | grep -q "db-backup"; then
     cron_found=1
-  elif systemctl list-timers --all 2>/dev/null | grep -qi "backup"; then
+  elif systemctl list-timers --all 2>/dev/null | grep -q "db-backup"; then
     cron_found=1
   fi
 
@@ -2034,8 +2034,15 @@ check_backup_health() {
 
     if [ "$install_cron" = "1" ]; then
       (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
-      dstatus backup-schedule status=installed
-      dok "Installed backup cron: ${cron_entry}"
+      if crontab -l 2>/dev/null | grep -q "db-backup"; then
+        dstatus backup-schedule status=installed
+        dok "Installed backup cron: ${cron_entry}"
+      else
+        dstatus backup-schedule status=warn
+        dwarn "Cron install attempted but could not be verified — add manually: crontab -e"
+        dwarn "  ${cron_entry}"
+        ok=0
+      fi
     else
       dstatus backup-schedule status=warn
       dwarn "No backup cron job found — add manually: crontab -e"
