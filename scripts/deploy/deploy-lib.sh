@@ -2006,7 +2006,11 @@ run_regression_tests() {
 check_backup_health() {
   dsection "Backup health check"
   local ok=1
-  local backup_dir="${BACKUP_DIR:-${HOME}/backups}"
+  # Scan the parent ~/backups tree rather than BACKUP_DIR from the deploy env.
+  # The cron job always runs from ~/MyPortfolioSite and resolves its own BACKUP_DIR
+  # from the prod .env — which may differ from the dev deploy env. Scanning the
+  # parent with maxdepth 2 finds files under prod/, dev/, or a flat layout.
+  local backup_dir="${HOME}/backups"
   local max_age_days=2
 
   # ── Check 1: cron/systemd timer configured ───────────────────────────────
