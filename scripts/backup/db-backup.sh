@@ -5,14 +5,14 @@
 set -e
 
 REPO_DIR="$HOME/MyPortfolioSite"
-BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/prod}"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-
-mkdir -p "$BACKUP_DIR"
 cd "$REPO_DIR"
 
-# Load .env for DB credentials
+# Load .env first so BACKUP_DIR and DB credentials are available before use
 set -a; source .env 2>/dev/null || true; set +a
+
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/prod}"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+mkdir -p "$BACKUP_DIR"
 
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting backup..."
 
