@@ -1,13 +1,9 @@
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
 import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
+import { createMessenger } from '../utils/messenger.js';
 
-function setMessage(msg, isError = false) {
-    const el = document.getElementById('passkey-message');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
-}
+const setMessage = createMessenger('passkey-message');
 
 async function loadPasskeys() {
     const container = document.getElementById('passkey-list');
