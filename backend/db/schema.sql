@@ -146,10 +146,25 @@ WHERE post_type = 'travel'
 -- DB-backed rate limiting for contact form (#79)
 -- One row per IP; window_start resets when the window expires.
 CREATE TABLE IF NOT EXISTS rate_limits (
-  ip VARCHAR(45) PRIMARY KEY,
+  ip VARCHAR(45) NOT NULL,
+  key_type VARCHAR(64) NOT NULL,
   count INTEGER NOT NULL DEFAULT 1,
-  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (ip, key_type)
 );
+
+-- Idempotent migration: add key_type to existing single-column PK installs (#445)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'rate_limits' AND column_name = 'key_type'
+  ) THEN
+    ALTER TABLE rate_limits ADD COLUMN key_type VARCHAR(64) NOT NULL DEFAULT 'legacy';
+    ALTER TABLE rate_limits DROP CONSTRAINT rate_limits_pkey;
+    ALTER TABLE rate_limits ADD PRIMARY KEY (ip, key_type);
+  END IF;
+END $$;
 
 -- ── Indexes on hot query columns (#79) ───────────────────────────────────────
 -- slug is already covered by the UNIQUE constraint (implicit index).
