@@ -77,7 +77,7 @@ function signJWT(user) {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-router.get('/setup/status', resolveUser, accountRateLimit, async (req, res, next) => {
+router.get('/setup/status', resolveUser, accountRateLimit, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via accountRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
     res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
@@ -456,7 +456,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
 
 // ── Passkey management ────────────────────────────────────────────────────────
 
-router.get('/passkeys', resolveUser, accountRateLimit, authenticate, async (req, res, next) => {
+router.get('/passkeys', resolveUser, accountRateLimit, authenticate, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via accountRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
   try {
     const result = await pool.query(
       `SELECT id, name, device_type, backed_up, created_at
@@ -470,7 +470,7 @@ router.get('/passkeys', resolveUser, accountRateLimit, authenticate, async (req,
   }
 });
 
-router.delete('/passkeys/:id', resolveUser, accountRateLimit, authenticate, async (req, res, next) => {
+router.delete('/passkeys/:id', resolveUser, accountRateLimit, authenticate, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via accountRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
   try {
     const result = await pool.query(
       'DELETE FROM passkeys WHERE id = $1 AND user_id = $2 RETURNING id',
