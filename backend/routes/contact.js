@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
@@ -8,12 +9,15 @@ import { logger } from '../utils/logger.js';
 
 const router = Router();
 
-const contactRateLimit = createRateLimiter({
-  limit: 3,
-  windowMs: 60 * 60 * 1000, // 1 hour
-  keyType: 'contact',
-  message: 'Too many requests. Please try again later.',
-  skip: exemptIfTrusted,
+const contactRateLimit = rateLimit({
+  windowMs:        60 * 60 * 1000, // 3 per hour
+  limit:           3,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'contact' }),
 });
 
 router.post('/', resolveUser, contactRateLimit, validate(ContactSchema), async (req, res) => {

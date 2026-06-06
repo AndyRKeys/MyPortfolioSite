@@ -1,5 +1,5 @@
 // Returns true when the request carries a valid X-Service-Key header matching
-// the SERVICE_KEY env var. Used as the `skip` function in createRateLimiter to
+// the SERVICE_KEY env var. Used as the `skip` function in rateLimit() to
 // exempt authenticated service accounts (e.g. the regression test runner) from
 // rate limiting — trusted callers are not in scope for user-facing quotas.
 // Fails closed: if SERVICE_KEY is unset, no request is exempted.

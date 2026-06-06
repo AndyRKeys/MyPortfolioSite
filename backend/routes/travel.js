@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
@@ -13,11 +14,15 @@ const router = Router();
 // Separate keyType from posts (#445 — shared counters caused cross-route lockout).
 // Owner is exempt via resolveUser + exemptIfTrusted; cap targets anonymous scraping
 // and fuzz attempts against the protected CRUD surface.
-const travelRateLimit = createRateLimiter({
-  limit: 120,
-  windowMs: 60 * 1000,
-  keyType: 'travel',
-  skip: exemptIfTrusted,
+const travelRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'travel' }),
 });
 
 const TRAVEL_COLS = `

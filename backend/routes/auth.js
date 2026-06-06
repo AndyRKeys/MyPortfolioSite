@@ -10,7 +10,8 @@ import {
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
@@ -29,31 +30,41 @@ const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 // Rate limiters for sensitive auth endpoints (per IP)
-const emailRateLimit = createRateLimiter({
-  limit: 5,
-  windowMs: 60 * 60 * 1000, // 5 per hour
-  keyType: 'email',
-  message: 'Too many login attempts. Please try again later.',
-  skip: exemptIfServiceAccount,
+const emailRateLimit = rateLimit({
+  windowMs:        60 * 60 * 1000, // 5 per hour
+  limit:           5,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfServiceAccount,
+  message:         { error: 'Too many login attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'email' }),
 });
 
-const passkeyRateLimit = createRateLimiter({
-  limit: 10,
-  windowMs: 60 * 60 * 1000, // 10 per hour
-  keyType: 'passkey',
-  message: 'Too many authentication attempts. Please try again later.',
-  skip: exemptIfServiceAccount,
+const passkeyRateLimit = rateLimit({
+  windowMs:        60 * 60 * 1000, // 10 per hour
+  limit:           10,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfServiceAccount,
+  message:         { error: 'Too many authentication attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'passkey' }),
 });
 
 // Account-management surface (/setup/status, /me, /passkeys, /passkeys/:id).
 // Owner is exempt via resolveUser → exemptIfTrusted; cap stops anonymous
 // scrapers polling /setup/status and blocks JWT-fuzz on protected endpoints.
 // Separate keyType from passkey/email (#445).
-const accountRateLimit = createRateLimiter({
-  limit: 60,
-  windowMs: 60 * 1000,
-  keyType: 'account',
-  skip: exemptIfTrusted,
+const accountRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           60,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'account' }),
 });
 
 function signJWT(user) {

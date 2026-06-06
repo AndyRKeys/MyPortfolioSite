@@ -3,7 +3,8 @@ import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { isEmailConfigured, sendErrorAlertEmail } from '../utils/email.js';
 
@@ -13,12 +14,15 @@ const router = Router();
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-const debugRateLimit = createRateLimiter({
-  limit: 50,
-  windowMs: 60 * 1000,
-  keyType: 'debug',
-  message: 'Rate limited',
-  skip: exemptIfTrusted,
+const debugRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           50,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Rate limited' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'debug' }),
 });
 
 // ── Alert threshold ───────────────────────────────────────────────────────────
