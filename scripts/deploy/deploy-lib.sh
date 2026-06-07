@@ -1038,9 +1038,11 @@ _do_rollback() {
     read -r rollback_branch rollback_sha < <(_restore_last_good_state)
     dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
-    git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
+    git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] git checkout to ${rollback_sha:0:7} failed — manual recovery required"; return 1; }
     dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] dc up failed after last-good-state restore — manual recovery required"; return 1; }
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
@@ -1049,10 +1051,13 @@ _do_rollback() {
     # previous commit on the same potentially-broken feature branch.
     dstatus rollback reason="$reason" target="$ROLLBACK_BRANCH" method=stable-branch
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
-    git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-    git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] git fetch for '$ROLLBACK_BRANCH' failed — manual recovery required"; return 1; }
+    git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] git checkout to '$ROLLBACK_BRANCH' failed — manual recovery required"; return 1; }
     dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] dc up failed for '$ROLLBACK_BRANCH' — manual recovery required"; return 1; }
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
@@ -1060,9 +1065,11 @@ _do_rollback() {
     # Same branch deploy: revert to the previous commit.
     dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
-    git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
+    git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] git reset to ${PRE_SHA:0:7} failed — manual recovery required"; return 1; }
     dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE"; [ "${PIPESTATUS[0]}" -eq 0 ] \
+      || { dfail "[rollback] dc up failed after reset to ${PRE_SHA:0:7} — manual recovery required"; return 1; }
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
