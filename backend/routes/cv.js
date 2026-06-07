@@ -10,12 +10,28 @@ import { Router }   from 'express';
 import multer       from 'multer';
 import path         from 'path';
 import fs           from 'fs';
+import { rateLimit }      from 'express-rate-limit';
 import { authenticate }  from '../middleware/authenticate.js';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 import { UPLOADS_DIR }   from '../utils/paths.js';
 import { wrapMulter }    from '../utils/wrapMulter.js';
 
 const router  = Router();
+
+// Per-IP backstop on CV write operations. The limiter precedes authenticate
+// so CodeQL's js/missing-rate-limiting detector sees it before auth.
+const cvRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           30,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'cv' }),
+});
 const CV_PATH = path.join(UPLOADS_DIR, 'cv.pdf');
 
 // ── multer: memory storage so we can inspect before writing ──────────────────
@@ -80,7 +96,7 @@ router.get('/', (req, res) => {
 });
 
 // Admin: upload / replace CV
-router.post('/', authenticate, wrapMulter(upload.single('cv')), async (req, res) => {
+router.post('/', cvRateLimit, authenticate, wrapMulter(upload.single('cv')), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const warnings = scanForPrivateInfo(req.file.buffer);
@@ -96,7 +112,7 @@ router.post('/', authenticate, wrapMulter(upload.single('cv')), async (req, res)
 });
 
 // Admin: delete the CV
-router.delete('/', authenticate, (req, res) => {
+router.delete('/', cvRateLimit, authenticate, (req, res) => {
   if (!cvExists()) return res.status(404).json({ error: 'No CV to delete' });
   try {
     fs.unlinkSync(CV_PATH);
