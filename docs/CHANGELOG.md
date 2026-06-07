@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Changed
+
+- Daily backup cron installed on `ak-home-server` and docs aligned (#185): `scripts/backup/db-backup.sh` now runs at 02:00 daily (`pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, log to `~/backup.log`). `docs/BACKUP.md` rewritten to lead with the automated flow, document verification + ad-hoc usage, and reflect the actual restore path (`db-restore.sh` uses `gunzip | psql`, not `pg_restore`). Offsite sync (rclone → B2) remains scaffolded but deliberately unconfigured — local-only is sufficient for now. `CLAUDE.md` fragile-areas list corrected from "No backups" to the actual state.
+
 ---
 
 ## Release 2026-05-25
