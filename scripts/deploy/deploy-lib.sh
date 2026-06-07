@@ -271,6 +271,11 @@ require_tools() {
   dok "All prerequisites satisfied (${*})"
 }
 
+# ── Compose shorthand ─────────────────────────────────────────────────────────
+# Wraps `docker compose -f "$COMPOSE_FILE"` so callers stay concise.
+# COMPOSE_FILE is set by each deploy script before sourcing this file.
+dc() { docker compose -f "$COMPOSE_FILE" "$@"; }
+
 # ── Repo helpers ───────────────────────────────────────────────────────────────
 
 ensure_repo_cloned() {
@@ -655,7 +660,7 @@ migrate_env_values() {
   # fails (e.g. compose can't parse the file) we skip this check rather
   # than block the deploy on a secondary signal.
   local available_services
-  if ! available_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null); then
+  if ! available_services=$(dc config --services 2>/dev/null); then
     dstatus envmigrate status=skipped reason=compose-config-failed
     dwarn "Could not list compose services — skipping .env migration check"
     return 0
@@ -974,7 +979,7 @@ check_nginx_config() {
   local nginx_output nginx_failed=0
   # Wrap in `if` so set -e doesn't abort on a non-zero exit before we capture
   # and surface the output.
-  if ! nginx_output=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" nginx -t 2>&1); then
+  if ! nginx_output=$(dc run --rm --no-deps "$nginx_service" nginx -t 2>&1); then
     nginx_failed=1
   fi
   echo "$nginx_output" | _log_cmd
@@ -1002,9 +1007,9 @@ check_nginx_config() {
   # running. This avoids unnecessary recreation on deploys where nginx config
   # hasn't changed, while still guaranteeing a fresh start when it has.
   local new_config current_config
-  new_config=$(docker compose -f "$COMPOSE_FILE" run --rm --no-deps "$nginx_service" \
+  new_config=$(dc run --rm --no-deps "$nginx_service" \
     sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
-  current_config=$(docker compose -f "$COMPOSE_FILE" exec -T "$nginx_service" \
+  current_config=$(dc exec -T "$nginx_service" \
     sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
 
   if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
@@ -1017,7 +1022,7 @@ check_nginx_config() {
     fi
     dinfo "Rendered nginx config:"
     echo "$new_config" | _log_cmd
-    docker compose -f "$COMPOSE_FILE" rm -fs "$nginx_service" 2>/dev/null | _log_cmd || true
+    dc rm -fs "$nginx_service" 2>/dev/null | _log_cmd || true
   fi
 }
 
@@ -1034,8 +1039,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${rollback_branch}@${rollback_sha:0:7}" method=last-good-state
     dwarn "Rolling back to last-good state: $rollback_branch@${rollback_sha:0:7} after: $reason"
     git checkout -B "$rollback_branch" "$rollback_sha" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
@@ -1046,8 +1051,8 @@ _do_rollback() {
     dwarn "Rolling back to stable branch '$ROLLBACK_BRANCH' after: $reason"
     git fetch origin "$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
     git checkout -B "$ROLLBACK_BRANCH" "origin/$ROLLBACK_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
@@ -1056,8 +1061,8 @@ _do_rollback() {
     dstatus rollback reason="$reason" target="${PRE_SHA:0:7}" method=previous-commit
     dwarn "Rolling back to previous commit (${PRE_SHA:0:7}) after: $reason"
     git reset --hard "$PRE_SHA" 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
     DEPLOY_ROLLED_BACK=1
     _check_rollback_health
 
@@ -1107,8 +1112,8 @@ _check_rollback_health() {
   # ── Level 2: no-cache rebuild ─────────────────────────────────────────────
   dstatus rollback-health status=failed level=1
   dwarn "Rollback unhealthy — escalating to level 2: no-cache image rebuild..."
-  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
-  docker compose -f "$COMPOSE_FILE" up -d --build --no-cache 2>&1 | tee -a "$LOG_FILE" || true
+  dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+  dc up -d --build --no-cache 2>&1 | tee -a "$LOG_FILE" || true
 
   if _poll_health 12 5; then
     dstatus rollback-health status=ok level=2
@@ -1121,9 +1126,9 @@ _check_rollback_health() {
   if [ "${DEPLOY_ENV:-}" = "dev" ]; then
     dwarn "Escalating to level 3: docker system prune + rebuild (dev only)..."
     dwarn "This removes dangling images and networks — named volumes (data) are preserved."
-    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    dc down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
     docker system prune -f 2>&1 | tee -a "$LOG_FILE" || true
-    docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --build 2>&1 | tee -a "$LOG_FILE" || true
 
     if _poll_health 12 5; then
       dstatus rollback-health status=ok level=3
@@ -1219,7 +1224,7 @@ apply_schema() {
   dsection "Phase 5b: applying DB schema"
   local postgres_service="${POSTGRES_SERVICE:-postgres}"
 
-  if ! docker compose -f "$COMPOSE_FILE" exec -T "$postgres_service" \
+  if ! dc exec -T "$postgres_service" \
       psql -U "${DB_USER:-postgres}" -d "${DB_NAME:-portfolio_prod}" \
       -f /docker-entrypoint-initdb.d/01-schema.sql \
       >> "$LOG_FILE" 2>&1; then
@@ -1236,7 +1241,7 @@ apply_schema() {
 prune_client_errors() {
   local postgres_service="${POSTGRES_SERVICE:-postgres}"
   local deleted
-  deleted=$(docker compose -f "$COMPOSE_FILE" exec -T "$postgres_service" \
+  deleted=$(dc exec -T "$postgres_service" \
     psql -U "${DB_USER:-postgres}" -d "${DB_NAME:-portfolio_prod}" -tAc \
     "DELETE FROM client_errors WHERE received_at < NOW() - INTERVAL '30 days'; SELECT ROW_COUNT();" \
     2>/dev/null | tail -1 || echo "?")
@@ -1254,8 +1259,8 @@ compose_up_with_rollback() {
   # rename (e.g. postgres → postgres-dev). --remove-orphans below stops them,
   # but surfacing them first gives a clear record of what was cleaned up.
   local running_services defined_services
-  running_services=$(docker compose -f "$COMPOSE_FILE" ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
-  defined_services=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | sort -u || true)
+  running_services=$(dc ps --all --format '{{.Service}}' 2>/dev/null | sort -u || true)
+  defined_services=$(dc config --services 2>/dev/null | sort -u || true)
   if [ -n "$running_services" ] && [ -n "$defined_services" ]; then
     while IFS= read -r svc; do
       [ -z "$svc" ] && continue
@@ -1266,7 +1271,7 @@ compose_up_with_rollback() {
   fi
 
   dinfo "Stopping existing stack before rebuild..."
-  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>&1 | _log_cmd || true
+  dc down --remove-orphans 2>&1 | _log_cmd || true
 
   # Pass commit SHA to nginx container so sub_filter can cache-bust JS module imports in HTML
   DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "dev")
@@ -1275,10 +1280,10 @@ compose_up_with_rollback() {
 
   dinfo "Running: docker compose -f $COMPOSE_FILE up -d --build"
 
-  if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1 | _log_cmd; then
+  if ! dc up -d --build 2>&1 | _log_cmd; then
     dstatus compose status=failed service="$service_name"
     dfail "docker compose up failed. Container logs for $service_name:"
-    docker compose -f "$COMPOSE_FILE" logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
+    dc logs --tail=40 "$service_name" 2>&1 | tee -a "$LOG_FILE" || true
     _do_rollback "docker compose up failed"
     ddie "Deploy failed — see above for details."
   fi
@@ -1288,8 +1293,8 @@ compose_up_with_rollback() {
   if [ -n "${NGINX_SERVICE:-}" ]; then
     sleep 2  # allow nginx to finish initialising or fail-fast
     local nginx_state
-    nginx_state=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$NGINX_SERVICE" 2>/dev/null \
-      || docker compose -f "$COMPOSE_FILE" ps "$NGINX_SERVICE" 2>/dev/null | awk 'NR==2{print $4}' \
+    nginx_state=$(dc ps --format '{{.State}}' "$NGINX_SERVICE" 2>/dev/null \
+      || dc ps "$NGINX_SERVICE" 2>/dev/null | awk 'NR==2{print $4}' \
       || echo "unknown")
 
     if [[ "$nginx_state" != "running" ]]; then
@@ -1297,7 +1302,7 @@ compose_up_with_rollback() {
       dfail "Nginx container is not running (state: $nginx_state)"
       dfail ""
       dfail "Nginx logs:"
-      docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+      dc logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
       _do_rollback "nginx failed to start"
       ddie "Nginx failed to start — check the nginx config and cert paths above."
     fi
@@ -1377,13 +1382,13 @@ wait_for_health() {
       dfail ""
 
       dfail "Backend logs — $backend_service (last 50 lines):"
-      docker compose -f "$COMPOSE_FILE" logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
+      dc logs --tail=50 "$backend_service" 2>&1 | tee -a "$LOG_FILE" || true
 
       # Nginx logs are critical for diagnosing SSL/config failures
       if [ -n "${NGINX_SERVICE:-}" ]; then
         dfail ""
         dfail "Nginx logs — $NGINX_SERVICE (last 30 lines):"
-        docker compose -f "$COMPOSE_FILE" logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
+        dc logs --tail=30 "$NGINX_SERVICE" 2>&1 | tee -a "$LOG_FILE" || true
       fi
 
       _do_rollback "health check timed out"
@@ -1414,7 +1419,7 @@ run_deploy_tests() {
   # aborting before we record the exit code.
   local report_path='/tmp/vitest-deploy-report.json'
   local out rc total passed failed counts
-  if out=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" \
+  if out=$(dc exec -T "$service_name" \
             npm test -- --reporter=default --reporter=json \
             --outputFile.json="$report_path" 2>&1); then rc=0; else rc=$?; fi
   printf '%s\n' "$out" | _log_cmd
@@ -1422,7 +1427,7 @@ run_deploy_tests() {
   # Read counts back from the json report in the same (persistent) container.
   # Falls back to "0 0 0" if the file is missing/unreadable so a parse failure
   # never aborts the deploy on its own.
-  counts=$(docker compose -f "$COMPOSE_FILE" exec -T "$service_name" node -e \
+  counts=$(dc exec -T "$service_name" node -e \
     'try{const r=require(process.argv[1]);process.stdout.write(`${r.numTotalTests||0} ${r.numPassedTests||0} ${r.numFailedTests||0}`)}catch(e){process.stdout.write("0 0 0")}' \
     "$report_path" 2>/dev/null || true)
   read -r total passed failed <<<"${counts:-0 0 0}" || true
@@ -1459,7 +1464,7 @@ test_error_logger_all_pages() {
   # Run comprehensive test inside the backend container — capture output and
   # surface it inline so failures are visible without SSHing to read the log.
   local test_output rc total passed failed
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  if test_output=$(dc exec -T "$BACKEND_SERVICE" npm run test:error-logger:all-pages -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
   local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[error-logger-all-pages\]' | tail -1 || true)
   passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed); total=$(_kv_num "$sline" total)
   if [ "$rc" -eq 0 ]; then
@@ -1496,7 +1501,7 @@ test_error_logger_contracts() {
   dinfo "Running contract test (capture, buffering, recursion safety)..."
 
   local test_output rc total passed failed
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" npm run test:error-logger:browser -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
+  if test_output=$(dc exec -T "$BACKEND_SERVICE" npm run test:error-logger:browser -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
   local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[error-logger-browser\]' | tail -1 || true)
   passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed)
   total=$(( ${passed:-0} + ${failed:-0} ))
@@ -1531,7 +1536,7 @@ check_public_page_js() {
   dinfo "Loading public pages in headless browser to check for unhandled JS errors..."
 
   local test_output rc
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" \
+  if test_output=$(dc exec -T "$BACKEND_SERVICE" \
       npm run test:public-pages -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
   local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[public-pages\]' | tail -1 || true)
   local passed failed total
@@ -1569,7 +1574,7 @@ check_csp_violations() {
   # Scan metric is pages/violations (a violation isn't a 1:1 test), so report
   # those native counts rather than forcing pass/fail semantics.
   local test_output rc pages violations
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T "$BACKEND_SERVICE" \
+  if test_output=$(dc exec -T "$BACKEND_SERVICE" \
       npm run test:csp-violations -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
   local sline; sline=$(printf '%s\n' "$test_output" | grep -E '^\[csp-violations\]' | tail -1 || true)
   pages=$(_kv_num "$sline" pages); violations=$(_kv_num "$sline" violations)
@@ -1607,7 +1612,7 @@ check_admin_e2e_csp() {
 
   # Scan metric is interactions/violations — report those native counts.
   local test_output rc interactions violations
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
+  if test_output=$(dc exec -T \
       -e JWT_SECRET="${JWT_SECRET:-}" \
       "$BACKEND_SERVICE" \
       npm run test:admin-e2e-csp -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
@@ -1637,7 +1642,7 @@ check_admin_e2e() {
   dinfo "Running admin E2E smoke and interaction tests..."
 
   local test_output rc smoke interactions
-  if test_output=$(docker compose -f "$COMPOSE_FILE" exec -T \
+  if test_output=$(dc exec -T \
       -e JWT_SECRET="${JWT_SECRET:-}" \
       "$BACKEND_SERVICE" \
       npm run test:admin-e2e -- "$base_url" 2>&1); then rc=0; else rc=$?; fi
@@ -1764,7 +1769,7 @@ check_outlook_token() {
   # Grep the startup logs for the preflight result emitted by server.js.
   # Non-blocking: a missing or invalid token is a warning, not a deploy failure.
   local log_output
-  log_output=$(docker compose -f "$COMPOSE_FILE" logs --no-log-prefix --tail=50 "$backend_service" 2>&1)
+  log_output=$(dc logs --no-log-prefix --tail=50 "$backend_service" 2>&1)
 
   if echo "$log_output" | grep -q "\[startup:preflight\] Outlook OAuth2 not configured"; then
     dstatus outlook status=skipped reason=not-configured
@@ -2125,7 +2130,7 @@ check_backup_health() {
         local timestamp
         timestamp=$(date +%Y%m%d-%H%M%S)
         local db_backup="${backup_dir}/portfolio-${timestamp}.sql.gz"
-        if docker compose -f "$COMPOSE_FILE" exec -T postgres \
+        if dc exec -T postgres \
             pg_dump -U "${DB_USER:-postgres}" "${DB_NAME:-portfolio}" \
             2>/dev/null | gzip > "$db_backup" && [ -s "$db_backup" ]; then
           dstatus backup-files status=ok dir="$backup_dir"
