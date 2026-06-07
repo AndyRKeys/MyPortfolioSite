@@ -1,6 +1,7 @@
 import { API_BASE } from './config.js';
-import { isAdminSession, getToken } from './auth-utils.js';
+import { getToken } from './auth-utils.js';
 import { buildRepoCard } from './utils/dom.js';
+import { recordVisit as _recordVisit } from './utils/stats.js';
 
 // ── Horizontal scroll carousel ────────────────────────────────────────────────
 
@@ -145,21 +146,18 @@ function initContactForm() {
 // ── Visit counter ─────────────────────────────────────────────────────────────
 
 function recordVisit(page) {
-    if (isAdminSession()) return;
-
     var counterLine = document.getElementById('visit-counter-line');
     var countEl = document.getElementById('visit-count');
     if (!counterLine || !countEl) return;
-
-    fetch(API_BASE + '/stats/visit?page=' + encodeURIComponent(page), { method: 'POST' })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-            if (data.count) {
-                countEl.textContent = data.count.toLocaleString();
-                counterLine.style.display = '';
-            }
-        })
-        .catch(function () {});
+    var p = _recordVisit(page);
+    if (!p) return;
+    p.then(function (res) { return res ? res.json() : null; })
+     .then(function (data) {
+         if (data && data.count) {
+             countEl.textContent = data.count.toLocaleString();
+             counterLine.style.display = '';
+         }
+     });
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────

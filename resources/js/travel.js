@@ -3,6 +3,7 @@ import { escapeHtml } from './utils/html.js';
 import { formatVisitDate } from './utils/date.js';
 import { buildTimelineItem, buildPublicTravelCard } from './utils/dom.js';
 import { initLightbox } from './utils/lightbox.js';
+import { recordVisit } from './utils/stats.js';
 
 // ── Travel map (Leaflet) ──────────────────────────────────────────────────────
 
@@ -181,6 +182,6 @@ function loadPublicTravelPosts() {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
+recordVisit('travel');
 loadPublicTravelPosts();
 initLightbox();
