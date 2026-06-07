@@ -1,5 +1,6 @@
 import { API_BASE } from './config.js';
 import { openLightbox, initLightbox } from './utils/lightbox.js';
+import { recordVisit } from './utils/stats.js';
 
 // ── Page loader ───────────────────────────────────────────────────────────────
 
@@ -29,8 +30,7 @@ function loadTravelPost() {
         })
         .then(function (travel) {
             renderTravelPost(travel);
-            // Fire-and-forget visit counter — only on a successful post load.
-            fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
+            recordVisit('travel');
         })
         .catch(function () { showError(); });
 }

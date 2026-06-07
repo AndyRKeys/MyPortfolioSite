@@ -1,6 +1,7 @@
 import { API_BASE } from './config.js';
 import { formatPostDate } from './utils/date.js';
 import { buildPostCard, buildTimelineItem } from './utils/dom.js';
+import { recordVisit } from './utils/stats.js';
 
 function truncate(str, len) {
     if (!str) return '';
@@ -96,7 +97,6 @@ function loadPosts() {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-// Fire-and-forget visit counter — swallow errors so stats never break the page
-fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
+recordVisit('blog');
 
 loadPosts();
