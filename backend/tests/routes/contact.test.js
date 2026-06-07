@@ -62,9 +62,10 @@ describe('POST /contact', () => {
 describe('POST /contact — SERVICE_KEY service account exemption', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Simulate rate limit exceeded so exemption behaviour is observable
+    // Simulate rate limit exceeded so exemption behaviour is observable.
+    // PostgresStore expects { count, window_start } from the INSERT...RETURNING.
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    pool.query.mockResolvedValue({ rows: [{ count: 4 }] });
+    pool.query.mockResolvedValue({ rows: [{ count: 4, window_start: new Date() }] });
   });
 
   afterEach(() => {
@@ -112,9 +113,10 @@ describe('POST /contact — SERVICE_KEY service account exemption', () => {
 describe('POST /contact — JWT authenticated session exemption', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Simulate rate limit exceeded so exemption behaviour is observable
+    // Simulate rate limit exceeded so exemption behaviour is observable.
+    // PostgresStore expects { count, window_start } from the INSERT...RETURNING.
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    pool.query.mockResolvedValue({ rows: [{ count: 4 }] });
+    pool.query.mockResolvedValue({ rows: [{ count: 4, window_start: new Date() }] });
   });
 
   it('returns 429 when rate limit exceeded and no JWT sent', async () => {
