@@ -5,7 +5,7 @@ import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
-import { slugify } from '../utils/slugify.js';
+import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
@@ -30,32 +30,15 @@ const postsRateLimit = rateLimit({
 
 // ── Helpers
 
-async function tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt = 0, maxAttempts = 100) {
-  const baseSlug = slugify(title);
-  const slug     = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO posts (post_type, title, slug, body_markdown, post_date, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (slug) DO NOTHING
-       RETURNING *`,
-      [post_type, title.trim(), slug, body_markdown || '', post_date, published_at]
-    );
-
-    if (result.rows.length > 0) {
-      return result.rows[0];
-    } else if (attempt < maxAttempts) {
-      return tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt + 1, maxAttempts);
-    } else {
-      throw new Error('Could not generate unique slug after max attempts');
-    }
-  } catch (err) {
-    if (attempt < maxAttempts) {
-      return tryInsertPost(post_type, title, body_markdown, post_date, published_at, attempt + 1, maxAttempts);
-    }
-    throw err;
-  }
+async function insertPost(post_type, title, body_markdown, post_date, published_at) {
+  const slug   = await findUniqueSlug(pool, slugify(title));
+  const result = await pool.query(
+    `INSERT INTO posts (post_type, title, slug, body_markdown, post_date, published_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [post_type, title.trim(), slug, body_markdown || '', post_date, published_at]
+  );
+  return result.rows[0];
 }
 
 // ── Routes
@@ -134,7 +117,7 @@ router.post('/', postsRateLimit, resolveUser, authenticate, validate(CreatePostS
     // title guaranteed present by validate()
     const publishedAt = publish ? new Date() : null;
     const postDateVal  = post_date || null;
-    const result = await tryInsertPost('blog', title, body_markdown, postDateVal, publishedAt);
+    const result = await insertPost('blog', title, body_markdown, postDateVal, publishedAt);
     res.status(201).json(result);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
@@ -156,17 +139,7 @@ router.put('/:id', postsRateLimit, resolveUser, authenticate, validate(UpdatePos
 
     let { slug, published_at } = existing.rows[0];
     if (existing.rows[0].title !== title.trim()) {
-      const base = slugify(title);
-      let attempt = 0;
-      let newSlug = base;
-      while (attempt < 100) {
-        const { rows } = await pool.query(
-          `SELECT id FROM posts WHERE slug = $1 AND id != $2`,
-          [newSlug, req.params.id]
-        );
-        if (!rows.length) { slug = newSlug; break; }
-        newSlug = `${base}-${++attempt}`;
-      }
+      slug = await findUniqueSlug(pool, slugify(title), { excludeId: req.params.id });
     }
     if (publish && !published_at) published_at = new Date();
     if (publish === false) published_at = null;
