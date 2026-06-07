@@ -12,8 +12,10 @@ import { logger } from '../utils/logger.js';
 const router = Router();
 
 // Separate keyType from posts (#445 — shared counters caused cross-route lockout).
-// Owner is exempt via resolveUser + exemptIfTrusted; cap targets anonymous scraping
-// and fuzz attempts against the protected CRUD surface.
+// Owner is exempt via exemptIfTrusted (which verifies the JWT inline); cap
+// targets anonymous scraping and fuzz attempts against the protected CRUD
+// surface. The limiter precedes resolveUser in the chain so CodeQL's
+// js/missing-rate-limiting detector sees it before any authorization step.
 const travelRateLimit = rateLimit({
   windowMs:        60 * 1000,
   limit:           120,
@@ -80,7 +82,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', resolveUser, travelRateLimit, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via travelRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -96,7 +98,7 @@ router.get('/', resolveUser, travelRateLimit, async (req, res, next) => { // cod
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
+router.get('/all', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -112,7 +114,7 @@ router.get('/all', resolveUser, travelRateLimit, authenticate, async (req, res, 
 });
 
 // Admin: single travel post by id (includes drafts)
-router.get('/admin/:id', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
+router.get('/admin/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1 AND p.post_type = 'travel'`,
@@ -127,7 +129,7 @@ router.get('/admin/:id', resolveUser, travelRateLimit, authenticate, async (req,
 });
 
 // Public: single published travel post by id
-router.get('/:id', resolveUser, travelRateLimit, async (req, res, next) => {
+router.get('/:id', travelRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
@@ -143,7 +145,7 @@ router.get('/:id', resolveUser, travelRateLimit, async (req, res, next) => {
 });
 
 // Admin: create travel post
-router.post('/', resolveUser, travelRateLimit, authenticate, validate(CreateTravelSchema), async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via travelRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.post('/', travelRateLimit, resolveUser, authenticate, validate(CreateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -204,7 +206,7 @@ router.post('/', resolveUser, travelRateLimit, authenticate, validate(CreateTrav
 });
 
 // Admin: update travel post
-router.put('/:id', resolveUser, travelRateLimit, authenticate, validate(UpdateTravelSchema), async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via travelRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -258,7 +260,7 @@ router.put('/:id', resolveUser, travelRateLimit, authenticate, validate(UpdateTr
 });
 
 // Admin: delete travel post (CASCADE removes post_media rows)
-router.delete('/:id', resolveUser, travelRateLimit, authenticate, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via travelRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
@@ -273,7 +275,7 @@ router.delete('/:id', resolveUser, travelRateLimit, authenticate, async (req, re
 });
 
 // Admin: delete a single media item from post_media
-router.delete('/:id/media/:mediaId', resolveUser, travelRateLimit, authenticate, async (req, res, next) => {
+router.delete('/:id/media/:mediaId', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,

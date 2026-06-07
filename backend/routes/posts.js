@@ -12,9 +12,11 @@ import { logger } from '../utils/logger.js';
 const router = Router();
 
 // Per-IP backstop against scraping and credential-stuffing fuzz on blog routes.
-// The owner is exempt via resolveUser → exemptIfTrusted, so legitimate admin
-// editing never throttles; the cap protects anonymous endpoints from abuse and
-// blocks attackers spamming protected routes with random JWTs.
+// The owner is exempt via exemptIfTrusted (which verifies the JWT inline),
+// so legitimate admin editing never throttles; the cap protects anonymous
+// endpoints from abuse and blocks attackers spamming protected routes with
+// random JWTs. The limiter is placed before resolveUser in the chain so
+// CodeQL's js/missing-rate-limiting detector sees it precede authorization.
 const postsRateLimit = rateLimit({
   windowMs:        60 * 1000,
   limit:           120,
@@ -59,7 +61,7 @@ async function tryInsertPost(post_type, title, body_markdown, post_date, publish
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', resolveUser, postsRateLimit, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via postsRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -76,7 +78,7 @@ router.get('/', resolveUser, postsRateLimit, async (req, res, next) => { // code
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', resolveUser, postsRateLimit, authenticate, async (req, res, next) => {
+router.get('/all', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -93,7 +95,7 @@ router.get('/all', resolveUser, postsRateLimit, authenticate, async (req, res, n
 });
 
 // Admin: single blog post by id (includes drafts)
-router.get('/admin/:id', resolveUser, postsRateLimit, authenticate, async (req, res, next) => {
+router.get('/admin/:id', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -109,7 +111,7 @@ router.get('/admin/:id', resolveUser, postsRateLimit, authenticate, async (req, 
 });
 
 // Public: single blog post by slug
-router.get('/:slug', resolveUser, postsRateLimit, async (req, res, next) => {
+router.get('/:slug', postsRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -126,7 +128,7 @@ router.get('/:slug', resolveUser, postsRateLimit, async (req, res, next) => {
 });
 
 // Admin: create blog post
-router.post('/', resolveUser, postsRateLimit, authenticate, validate(CreatePostSchema), async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via postsRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.post('/', postsRateLimit, resolveUser, authenticate, validate(CreatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -141,7 +143,7 @@ router.post('/', resolveUser, postsRateLimit, authenticate, validate(CreatePostS
 });
 
 // Admin: update blog post
-router.put('/:id', resolveUser, postsRateLimit, authenticate, validate(UpdatePostSchema), async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via postsRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.put('/:id', postsRateLimit, resolveUser, authenticate, validate(UpdatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -184,7 +186,7 @@ router.put('/:id', resolveUser, postsRateLimit, authenticate, validate(UpdatePos
 });
 
 // Admin: delete blog post
-router.delete('/:id', resolveUser, postsRateLimit, authenticate, async (req, res, next) => { // codeql[js/missing-rate-limiting] — rate-limited via postsRateLimit; resolveUser must precede it so exemptIfTrusted can read req.user to exempt the owner
+router.delete('/:id', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id`,

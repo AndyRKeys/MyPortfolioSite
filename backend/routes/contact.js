@@ -20,7 +20,7 @@ const contactRateLimit = rateLimit({
   store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'contact' }),
 });
 
-router.post('/', resolveUser, contactRateLimit, validate(ContactSchema), async (req, res) => {
+router.post('/', contactRateLimit, resolveUser, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept
   if (req.body.website) {
     return res.json({ success: true });

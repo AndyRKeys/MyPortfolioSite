@@ -85,7 +85,7 @@ function isValidUuid(v) {
  * POST /debug/errors — Receive frontend errors from error-logger.js.
  * Persists to client_errors table and triggers threshold alerting (#333).
  */
-router.post('/errors', resolveUser, debugRateLimit, async (req, res) => {
+router.post('/errors', debugRateLimit, resolveUser, async (req, res) => {
   const { type, message, timestamp, url, filename, lineno, colno, stack, sessionId, requestId } = req.body;
 
   if (!type || !message) {
@@ -141,7 +141,7 @@ router.post('/errors', resolveUser, debugRateLimit, async (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports.
  */
-router.post('/csp-violations', resolveUser, debugRateLimit, async (req, res) => {
+router.post('/csp-violations', debugRateLimit, resolveUser, async (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 
