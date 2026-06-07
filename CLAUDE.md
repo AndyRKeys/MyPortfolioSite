@@ -396,7 +396,7 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 
 ## Fragile / Incomplete Areas (from docs/PROJECT_ASSESSMENT.md)
 
-- **No backups:** Database and uploads have no automated backup. (#164)
+- **Local backups, no offsite:** `scripts/backup/db-backup.sh` runs daily at 02:00 via cron — `pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, written to `~/backups/prod/`. Offsite sync to B2 is scaffolded (`offsite-sync.sh`) but not configured — local-only is the deliberate current state. See [docs/BACKUP.md](docs/BACKUP.md) and #185.
 - **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.js modularised (#175):** admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
