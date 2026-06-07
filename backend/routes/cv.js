@@ -10,15 +10,13 @@ import { Router }   from 'express';
 import multer       from 'multer';
 import path         from 'path';
 import fs           from 'fs';
-import { fileURLToPath } from 'url';
 import { authenticate }  from '../middleware/authenticate.js';
 import { logger }        from '../utils/logger.js';
+import { UPLOADS_DIR }   from '../utils/paths.js';
+import { wrapMulter }    from '../utils/wrapMulter.js';
 
-const router = Router();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
-const CV_PATH     = path.join(UPLOADS_DIR, 'cv.pdf');
+const router  = Router();
+const CV_PATH = path.join(UPLOADS_DIR, 'cv.pdf');
 
 // ── multer: memory storage so we can inspect before writing ──────────────────
 const upload = multer({
@@ -82,17 +80,7 @@ router.get('/', (req, res) => {
 });
 
 // Admin: upload / replace CV
-router.post('/', authenticate, (req, res, next) => {
-  upload.single('cv')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-    next();
-  });
-}, async (req, res) => {
+router.post('/', authenticate, wrapMulter(upload.single('cv')), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const warnings = scanForPrivateInfo(req.file.buffer);

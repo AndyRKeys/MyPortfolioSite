@@ -1,13 +1,9 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { authenticate } from '../middleware/authenticate.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// UPLOADS_DIR env var overrides the default so Docker can point to /app/uploads
-// without the two-level relative path resolving to the container root.
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
+import { UPLOADS_DIR } from '../utils/paths.js';
+import { wrapMulter }  from '../utils/wrapMulter.js';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
@@ -36,17 +32,7 @@ const upload = multer({
 
 const router = Router();
 
-router.post('/', authenticate, (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-    next();
-  });
-}, (req, res) => {
+router.post('/', authenticate, wrapMulter(upload.single('file')), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file received' });
   res.json({ url: `/uploads/${req.file.filename}`, type: req.file.mimetype });
 });

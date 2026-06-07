@@ -5,7 +5,7 @@ import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
-import { slugify } from '../utils/slugify.js';
+import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
@@ -157,34 +157,21 @@ router.post('/', travelRateLimit, resolveUser, authenticate, validate(CreateTrav
     const postDateVal = post_date || null;
     const publishedAt = publish ? new Date() : null;
 
-    const baseSlug = slugify(title, 'travel');
-    let slug   = baseSlug;
-    let i      = 1;
-    let postId = null;
+    const slug = await findUniqueSlug(client, slugify(title, 'travel'));
 
-    while (!postId && i <= 100) {
-      const firstMedia = media_items && media_items.length ? media_items[0] : null;
-      const insert = await client.query(
-        `INSERT INTO posts
-           (post_type, title, slug, body_markdown, post_date, published_at,
-            location, media_url, media_type, lat, lng)
-         VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (slug) DO NOTHING
-         RETURNING id`,
-        [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
-         location?.trim() || null,
-         firstMedia?.url || null, firstMedia?.type || null,
-         latVal, lngVal]
-      );
-
-      if (insert.rows.length > 0) {
-        postId = insert.rows[0].id;
-      } else {
-        slug = `${baseSlug}-${i++}`;
-      }
-    }
-
-    if (!postId) throw new Error('Could not generate unique slug after 100 attempts');
+    const firstMedia = media_items && media_items.length ? media_items[0] : null;
+    const insert = await client.query(
+      `INSERT INTO posts
+         (post_type, title, slug, body_markdown, post_date, published_at,
+          location, media_url, media_type, lat, lng)
+       VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
+       location?.trim() || null,
+       firstMedia?.url || null, firstMedia?.type || null,
+       latVal, lngVal]
+    );
+    const postId = insert.rows[0].id;
 
     if (media_items && media_items.length) {
       await replaceMedia(client, postId, media_items);
