@@ -28,10 +28,41 @@ const debugRateLimit = rateLimit({
 // ── Alert threshold ───────────────────────────────────────────────────────────
 // Fire an email when this many errors arrive within the window. Cooldown
 // prevents repeated alerts for sustained storms — one email per window max.
-const ALERT_THRESHOLD = parseInt(process.env.ERROR_ALERT_THRESHOLD || '20');
-const ALERT_WINDOW_MS = parseInt(process.env.ERROR_ALERT_WINDOW_MS  || String(15 * 60 * 1000));
-const ALERT_WINDOW_MIN = Math.round(ALERT_WINDOW_MS / 60_000);
+// The cooldown timestamp is persisted to the `app_settings` table (#371) so
+// that a container restart inside the window does not re-fire an alert that
+// was already sent before the restart.
+const ALERT_THRESHOLD        = parseInt(process.env.ERROR_ALERT_THRESHOLD || '20');
+const ALERT_WINDOW_MS        = parseInt(process.env.ERROR_ALERT_WINDOW_MS  || String(15 * 60 * 1000));
+const ALERT_WINDOW_MIN       = Math.round(ALERT_WINDOW_MS / 60_000);
+const LAST_ALERT_SETTING_KEY = 'last_error_alert_at';
 let _lastAlertAt = 0;
+
+// Restore the cooldown timestamp from the DB on module load. Fire-and-forget:
+// if the DB is not yet ready (boot ordering) or the row doesn't exist, log a
+// warning and leave _lastAlertAt at 0 — at worst we may send one extra alert
+// on the first request after startup, never one less.
+(async () => {
+  try {
+    const result = await pool.query(
+      'SELECT value FROM app_settings WHERE key = $1',
+      [LAST_ALERT_SETTING_KEY]
+    );
+    if (result.rows.length === 0) return;
+    const parsed = parseInt(result.rows[0].value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      _lastAlertAt = parsed;
+      logger.info(
+        { lastAlertAt: new Date(parsed).toISOString() },
+        '[debug/errors] Restored alert cooldown timestamp from app_settings'
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      { err: err.message },
+      '[debug/errors] Could not restore alert cooldown from app_settings — starting from 0'
+    );
+  }
+})();
 
 async function maybeAlert() {
   if (!isEmailConfigured()) return;
@@ -60,7 +91,25 @@ async function maybeAlert() {
     [windowStart]
   );
 
-  _lastAlertAt = Date.now();
+  const now = Date.now();
+  _lastAlertAt = now;
+  // Persist the new cooldown timestamp so a container restart in the next
+  // ALERT_WINDOW_MS does not re-fire (#371). Failure here must not block the
+  // email — the in-memory cooldown still holds until the next restart.
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value, updated_at = NOW()`,
+      [LAST_ALERT_SETTING_KEY, String(now)]
+    );
+  } catch (err) {
+    logger.error(
+      { err: err.message },
+      '[debug/errors] Failed to persist alert cooldown to app_settings — will reset on restart'
+    );
+  }
   logger.warn({ count, windowMin: ALERT_WINDOW_MIN }, '[debug/errors] Alert threshold reached — sending email');
   await sendErrorAlertEmail({ count, windowMinutes: ALERT_WINDOW_MIN, topErrors: top.rows, adminEmail });
 }
