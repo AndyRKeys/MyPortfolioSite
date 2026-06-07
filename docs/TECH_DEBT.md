@@ -27,7 +27,7 @@ These are the highest-impact fixes. Address these before any cosmetic debt.
 **Honourable mentions (high signal-to-noise):**
 - `REPO_URL` baked into 6 separate files — rename = 6 edits
 - Magic-link TTL (`INTERVAL '15 minutes'`) and upload limits (`5MB`, `20MB`) belong in env config (security-sensitive)
-- Deprecated files `dev-server-deploy.ps1`, `dev-server-deploy-wrapper.sh`, `dev-deploy-wrapper.sh` should be deleted
+- ✅ Deprecated files `dev-server-deploy.ps1`, `dev-server-deploy-wrapper.sh`, `dev-deploy-wrapper.sh` deleted (#435)
 
 ---
 
@@ -190,7 +190,7 @@ These are the highest-impact fixes. Address these before any cosmetic debt.
 - `[DRY]` `scripts/deploy/deploy-lib.sh:1444-1625` — `test_error_logger_all_pages`, `test_error_logger_contracts`, `check_public_page_js`, `check_csp_violations`, `check_admin_e2e_csp` share the same shape (check URL → run test → grep summary → emit dstatus); extract `run_browser_test <name> <npm-script> <status-key>`
 - `[DRY]` `scripts/deploy/deploy-lib.sh:1218,1236,1239` — three places run psql inside compose; add `dc_psql()` helper
 - `[DRY]` `scripts/deploy/deploy-lib.sh:1026-1068` — `_do_rollback` three branches each repeat `git checkout/reset → compose down → compose up → health check`; extract `_rollback_to <branch> <sha>`
-- `[DRY]` Deprecated files still present alongside active ones — remove `dev-server-deploy.ps1`, `dev-server-deploy-wrapper.sh`, `dev-deploy-wrapper.sh`
+- ✅ `[DRY]` Deprecated files removed — `dev-server-deploy.ps1`, `dev-server-deploy-wrapper.sh`, `dev-deploy-wrapper.sh` deleted (#435)
 - `[DRY]` `scripts/deploy/server-setup.sh:125-126` and `deploy-lib.sh:2020` — backup cron line hardcoded in two places
 
 ### Hardened quick-fixes
@@ -206,10 +206,10 @@ These are the highest-impact fixes. Address these before any cosmetic debt.
 
 ### Hardcoding
 
-- `[HARDCODE]` `REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"` baked into 6 files: `deploy.sh:96`, `dev-deploy.ps1:37`, `prod-deploy.ps1:37`, `dev-server-deploy-wrapper.sh:34`, `dev-deploy-wrapper.sh:26`, `server-setup.sh:51`
+- `[HARDCODE]` `REPO_URL="https://github.com/AndyRKeys/MyPortfolioSite.git"` baked into 4 files: `deploy.sh:96`, `dev-deploy.ps1:37`, `prod-deploy.ps1:37`, `server-setup.sh:51` (deleted `dev-server-deploy-wrapper.sh` and `dev-deploy-wrapper.sh` in #435)
 - `[HARDCODE]` `scripts/deploy/deploy.sh:113,133` — `MyPortfolioSite-dev` and `MyPortfolioSite` repo dir names baked in
 - `[HARDCODE]` `scripts/deploy/deploy.sh:90-91` — `HEALTH_TIMEOUT=60`, `HEALTH_INTERVAL=5`; should be env-overridable
-- `[HARDCODE]` `scripts/deploy/dev-deploy.ps1:7` and `prod-deploy.ps1:12` — `$Hostname = 'ak-home-server'` SSH host pinned in script body (also `dev-server-deploy.ps1:23`)
+- `[HARDCODE]` `scripts/deploy/dev-deploy.ps1:7` and `prod-deploy.ps1:12` — `$Hostname = 'ak-home-server'` SSH host pinned in script body
 - `[HARDCODE]` `scripts/deploy/deploy-lib.sh:1730-1731` — `ifconfig.me` and `8.8.8.8` baked into DDNS check
 - `[HARDCODE]` `scripts/deploy/deploy-lib.sh:1223,1240` — `DB_NAME:-portfolio_prod` default used in both dev and prod contexts
 - `[HARDCODE]` `scripts/deploy/deploy-lib.sh:2010` — `max_age_days=2` backup staleness threshold
@@ -221,7 +221,7 @@ These are the highest-impact fixes. Address these before any cosmetic debt.
 - `[NAMING]` `scripts/deploy/deploy-lib.sh:163,180` — `_save_last_good_state`/`_restore_last_good_state` use underscore (private convention) but are called from `_do_rollback`; underscore has no meaning in bash visibility
 - `[NAMING]` `scripts/deploy/deploy-lib.sh:229-230` — `_kv_num`/`_kv_str` cryptic; `parse_status_int`/`parse_status_str` would read better
 - `[NAMING]` `scripts/deploy/deploy.sh:71` — `AUTO_YES` is non-standard; `INTERACTIVE=0` or `ASSUME_YES=1` are conventional
-- `[NAMING]` `scripts/deploy/` — `dev-deploy.ps1` and `dev-server-deploy.ps1` (deprecated) coexist; ambiguous for a new contributor
+- ✅ `[NAMING]` `dev-server-deploy.ps1` (deprecated) removed in #435; `dev-deploy.ps1` is now the sole Windows PS1 wrapper
 
 ### Overcomplicated code
 
