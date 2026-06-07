@@ -1,5 +1,7 @@
+import jwt from 'jsonwebtoken';
+
 // Returns true when the request carries a valid X-Service-Key header matching
-// the SERVICE_KEY env var. Used as the `skip` function in createRateLimiter to
+// the SERVICE_KEY env var. Used as the `skip` function in rateLimit() to
 // exempt authenticated service accounts (e.g. the regression test runner) from
 // rate limiting — trusted callers are not in scope for user-facing quotas.
 // Fails closed: if SERVICE_KEY is unset, no request is exempted.
@@ -9,13 +11,22 @@ export const exemptIfServiceAccount = (req) => {
   return !!key && req.headers['x-service-key'] === key;
 };
 
-// Returns true when the request is from a trusted caller: a verified JWT session
-// (set by resolveUser) or a valid service account key.
-// Use this as the `skip` function on application routes (contact, debug/errors).
-// Auth endpoints must keep exemptIfServiceAccount — JWT exemption is inappropriate
-// there (a stolen JWT must not bypass magic-link or passkey rate limits).
-// See: issue #415.
+// Returns true when the request is from a trusted caller: a verified JWT bearer
+// or a valid service account key. JWT verification is done inline (not via
+// req.user) so this can be used as a `skip` on a rate limiter placed before
+// resolveUser in the middleware chain — CodeQL's js/missing-rate-limiting
+// detector requires the limiter to precede any authorization step.
+// Auth endpoints with email/passkey ceremonies must keep exemptIfServiceAccount
+// instead — JWT exemption is inappropriate there (a stolen JWT must not bypass
+// magic-link or passkey rate limits). See: issues #415, #453.
 export const exemptIfTrusted = (req) => {
-  if (req.user) return true;
-  return exemptIfServiceAccount(req);
+  if (exemptIfServiceAccount(req)) return true;
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return false;
+  try {
+    jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+    return true;
+  } catch {
+    return false;
+  }
 };

@@ -10,7 +10,7 @@ export function resolveUser(req, _res, next) {
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
     try {
-      req.user = jwt.verify(token, process.env.JWT_SECRET); // lgtm[js/missing-rate-limiting] -- cheap synchronous HMAC; invalid tokens fall through to the caller's rate limiter unauthenticated
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
       // invalid or expired token — treat as unauthenticated
     }

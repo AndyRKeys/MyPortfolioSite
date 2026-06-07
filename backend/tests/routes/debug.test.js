@@ -155,8 +155,9 @@ describe('GET /debug/errors', () => {
 describe('POST /debug/errors — JWT authenticated session exemption', () => {
   beforeEach(() => {
     mockQuery.mockReset();
-    // Simulate rate limit exceeded so exemption behaviour is observable
-    mockQuery.mockResolvedValue({ rows: [{ count: 51 }] });
+    // Simulate rate limit exceeded so exemption behaviour is observable.
+    // PostgresStore expects { count, window_start } from the INSERT...RETURNING.
+    mockQuery.mockResolvedValue({ rows: [{ count: 51, window_start: new Date() }] });
   });
 
   afterEach(() => {

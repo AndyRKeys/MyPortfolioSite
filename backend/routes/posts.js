@@ -1,11 +1,32 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// Per-IP backstop against scraping and credential-stuffing fuzz on blog routes.
+// The owner is exempt via exemptIfTrusted (which verifies the JWT inline),
+// so legitimate admin editing never throttles; the cap protects anonymous
+// endpoints from abuse and blocks attackers spamming protected routes with
+// random JWTs. The limiter is placed before resolveUser in the chain so
+// CodeQL's js/missing-rate-limiting detector sees it precede authorization.
+const postsRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'posts' }),
+});
 
 // ── Helpers
 
@@ -40,7 +61,7 @@ async function tryInsertPost(post_type, title, body_markdown, post_date, publish
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', async (req, res) => {
+router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -52,12 +73,12 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -69,12 +90,12 @@ router.get('/all', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: single blog post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res) => {
+router.get('/admin/:id', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -85,12 +106,12 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Public: single blog post by slug
-router.get('/:slug', async (req, res) => {
+router.get('/:slug', postsRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
@@ -102,12 +123,12 @@ router.get('/:slug', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: create blog post
-router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
+router.post('/', postsRateLimit, resolveUser, authenticate, validate(CreatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -117,12 +138,12 @@ router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: update blog post
-router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) => {
+router.put('/:id', postsRateLimit, resolveUser, authenticate, validate(UpdatePostSchema), async (req, res, next) => {
   try {
     const { title, body_markdown, post_date, publish } = req.body;
     // title guaranteed present by validate()
@@ -160,12 +181,12 @@ router.put('/:id', authenticate, validate(UpdatePostSchema), async (req, res) =>
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: delete blog post
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id`,
@@ -175,7 +196,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 

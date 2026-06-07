@@ -1,11 +1,31 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// Separate keyType from posts (#445 — shared counters caused cross-route lockout).
+// Owner is exempt via exemptIfTrusted (which verifies the JWT inline); cap
+// targets anonymous scraping and fuzz attempts against the protected CRUD
+// surface. The limiter precedes resolveUser in the chain so CodeQL's
+// js/missing-rate-limiting detector sees it before any authorization step.
+const travelRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'travel' }),
+});
 
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
@@ -62,7 +82,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', async (req, res) => {
+router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -73,12 +93,12 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -89,12 +109,12 @@ router.get('/all', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: single travel post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res) => {
+router.get('/admin/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1 AND p.post_type = 'travel'`,
@@ -104,12 +124,12 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Public: single published travel post by id
-router.get('/:id', async (req, res) => {
+router.get('/:id', travelRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
@@ -120,12 +140,12 @@ router.get('/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: create travel post
-router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) => {
+router.post('/', travelRateLimit, resolveUser, authenticate, validate(CreateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -179,14 +199,14 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: update travel post
-router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) => {
+router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -233,14 +253,14 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: delete travel post (CASCADE removes post_media rows)
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
@@ -250,12 +270,12 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: delete a single media item from post_media
-router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
+router.delete('/:id/media/:mediaId', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,
@@ -274,7 +294,7 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
