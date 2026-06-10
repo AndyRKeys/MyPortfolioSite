@@ -9,6 +9,7 @@ import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
+import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 
 const router = Router();
 
@@ -83,7 +84,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
+router.get('/', travelRateLimit, resolveUser, publicCache(60), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -99,7 +100,7 @@ router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
+router.get('/all', travelRateLimit, resolveUser, authenticate, noStore, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -130,7 +131,7 @@ router.get('/admin/:id', travelRateLimit, resolveUser, authenticate, async (req,
 });
 
 // Public: single published travel post by id
-router.get('/:id', travelRateLimit, resolveUser, async (req, res, next) => {
+router.get('/:id', travelRateLimit, resolveUser, publicCache(300), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p

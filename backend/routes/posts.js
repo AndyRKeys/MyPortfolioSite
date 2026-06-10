@@ -9,6 +9,7 @@ import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { EXCERPT_LENGTH, POSTS_RATE_WINDOW_MS, POSTS_RATE_LIMIT } from '../utils/constants.js';
+import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 
 const router = Router();
 
@@ -45,7 +46,7 @@ async function insertPost(post_type, title, body_markdown, post_date, published_
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
+router.get('/', postsRateLimit, resolveUser, publicCache(60), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -62,7 +63,7 @@ router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
+router.get('/all', postsRateLimit, resolveUser, authenticate, noStore, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
@@ -95,7 +96,7 @@ router.get('/admin/:id', postsRateLimit, resolveUser, authenticate, async (req, 
 });
 
 // Public: single blog post by slug
-router.get('/:slug', postsRateLimit, resolveUser, async (req, res, next) => {
+router.get('/:slug', postsRateLimit, resolveUser, publicCache(300), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at
