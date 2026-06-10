@@ -64,22 +64,22 @@ router.get('/status', authenticate, async (req, res) => {
 
     const behind = parseInt(behindRaw.trim(), 10) || 0;
     res.json({
-      env:       DEPLOY_ENV,
-      branch:    branch.trim(),
-      head:      { sha: fullSha.trim().slice(0, 7), fullSha: fullSha.trim(), message: message.trim(), date: date.trim() },
+      env:        DEPLOY_ENV,
+      branch:     branch.trim(),
+      head:       { sha: fullSha.trim().slice(0, 7), full_sha: fullSha.trim(), message: message.trim(), date: date.trim() },
       behind,
-      upToDate:  behind === 0,
-      canDeploy: await scriptExists(),
+      up_to_date: behind === 0,
+      can_deploy: await scriptExists(),
     });
   } catch (err) {
     // Git commands failing in dev is expected — return read-only status
     res.status(200).json({
-      branch:    'unknown',
-      head:      { sha: '?', fullSha: '?', message: 'Git unavailable', date: '' },
-      behind:    0,
-      upToDate:  false,
-      canDeploy: false,
-      gitError:  err.message,
+      branch:     'unknown',
+      head:       { sha: '?', full_sha: '?', message: 'Git unavailable', date: '' },
+      behind:     0,
+      up_to_date: false,
+      can_deploy: false,
+      git_error:  err.message,
     });
   }
 });
@@ -94,8 +94,8 @@ router.get('/history', authenticate, async (req, res) => {
     ).catch(() => '');
 
     const commits = gitOut.trim().split('\n').filter(Boolean).map(line => {
-      const [sha, shortSha, message, date] = line.split('|');
-      return { sha, shortSha, message, date };
+      const [sha, short_sha, message, date] = line.split('|');
+      return { sha, short_sha, message, date };
     });
 
     let deployLog = [];
@@ -114,10 +114,10 @@ router.get('/history', authenticate, async (req, res) => {
         .filter(e => e.detail); // skip blank separator lines
     } catch { /* log file may not exist yet */ }
 
-    res.json({ commits, deployLog });
+    res.json({ commits, deploy_log: deployLog });
   } catch (err) {
     // Git not available in dev — return empty history gracefully
-    res.json({ commits: [], deployLog: [] });
+    res.json({ commits: [], deploy_log: [] });
   }
 });
 

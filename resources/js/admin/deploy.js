@@ -34,12 +34,12 @@ export function initDeploy() {
 
     function renderStatus(s) {
         if (s.env) deployEnv = s.env;
-        const badge = s.upToDate
+        const badge = s.up_to_date
             ? '<span style="color:var(--color-success)">✓ Up to date</span>'
             : `<span style="color:var(--color-error)">↓ ${s.behind} commit${s.behind !== 1 ? 's' : ''} behind</span>`;
         statusRow.innerHTML =
             `<strong>${escapeHtml(s.head.sha)}</strong> — ${escapeHtml(s.head.message)}&nbsp;&nbsp;${badge}`;
-        if (s.canDeploy) {
+        if (s.can_deploy) {
             fetchBtn.disabled    = false;
             deployBtn.disabled   = false;
             rollbackBtn.disabled = false;
@@ -49,13 +49,13 @@ export function initDeploy() {
     }
 
     function renderLog(data) {
-        const rows = data.deployLog.map(e =>
+        const rows = data.deploy_log.map(e =>
             `<p style="font-size:0.85rem;font-family:monospace">${escapeHtml(e.ts ? '[' + e.ts + '] ' : '')}${escapeHtml(e.detail)}</p>`
         ).join('');
         logList.innerHTML = rows || '<p class="hint">No deploy log entries yet.</p>';
 
         rollbackSelect.innerHTML = data.commits.map(c =>
-            `<option value="${escapeHtml(c.sha)}">${escapeHtml(c.shortSha)} — ${escapeHtml(c.message)}</option>`
+            `<option value="${escapeHtml(c.sha)}">${escapeHtml(c.short_sha)} — ${escapeHtml(c.message)}</option>`
         ).join('');
     }
 

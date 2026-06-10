@@ -50,14 +50,14 @@ document.getElementById('passkey-btn').addEventListener('click', async () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
         });
-        const { options, sessionKey } = await startRes.json();
+        const { options, session_key } = await startRes.json();
 
         const response = await startAuthentication(options);
 
         const finishRes = await fetch(`${API_BASE}/auth/passkey/login/finish`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ response, sessionKey }),
+            body: JSON.stringify({ response, session_key }),
         });
         const data = await finishRes.json();
         if (!finishRes.ok) throw new Error(data.error || 'Authentication failed');

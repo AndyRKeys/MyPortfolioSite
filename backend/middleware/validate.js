@@ -101,12 +101,12 @@ export const EmailSendSchema = z.object({
 });
 
 export const PasskeyRegisterFinishSchema = z.object({
-  response:    z.object({}).passthrough(),
-  sessionKey:  z.string().min(1, 'sessionKey is required'),
-  passkeyName: z.string().optional(),
+  response:     z.object({}).passthrough(),
+  session_key:  z.string().min(1, 'session_key is required'),
+  passkey_name: z.string().optional(),
 });
 
 export const PasskeyLoginFinishSchema = z.object({
-  response:   z.object({}).passthrough(),
-  sessionKey: z.string().min(1, 'sessionKey is required'),
+  response:    z.object({}).passthrough(),
+  session_key: z.string().min(1, 'session_key is required'),
 });

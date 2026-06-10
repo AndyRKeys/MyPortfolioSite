@@ -90,7 +90,7 @@ function signJWT(user) {
 router.get('/setup/status', accountRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
-    res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
+    res.json({ has_users: parseInt(result.rows[0].count) > 0 });
   } catch (err) {
     logger.error({ err }, '[auth] setup/status DB error');
     next(err);
@@ -163,7 +163,7 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
       [sessionKey, options.challenge, userId]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey register start failed');
     next(err);
@@ -172,7 +172,7 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
 
 router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey, passkeyName } = req.body;
+    const { response, session_key: sessionKey, passkey_name: passkeyName } = req.body;
 
     const challengeRow = await pool.query(
       `SELECT * FROM webauthn_challenges
@@ -257,7 +257,7 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
       [sessionKey, options.challenge]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login start failed');
     next(err);
@@ -266,7 +266,7 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
 
 router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey } = req.body;
+    const { response, session_key: sessionKey } = req.body;
 
     const challengeRow = await pool.query(
       'SELECT * FROM webauthn_challenges WHERE session_key = $1 AND expires_at > NOW()',
