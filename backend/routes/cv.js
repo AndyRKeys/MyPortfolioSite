@@ -17,27 +17,28 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 import { UPLOADS_DIR }   from '../utils/paths.js';
 import { wrapMulter }    from '../utils/wrapMulter.js';
+import { CV_RATE_WINDOW_MS, CV_RATE_LIMIT, CV_MAX_FILE_SIZE } from '../utils/constants.js';
 
 const router  = Router();
 
 // Per-IP backstop on CV write operations. The limiter precedes authenticate
 // so CodeQL's js/missing-rate-limiting detector sees it before auth.
 const cvRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           30,
+  windowMs:        CV_RATE_WINDOW_MS,
+  limit:           CV_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'cv' }),
+  store:           new PostgresStore({ windowMs: CV_RATE_WINDOW_MS, keyType: 'cv' }),
 });
 const CV_PATH = path.join(UPLOADS_DIR, 'cv.pdf');
 
 // ── multer: memory storage so we can inspect before writing ──────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: CV_MAX_FILE_SIZE },
   fileFilter(_req, file, cb) {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
