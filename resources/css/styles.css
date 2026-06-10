@@ -2045,28 +2045,24 @@ footer {
 
 .btn-small {
     background: var(--color-text);
-    color: var(--color-bg);
-    border: none;
-    padding: 0.35rem 0.85rem;
+    color:       var(--color-bg);
+    border:      none;
+    padding:     0.35rem 0.85rem;
     border-radius: 4px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    height: auto;
-    width: auto;
+    font-size:   0.85rem;
+    cursor:      pointer;
+    height:      auto;
+    width:       auto;
 }
 
 .btn-small:hover { opacity: 0.85; }
 
+/* Colour modifier — combine with a size class (.btn-small, .btn-primary, etc.)
+   to get the red danger style without duplicating geometry rules (#150). */
 .btn-danger {
     background: var(--color-error);
-    color: #fff;
-    border: none;
-    padding: 0.35rem 0.85rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    height: auto;
-    width: auto;
+    color:      #fff;
+    border:     none;
 }
 
 .btn-danger:hover { opacity: 0.85; }
