@@ -63,13 +63,30 @@ function scanForPrivateInfo(buffer) {
   const text = buffer.toString('latin1');
   const warnings = [];
 
-  // Common patterns that shouldn't appear in a public CV
+  // Common patterns that shouldn't appear in a public CV.
+  // Patterns are heuristic — broad enough to catch common formats while
+  // avoiding false positives on innocuous text (#111).
   const patterns = [
     { re: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, label: 'possible card number' },
     { re: /\b\d{3}-\d{2}-\d{4}\b/,                        label: 'possible SSN' },
     { re: /\bpassword[:\s]/i,                              label: 'possible password' },
     { re: /\bsort\s*code[:\s]/i,                          label: 'possible sort code' },
     { re: /\bni\s*number[:\s]/i,                          label: 'possible NI number' },
+
+    // Phone numbers — UK mobile (07xxx), UK landline, international +xx prefix,
+    // and Guernsey/Channel Islands numbers (01481).
+    { re: /\b07\d{3}[\s-]?\d{3}[\s-]?\d{3}\b/,           label: 'possible UK mobile number' },
+    { re: /\b0[1-9]\d{3}[\s-]?\d{6}\b/,                  label: 'possible UK landline number' },
+    { re: /\+\d{1,3}[\s-]?\(?\d{1,4}\)?[\s-]?\d{3,}/,   label: 'possible international phone number' },
+
+    // UK and Guernsey postcodes (e.g. SW1A 1AA, GY1 1AA).
+    { re: /\b(GY\d[\s-]?\d[A-Z]{2}|[A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b/i,
+                                                           label: 'possible UK/Guernsey postcode' },
+
+    // Street address heuristic — a line containing a house number followed by
+    // a road/street/avenue/close/lane/way keyword. Avoids matching short refs.
+    { re: /\b\d+\s+\w+\s+(street|st|road|rd|avenue|ave|close|cl|lane|ln|way|drive|dr|crescent|place|pl|row)\b/i,
+                                                           label: 'possible street address' },
   ];
 
   patterns.forEach(({ re, label }) => {
