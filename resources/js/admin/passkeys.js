@@ -1,3 +1,4 @@
+// Version pin: keep in sync with login.js (#434).
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
 import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';

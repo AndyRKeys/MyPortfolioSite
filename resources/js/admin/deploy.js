@@ -2,6 +2,12 @@ import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
 import { createMessenger } from '../utils/messenger.js';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+// Together these encode a ~60 s recovery window after a backend restart.
+const MAX_POLL_ATTEMPTS  = 30;
+const POLL_INTERVAL_MS   = 2000;
+
 export function initDeploy() {
     let deployEnv = 'prod'; // fallback until status loads
 
@@ -106,13 +112,13 @@ export function initDeploy() {
 
     // Poll /deploy/status until the backend responds (up to 60s)
     async function pollUntilBack(attempts = 0) {
-        if (attempts > 30) throw new Error('Backend did not recover within 60s');
+        if (attempts > MAX_POLL_ATTEMPTS) throw new Error('Backend did not recover within 60s');
         try {
             const r = await authFetch('/deploy/status');
             if (!r.ok) throw new Error();
             renderStatus(await r.json());
         } catch {
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
             return pollUntilBack(attempts + 1);
         }
     }
