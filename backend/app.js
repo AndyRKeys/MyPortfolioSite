@@ -22,6 +22,8 @@ import statsRoutes   from './routes/stats.js';
 import cvRoutes      from './routes/cv.js';
 import deployRoutes  from './routes/deploy.js';
 import debugRoutes   from './routes/debug.js';
+import auditRoutes   from './routes/audit.js';
+import searchRoutes  from './routes/search.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -85,6 +87,8 @@ export function createApp() {
   app.use('/cv',      cvRoutes);
   app.use('/deploy',  deployRoutes);
   app.use('/debug',   debugRoutes);
+  app.use('/audit',   auditRoutes);
+  app.use('/search',  searchRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);
