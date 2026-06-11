@@ -160,6 +160,51 @@ DB-backed rate limiting for the contact form. One row per IP address.
 | `idx_posts_created_at` | `posts` | `created_at DESC` | Sort by creation |
 | `idx_posts_type_published_date` | `posts` | `(post_type, published_at DESC, post_date DESC)` | Primary public list query |
 | `idx_post_media_post_id` | `post_media` | `post_id` | Media lookups by post |
+| `posts_search_vector_idx` | `posts` | `search_vector` (GIN) | Full-text search (#157) |
+| `audit_log_created_at` | `audit_log` | `created_at DESC` | Recent-first audit queries (#154) |
+| `audit_log_user_id` | `audit_log` | `user_id` | Audit queries by user (#154) |
+| `cvs_one_current` | `cvs` | `is_current` WHERE true (partial unique) | Enforce one current CV (#109) |
+
+---
+
+## Tables (continued)
+
+### `audit_log`
+
+Records admin actions with user, timestamp, action type, and structured context. Powers the admin activity dashboard (#155). Sensitive fields (tokens, passwords, hashes) are never stored in `detail`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `UUID PK` | |
+| `user_id` | `UUID FK → users(id)` | `ON DELETE SET NULL` — preserved if user deleted |
+| `action` | `TEXT NOT NULL` | Dot-namespaced, e.g. `post.publish`, `auth.login`, `deploy.start` |
+| `entity_type` | `TEXT` | e.g. `post`, `travel`, `cv`, `deploy` |
+| `entity_id` | `TEXT` | ID of the affected record |
+| `detail` | `JSONB` | Structured context (title, method, sha, env). Never secrets. |
+| `ip` | `TEXT` | Client IP from `x-forwarded-for` or socket |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
+
+**API:** `GET /api/audit?limit=50&type=<prefix|all>` — auth required.
+
+---
+
+### `cvs`
+
+Tracks every uploaded CV version with a timestamp. Only one row may have `is_current = TRUE` at a time (partial unique index). The public download endpoint always serves the current version. Older versions are kept for archival; uploads beyond 5 prune the oldest automatically (#109).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `UUID PK` | |
+| `filename` | `TEXT NOT NULL` | Stored filename, e.g. `cv-20260604-120000.pdf` |
+| `uploaded_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
+| `is_current` | `BOOLEAN NOT NULL DEFAULT FALSE` | Only one row may be TRUE (partial unique index) |
+
+**Endpoints:**
+- `GET /api/cv` — public download (serves current)
+- `GET /api/cv/exists` — public, returns `{ exists: bool }`
+- `GET /api/cv/history` — auth, lists all versions
+- `PUT /api/cv/:id/set-current` — auth, promotes a version
+- `DELETE /api/cv/:id` — auth, removes a non-current version
 
 ---
 

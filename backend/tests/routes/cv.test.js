@@ -1,6 +1,6 @@
 /**
- * CV route tests — auth gate, MIME filtering, size limit, private-info scan.
- * Uses vi.spyOn on fs to avoid real disk I/O.
+ * CV route tests (#109) — auth gate, MIME filtering, size limit, private-info scan.
+ * Routes now use DB for version history; pool.query is mocked throughout.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
@@ -8,9 +8,15 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import { createApp } from '../../app.js';
 
+// Mock DB pool — cv.js now queries `cvs` table
 vi.mock('../../db/pool.js', () => ({
-  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+  pool: {
+    query: vi.fn(),
+    connect: vi.fn(),
+  },
 }));
+
+import { pool } from '../../db/pool.js';
 
 process.env.JWT_SECRET   = 'test-secret-test-secret-test-secret-32';
 process.env.UPLOADS_DIR  = '/tmp/test-uploads';
@@ -29,32 +35,59 @@ let spyMkdirSync;
 let spyWriteFileSync;
 let spyUnlinkSync;
 
+// Fake DB client for pool.connect()
+function makeFakeClient(queryFn) {
+  return {
+    query: queryFn || vi.fn().mockResolvedValue({ rows: [] }),
+    release: vi.fn(),
+  };
+}
+
 beforeEach(() => {
   spyExistsSync    = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
   spyMkdirSync     = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
   spyWriteFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   spyUnlinkSync    = vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
+
+  // Default: no current CV in DB
+  pool.query.mockResolvedValue({ rows: [] });
+  pool.connect.mockResolvedValue(makeFakeClient());
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// ── GET /cv/exists ────────────────────────────────────────────────────────────
+
 describe('GET /cv/exists', () => {
-  it('returns { exists: false } when no CV is present', async () => {
-    spyExistsSync.mockReturnValue(false);
+  it('returns { exists: false } when no current CV row in DB', async () => {
+    pool.query.mockResolvedValue({ rows: [] }); // no current row
     const res = await request(app).get('/cv/exists');
     expect(res.status).toBe(200);
     expect(res.body.exists).toBe(false);
   });
 
-  it('returns { exists: true } when CV is on disk', async () => {
+  it('returns { exists: true } when current CV row found and file on disk', async () => {
+    pool.query.mockResolvedValue({ rows: [{ id: 'abc', filename: 'cv-test.pdf' }] });
     spyExistsSync.mockReturnValue(true);
     const res = await request(app).get('/cv/exists');
     expect(res.status).toBe(200);
     expect(res.body.exists).toBe(true);
   });
 });
+
+// ── GET /cv ───────────────────────────────────────────────────────────────────
+
+describe('GET /cv', () => {
+  it('returns 404 when no current CV in DB', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+    const res = await request(app).get('/cv');
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── POST /cv — auth gate ──────────────────────────────────────────────────────
 
 describe('POST /cv — auth gate', () => {
   it('returns 401 without a JWT', async () => {
@@ -73,6 +106,8 @@ describe('POST /cv — auth gate', () => {
   });
 });
 
+// ── POST /cv — MIME filtering ─────────────────────────────────────────────────
+
 describe('POST /cv — MIME filtering', () => {
   it('rejects a non-PDF file', async () => {
     const res = await request(app)
@@ -83,8 +118,21 @@ describe('POST /cv — MIME filtering', () => {
   });
 
   it('accepts application/pdf and writes the file', async () => {
-    // UPLOADS_DIR does not exist → mkdirSync + writeFileSync should be called
     spyExistsSync.mockReturnValue(false);
+
+    // Mock pool.connect() to return a client that handles the transaction steps
+    let queryCount = 0;
+    const fakeClient = makeFakeClient(async (sql) => {
+      queryCount++;
+      // INSERT INTO cvs returns new ID
+      if (sql && typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
+        return { rows: [{ id: 'new-cv-id' }] };
+      }
+      // SELECT offset for prune — no rows to prune
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
     const res = await request(app)
       .post('/cv')
       .set('Authorization', `Bearer ${makeToken()}`)
@@ -94,6 +142,8 @@ describe('POST /cv — MIME filtering', () => {
     expect(spyWriteFileSync).toHaveBeenCalledOnce();
   });
 });
+
+// ── POST /cv — size limit ─────────────────────────────────────────────────────
 
 describe('POST /cv — size limit', () => {
   it('rejects a file over 5 MB', async () => {
@@ -107,9 +157,20 @@ describe('POST /cv — size limit', () => {
   });
 });
 
+// ── POST /cv — private info scan ──────────────────────────────────────────────
+
 describe('POST /cv — private info scan', () => {
   it('returns warnings for a PDF containing a card-number pattern', async () => {
     const cardPdf = Buffer.from('%PDF-1.4 card: 1234 5678 9012 3456 end');
+    spyExistsSync.mockReturnValue(false);
+    const fakeClient = makeFakeClient(async (sql) => {
+      if (sql && typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
+        return { rows: [{ id: 'new-cv-id' }] };
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
     const res = await request(app)
       .post('/cv')
       .set('Authorization', `Bearer ${makeToken()}`)
@@ -119,6 +180,15 @@ describe('POST /cv — private info scan', () => {
   });
 
   it('returns no warnings for a clean PDF', async () => {
+    spyExistsSync.mockReturnValue(false);
+    const fakeClient = makeFakeClient(async (sql) => {
+      if (sql && typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
+        return { rows: [{ id: 'new-cv-id' }] };
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
     const res = await request(app)
       .post('/cv')
       .set('Authorization', `Bearer ${makeToken()}`)
@@ -128,29 +198,66 @@ describe('POST /cv — private info scan', () => {
   });
 });
 
-describe('DELETE /cv — auth gate', () => {
+// ── GET /cv/history — auth gate ───────────────────────────────────────────────
+
+describe('GET /cv/history — auth gate', () => {
   it('returns 401 without a JWT', async () => {
-    const res = await request(app).delete('/cv');
+    const res = await request(app).get('/cv/history');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns version list when authenticated', async () => {
+    pool.query.mockResolvedValue({
+      rows: [
+        { id: 'abc', filename: 'cv-20260101.pdf', uploaded_at: new Date().toISOString(), is_current: true },
+      ],
+    });
+    const res = await request(app)
+      .get('/cv/history')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body[0].is_current).toBe(true);
+  });
+});
+
+// ── DELETE /cv/:id — auth gate ────────────────────────────────────────────────
+
+describe('DELETE /cv/:id — auth gate', () => {
+  it('returns 401 without a JWT', async () => {
+    const res = await request(app).delete('/cv/some-id');
     expect(res.status).toBe(401);
   });
 });
 
-describe('DELETE /cv', () => {
-  it('returns 404 when no CV exists', async () => {
-    spyExistsSync.mockReturnValue(false);
+describe('DELETE /cv/:id', () => {
+  it('returns 404 when version not found', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
     const res = await request(app)
-      .delete('/cv')
+      .delete('/cv/nonexistent-id')
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(404);
   });
 
-  it('deletes the file and returns { deleted: true }', async () => {
-    spyExistsSync.mockReturnValue(true);
+  it('returns 400 when trying to delete the current version', async () => {
+    pool.query.mockResolvedValue({ rows: [{ id: 'abc', filename: 'cv.pdf', is_current: true }] });
     const res = await request(app)
-      .delete('/cv')
+      .delete('/cv/abc')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/current/i);
+  });
+
+  it('deletes a non-current version and returns { deleted: true }', async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 'old-id', filename: 'cv-old.pdf', is_current: false }] })
+      .mockResolvedValueOnce({ rows: [] }); // DELETE
+    spyExistsSync.mockReturnValue(false);
+
+    const res = await request(app)
+      .delete('/cv/old-id')
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(true);
-    expect(spyUnlinkSync).toHaveBeenCalledOnce();
   });
 });

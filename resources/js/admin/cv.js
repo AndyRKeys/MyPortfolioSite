@@ -1,8 +1,18 @@
+/**
+ * Admin CV management (#109)
+ *
+ * Supports versioned CV uploads: every upload creates a new version.
+ * The version history table lets the admin set any previous version as current
+ * or delete old versions.
+ */
 import { authFetch, getToken } from './auth.js';
 import { API_BASE } from '../config.js';
 import { createMessenger } from '../utils/messenger.js';
+import { escapeHtml } from '../utils/html.js';
 
 const setMessage = createMessenger('cv-message');
+
+// ── Status badge ──────────────────────────────────────────────────────────────
 
 function updateStatusBadge(exists) {
     const badge = document.getElementById('cv-status-badge');
@@ -14,8 +24,6 @@ function updateStatusBadge(exists) {
         badge.textContent = '✕ No CV uploaded';
         badge.className = 'cv-status-badge not-uploaded';
     }
-    const deleteBtn = document.getElementById('cv-delete-btn');
-    if (deleteBtn) deleteBtn.disabled = !exists;
 }
 
 async function loadStatus() {
@@ -27,6 +35,101 @@ async function loadStatus() {
         setMessage('Could not check CV status.', true);
     }
 }
+
+// ── Version history table ─────────────────────────────────────────────────────
+
+function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+}
+
+async function loadHistory() {
+    const container = document.getElementById('cv-history');
+    if (!container) return;
+
+    try {
+        const res  = await authFetch('/cv/history');
+        if (!res.ok) throw new Error();
+        const rows = await res.json();
+
+        if (!rows.length) {
+            container.innerHTML = '<p class="hint">No CV versions uploaded yet.</p>';
+            return;
+        }
+
+        container.innerHTML = `
+            <table class="cv-history-table">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Uploaded</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(r => `
+                    <tr class="${r.is_current ? 'cv-row-current' : ''}">
+                        <td><code>${escapeHtml(r.filename)}</code></td>
+                        <td>${formatDate(r.uploaded_at)}</td>
+                        <td>${r.is_current ? '<strong>Current</strong>' : '<span class="hint">Archive</span>'}</td>
+                        <td class="cv-row-actions">
+                            ${!r.is_current ? `
+                            <button type="button" class="btn-small cv-set-current" data-id="${escapeHtml(r.id)}">Set current</button>
+                            <button type="button" class="btn-small btn-danger cv-delete-version" data-id="${escapeHtml(r.id)}">Delete</button>
+                            ` : '<span class="hint">—</span>'}
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+
+        // Bind actions
+        container.querySelectorAll('.cv-set-current').forEach(btn => {
+            btn.addEventListener('click', () => setCurrent(btn.dataset.id));
+        });
+        container.querySelectorAll('.cv-delete-version').forEach(btn => {
+            btn.addEventListener('click', () => deleteVersion(btn.dataset.id));
+        });
+    } catch {
+        container.innerHTML = '<p class="hint" style="color:var(--color-error)">Failed to load CV history.</p>';
+    }
+}
+
+async function setCurrent(id) {
+    setMessage('');
+    try {
+        const res = await authFetch(`/cv/${id}/set-current`, { method: 'PUT' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Failed to set current');
+        }
+        setMessage('CV version set as current.');
+        await Promise.all([loadStatus(), loadHistory()]);
+    } catch (err) {
+        setMessage(err.message || 'Failed to set current.', true);
+    }
+}
+
+async function deleteVersion(id) {
+    if (!confirm('Delete this CV version? This cannot be undone.')) return;
+    setMessage('');
+    try {
+        const res = await authFetch(`/cv/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Failed to delete');
+        }
+        setMessage('CV version deleted.');
+        await Promise.all([loadStatus(), loadHistory()]);
+    } catch (err) {
+        setMessage(err.message || 'Failed to delete.', true);
+    }
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
 
 async function uploadCv(file) {
     const uploadBtn = document.getElementById('cv-upload-btn');
@@ -51,15 +154,16 @@ async function uploadCv(file) {
                 `The scan found potential private information in this PDF:\n• ${warningList}\n\nDo you still want to publish it?`
             );
             if (!proceed) {
-                await authFetch('/cv', { method: 'DELETE' });
+                // Delete the just-uploaded version
+                await authFetch(`/cv/${data.id}`, { method: 'DELETE' });
                 setMessage('Upload cancelled — CV removed from server.', true);
-                await loadStatus();
+                await Promise.all([loadStatus(), loadHistory()]);
                 return;
             }
         }
 
-        setMessage('CV uploaded successfully.');
-        await loadStatus();
+        setMessage('CV uploaded successfully — now set as current.');
+        await Promise.all([loadStatus(), loadHistory()]);
     } catch (err) {
         setMessage(err.message || 'Upload failed.', true);
     } finally {
@@ -71,27 +175,14 @@ async function uploadCv(file) {
     }
 }
 
-async function deleteCv() {
-    if (!confirm('Delete the current CV? It will no longer be available for download.')) return;
-    setMessage('');
-    try {
-        const res = await authFetch('/cv', { method: 'DELETE' });
-        if (!res.ok) throw new Error();
-        setMessage('CV deleted.');
-        await loadStatus();
-    } catch {
-        setMessage('Failed to delete CV.', true);
-    }
-}
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initCv() {
     const cvFileInput = document.getElementById('cv-file-input');
     const cvUploadBtn = document.getElementById('cv-upload-btn');
-    const cvDeleteBtn = document.getElementById('cv-delete-btn');
 
     if (!cvFileInput) return;
 
-    // Enable upload button when a file is selected (rename notice handled by admin-init.js)
     cvFileInput.addEventListener('change', () => {
         cvUploadBtn.disabled = !cvFileInput.files[0];
     });
@@ -101,7 +192,6 @@ export function initCv() {
         if (file) uploadCv(file);
     });
 
-    cvDeleteBtn.addEventListener('click', deleteCv);
-
     loadStatus();
+    loadHistory();
 }
