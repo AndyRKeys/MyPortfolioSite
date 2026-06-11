@@ -1,6 +1,14 @@
+# ── Shared log driver config (#437) ──────────────────────────────────────────
+# Applied to every service below via <<: *logging.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine  # pin: update intentionally — test before bumping (#437)
     environment:
       POSTGRES_DB: ${DB_NAME:-portfolio_dev}
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -10,16 +18,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    # Canonical healthcheck for postgres — mirrors docker-compose.yml definition (#437).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
   backend:
     build:
@@ -58,19 +63,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Canonical healthcheck for backend — mirrors docker-compose.yml definition (#437).
+    # Dockerfile also has a HEALTHCHECK directive; compose wins for local dev use.
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-8080}/health"]
       interval: 10s
       timeout: 5s
       retries: 3
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
   nginx:
-    image: nginx:alpine
+    image: nginx:alpine  # pin: update intentionally — test before bumping (#437)
     ports:
       - "80:80"
     volumes:
@@ -87,11 +90,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
 
 volumes:
   postgres_data:

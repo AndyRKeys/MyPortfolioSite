@@ -16,9 +16,17 @@
 #     (bash scripts/setup/generate-dev-certs.sh $LAN_IP $SITE_HOST)
 #   - For prod: Let's Encrypt certs present at $CERT_MOUNT_SRC
 
+# ── Shared log driver config (#437) ──────────────────────────────────────────
+# Applied to every service below via <<: *logging.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine  # pin: update intentionally — test before bumping (#437)
     restart: always
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -27,16 +35,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    # Canonical healthcheck for postgres in this project (#437).
+    # docker-compose.local.yml mirrors this definition.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
+    logging: *logging
 
   backend:
     build:
@@ -85,19 +91,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Canonical healthcheck for backend in this project (#437).
+    # docker-compose.local.yml mirrors this definition.
+    # Dockerfile also has a HEALTHCHECK directive; compose wins for local/server use.
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT}/health"]
       interval: 10s
       timeout: 5s
       retries: 3
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
+    logging: *logging
 
   nginx:
-    image: nginx:alpine
+    image: nginx:alpine  # pin: update intentionally — test before bumping (#437)
     restart: always
     ports:
       # Primary HTTPS port — 3001 (dev) or 443 (prod).
@@ -121,11 +126,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
+    logging: *logging
 
 # Explicit volume names let .env preserve existing data when upgrading from
 # the per-env compose files (uploads_dev_data → uploads_dev_data, etc.). Leave
