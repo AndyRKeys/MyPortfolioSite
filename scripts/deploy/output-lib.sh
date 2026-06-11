@@ -1,27 +1,43 @@
 #!/usr/bin/env bash
-# output-lib.sh — Shared box-drawing helpers for deploy, test, and ops scripts.
+# output-lib.sh — Shared console output primitives for deploy, test, and ops scripts (#314).
 #
-# Source this file to get _visual_width, _print_box, and _print_multi_box.
-# Callers supply their own colour escape strings; this lib provides _OUT_RESET.
+# Source this file to get:
+#   out_info / out_ok / out_warn / out_fail / out_section / out_die
+#   _visual_width / _print_box / _print_multi_box
 #
-# Log-file tee: if $LOG_FILE is set and non-empty in the calling script,
-# all box output is automatically tee'd to that file.
+# Configuration (set before sourcing, or export from calling script):
+#   OUTPUT_LOG_FILE — if set, all output is also tee'd to this file
+#   OUTPUT_QUIET=1  — suppress info/ok/section; warnings and errors always shown
+#
+# Callers that already define LOG_FILE (deploy-lib.sh) can alias it:
+#   export OUTPUT_LOG_FILE="$LOG_FILE"
 
-# ── Colour reset (detected once at source time) ───────────────────────────────
+# ── Colour detection (done once at source time) ───────────────────────────────
 
 if [ -t 1 ]; then
+  _OUT_RED='\033[0;31m'
+  _OUT_YELLOW='\033[0;33m'
+  _OUT_GREEN='\033[0;32m'
+  _OUT_CYAN='\033[0;36m'
   _OUT_RESET='\033[0m'
   _OUT_BOLD='\033[1m'
 else
+  _OUT_RED=''
+  _OUT_YELLOW=''
+  _OUT_GREEN=''
+  _OUT_CYAN=''
   _OUT_RESET=''
   _OUT_BOLD=''
 fi
 
 # ── Internal emit helpers ─────────────────────────────────────────────────────
 
-# Emit a line — tee to $LOG_FILE if set, otherwise plain stdout.
+# Emit a line — tee to $OUTPUT_LOG_FILE if set, otherwise plain stdout.
 _out_emit() {
-  if [ -n "${LOG_FILE:-}" ]; then
+  if [ -n "${OUTPUT_LOG_FILE:-}" ]; then
+    echo -e "$*" | tee -a "$OUTPUT_LOG_FILE"
+  elif [ -n "${LOG_FILE:-}" ]; then
+    # Legacy: deploy-lib.sh callers use LOG_FILE
     echo -e "$*" | tee -a "$LOG_FILE"
   else
     echo -e "$*"
@@ -30,11 +46,52 @@ _out_emit() {
 
 # printf variant of _out_emit — passes all args straight to printf.
 _out_printf() {
-  if [ -n "${LOG_FILE:-}" ]; then
+  if [ -n "${OUTPUT_LOG_FILE:-}" ]; then
+    printf "$@" | tee -a "$OUTPUT_LOG_FILE"
+  elif [ -n "${LOG_FILE:-}" ]; then
     printf "$@" | tee -a "$LOG_FILE"
   else
     printf "$@"
   fi
+}
+
+_out_quiet() { [ "${OUTPUT_QUIET:-0}" = "1" ]; }
+
+# ── Message functions (#314) ──────────────────────────────────────────────────
+
+# ℹ info line (cyan) — suppressed in quiet mode
+out_info() {
+  _out_quiet && return 0
+  _out_emit "${_OUT_CYAN}${_OUT_BOLD}ℹ  ${_OUT_RESET} $*"
+}
+
+# ✅ success line (green) — suppressed in quiet mode
+out_ok() {
+  _out_quiet && return 0
+  _out_emit "${_OUT_GREEN}${_OUT_BOLD}✅ ${_OUT_RESET} $*"
+}
+
+# ⚠️  warning line (yellow) — always shown
+out_warn() {
+  _out_emit "${_OUT_YELLOW}${_OUT_BOLD}⚠️  ${_OUT_RESET} $*"
+}
+
+# ❌ error line (red) — always shown
+out_fail() {
+  _out_emit "${_OUT_RED}${_OUT_BOLD}❌ ${_OUT_RESET} $*"
+}
+
+# 🔷 section header — suppressed in quiet mode
+out_section() {
+  _out_quiet && return 0
+  _out_emit ""
+  _out_emit "${_OUT_CYAN}${_OUT_BOLD}🔷 ── $* ───────────────────────────────────────────${_OUT_RESET}"
+}
+
+# Print error and exit 1 — always shown
+out_die() {
+  out_fail "$*"
+  exit 1
 }
 
 # ── Width helper ──────────────────────────────────────────────────────────────
