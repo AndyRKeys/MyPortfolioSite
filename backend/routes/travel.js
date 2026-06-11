@@ -10,6 +10,7 @@ import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/
 import { logger } from '../utils/logger.js';
 import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = Router();
 
@@ -184,6 +185,7 @@ router.post('/', travelRateLimit, resolveUser, authenticate, validate(CreateTrav
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1`, [postId]
     );
+    await logAudit(req, 'travel.create', 'travel', postId, { title: title.trim(), published: !!publishedAt });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -238,7 +240,14 @@ router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTr
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1`, [req.params.id]
     );
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    const wasPublished = !!existing.rows[0].published_at;
+    const nowPublished = !!updated?.published_at;
+    const auditAction  = !wasPublished && nowPublished ? 'travel.publish'
+                       : wasPublished && !nowPublished ? 'travel.unpublish'
+                       : 'travel.update';
+    await logAudit(req, auditAction, 'travel', req.params.id, { title: title?.trim() });
+    res.json(updated);
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
@@ -252,10 +261,11 @@ router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTr
 router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
-      `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
+      `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id, title`,
       [req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
+    await logAudit(req, 'travel.delete', 'travel', result.rows[0].id, { title: result.rows[0].title });
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');

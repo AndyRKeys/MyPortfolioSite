@@ -14,7 +14,8 @@ import { rateLimit } from 'express-rate-limit';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
-import { logger } from '../utils/logger.js';
+import { logger }   from '../utils/logger.js';
+import { logAudit } from '../utils/audit.js';
 import {
   validate,
   EmailSendSchema,
@@ -314,6 +315,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     ]);
 
     const token = signJWT({ id: passkey.user_id, email: passkey.email, username: passkey.username });
+    await logAudit(req, 'auth.login', 'user', passkey.user_id, { method: 'passkey' });
     res.json({ token, user: { id: passkey.user_id, email: passkey.email, username: passkey.username } });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login finish failed');
@@ -456,6 +458,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
     logger.info({ userId: row.user_id }, '[auth/email/verify] Match — token consumed; issuing JWT');
 
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
+    await logAudit(req, 'auth.login', 'user', row.user_id, { method: 'email_magic_link' });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
     // Log the failure reason (not the token) so crypt/DB errors are diagnosable.

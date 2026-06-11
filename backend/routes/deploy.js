@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import fs                from 'fs/promises';
 import { authenticate }  from '../middleware/authenticate.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
+import { logger }        from '../utils/logger.js';
+import { logAudit }     from '../utils/audit.js';
 
 const router   = Router();
 // /repo is the repo root mounted via docker-compose — the backend image only
@@ -124,6 +126,7 @@ router.get('/history', authenticate, async (req, res) => {
 // ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
 
 router.post('/fetch', authenticate, async (req, res) => {
+  await logAudit(req, 'deploy.fetch', 'deploy', null, { env: DEPLOY_ENV });
   await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
 });
 
@@ -133,6 +136,7 @@ router.post('/', authenticate, async (req, res) => {
   if (!await scriptExists()) {
     return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
+  await logAudit(req, 'deploy.start', 'deploy', null, { env: DEPLOY_ENV });
   await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV], { cwd: REPO_DIR }));
 });
 
@@ -156,6 +160,7 @@ router.post('/rollback', authenticate, async (req, res) => {
     return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
 
+  await logAudit(req, 'deploy.rollback', 'deploy', null, { env: DEPLOY_ENV, sha });
   await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV, '--rollback', sha], { cwd: REPO_DIR }));
 });
 
