@@ -15,6 +15,7 @@ import { Router }        from 'express';
 import multer            from 'multer';
 import path              from 'path';
 import fs                from 'fs';
+import { randomBytes }   from 'crypto';
 import { rateLimit }     from 'express-rate-limit';
 import { authenticate }  from '../middleware/authenticate.js';
 import { PostgresStore } from '../middleware/postgresStore.js';
@@ -63,11 +64,12 @@ function cvPath(filename) {
   return path.join(UPLOADS_DIR, filename);
 }
 
-/** Generate a timestamped CV filename */
+/** Generate a timestamped CV filename with a random suffix to prevent same-second collisions */
 function timestampedFilename() {
-  const now = new Date();
-  const ts  = now.toISOString().replace(/[-:T]/g, '').slice(0, 14); // YYYYMMDDHHmmss
-  return `cv-${ts}.pdf`;
+  const now  = new Date();
+  const ts   = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const rand = randomBytes(3).toString('hex');
+  return `cv-${ts}-${rand}.pdf`;
 }
 
 /**
