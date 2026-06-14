@@ -130,6 +130,7 @@ export function initActivity() {
   }
 
   // Auto-refresh every 60 s
+  if (_refreshTimer) clearInterval(_refreshTimer);
   _refreshTimer = setInterval(() => loadActivity(), 60_000);
 
   loadActivity();
