@@ -2418,6 +2418,12 @@ footer {
     max-width: 260px;
 }
 
+.upload-status-msg {
+    font-size:   0.8rem;
+    color:       var(--color-muted, #888);
+    margin-left: 0.5rem;
+}
+
 /* ── Issue #39: Custom coordinate stepper ─────────────────────────────────── */
 
 /* Hide native browser up/down spinner arrows on number inputs */
