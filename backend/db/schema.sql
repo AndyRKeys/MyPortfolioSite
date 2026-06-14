@@ -211,3 +211,15 @@ CREATE TABLE IF NOT EXISTS client_errors (
 
 CREATE INDEX IF NOT EXISTS idx_client_errors_received_at
   ON client_errors (received_at DESC);
+
+-- ── App settings (#371) ──────────────────────────────────────────────────────
+-- Persistent key/value store for small pieces of runtime state that must
+-- survive container restarts. First user: `last_error_alert_at` — the
+-- timestamp of the most recent /debug/errors alert email, so the cooldown
+-- in routes/debug.js is honoured across deploys. Values are stored as TEXT;
+-- callers parse to the type they need. Not for secrets.
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
