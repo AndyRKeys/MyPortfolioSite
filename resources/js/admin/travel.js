@@ -69,6 +69,7 @@ function renderMediaList() {
                 if (!pendingFiles.length && !existingMedia.length) {
                     document.querySelector('.file-input-label').textContent = 'No files chosen';
                 }
+                syncUploadBtn();
             });
         }
 
@@ -94,6 +95,8 @@ function clearForm() {
     renderMediaList();
     setMessage('');
     hideGeoconfirmMap();
+    syncUploadBtn();
+    if (uploadStatus) uploadStatus.textContent = '';
 }
 
 // ── Saved memories list ───────────────────────────────────────────────────────
@@ -184,6 +187,8 @@ async function loadForEdit(memory) {
             : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
         document.querySelector('.file-input-label').textContent = 'No files chosen';
         renderMediaList();
+        syncUploadBtn();
+        if (uploadStatus) uploadStatus.textContent = '';
 
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
@@ -332,6 +337,9 @@ async function extractGpsFromFile(file) {
 }
 
 // Loop through sorted files to find the first one with valid GPS coords.
+// Returns true if GPS was found and applied, false otherwise — callers
+// (e.g. the manual Upload photos button on mobile) use this to surface
+// clear success/failure feedback to the user.
 async function tryAutofillGpsFromFileList(files) {
     const sortedImages = files
         .filter(f => f.type && f.type.startsWith('image/'))
@@ -345,10 +353,11 @@ async function tryAutofillGpsFromFileList(files) {
             setMessage(`GPS auto-filled from ${file.name}.`);
             updateGeoconfirmMap(gps.latitude, gps.longitude);
             await reverseGeocodeToLocation(gps.latitude, gps.longitude);
-            return;
+            return true;
         }
     }
     setMessage('No GPS data in any photo — enter coordinates manually or use Geocode.', false, true);
+    return false;
 }
 
 // Try to read DateTimeOriginal from image EXIF and populate the date input.
@@ -407,10 +416,44 @@ async function geocodeLocation() {
     }
 }
 
+// ── Upload-button helpers (#466) ──────────────────────────────────────────────
+
+// Module-scoped so non-init callers (renderMediaList remove handlers,
+// clearForm, loadForEdit) can keep the button's disabled state in sync
+// with pendingFiles.length.
+let uploadBtn    = null;
+let uploadStatus = null;
+
+function syncUploadBtn() {
+    if (!uploadBtn) return;
+    uploadBtn.disabled = pendingFiles.length === 0;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initTravel() {
     loadAll();
+
+    uploadBtn    = document.getElementById('travel-upload-btn');
+    uploadStatus = document.getElementById('travel-upload-status');
+    syncUploadBtn();
+
+    uploadBtn?.addEventListener('click', async () => {
+        if (!pendingFiles.length) return;
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Extracting GPS…';
+        if (uploadStatus) uploadStatus.textContent = '';
+
+        const found = await tryAutofillGpsFromFileList(pendingFiles);
+
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Upload photos';
+        if (uploadStatus) {
+            uploadStatus.textContent = found
+                ? 'GPS location auto-filled from photo.'
+                : 'No GPS data found — enter location manually.';
+        }
+    });
 
     document.getElementById('geocode-btn').addEventListener('click', () => geocodeLocation());
 
@@ -446,6 +489,8 @@ export function initTravel() {
             pendingFiles.length + ' file' + (pendingFiles.length !== 1 ? 's' : '') + ' selected';
         event.target.value = ''; // reset so same file can be re-added if removed
         renderMediaList();
+        syncUploadBtn();
+        if (uploadStatus) uploadStatus.textContent = '';
     });
 
     document.getElementById('travel-form').addEventListener('submit', async (event) => {
