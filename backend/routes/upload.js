@@ -22,6 +22,7 @@ const uploadRateLimit = rateLimit({
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: UPLOAD_RATE_WINDOW_MS, keyType: 'upload' }),
 });
 

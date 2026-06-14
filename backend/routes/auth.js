@@ -47,6 +47,7 @@ const emailRateLimit = rateLimit({
   message:         { error: 'Too many login attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: EMAIL_RATE_WINDOW_MS, keyType: 'email' }),
 });
 
@@ -58,6 +59,7 @@ const passkeyRateLimit = rateLimit({
   message:         { error: 'Too many authentication attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: PASSKEY_RATE_WINDOW_MS, keyType: 'passkey' }),
 });
 
@@ -75,6 +77,7 @@ const accountRateLimit = rateLimit({
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: ACCOUNT_RATE_WINDOW_MS, keyType: 'account' }),
 });
 

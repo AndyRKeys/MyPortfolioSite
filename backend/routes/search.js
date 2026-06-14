@@ -24,6 +24,7 @@ const searchRateLimit = rateLimit({
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'search' }),
 });
 
