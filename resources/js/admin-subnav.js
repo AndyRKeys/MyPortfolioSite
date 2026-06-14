@@ -7,6 +7,7 @@
         { href: '/admin/travel.html',   label: 'Travel',    icon: '✈' },
         { href: '/admin/deploy.html',   label: 'Deploy',    icon: '⚡' },
         { href: '/admin/media.html',    label: 'Media',     icon: '📁' },
+        { href: '/admin/activity.html', label: 'Activity',  icon: '📋' },
         { href: '/admin/stats.html',    label: 'Stats',     icon: '📊' },
         { href: '/admin/settings.html', label: 'Settings',  icon: '⚙' },
     ];

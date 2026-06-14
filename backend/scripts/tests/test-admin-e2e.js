@@ -193,10 +193,14 @@ try {
   smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
   const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
 
-  // S3: admin sub-nav present and Dashboard is the active item (#378)
+  // S3: admin sub-nav present, correct item count, and Dashboard is active (#378, +Activity #155)
   const subnavExists = await page.$('.admin-subnav') !== null;
   smoke('Admin sub-nav present', subnavExists, '.admin-subnav not found');
   if (subnavExists) {
+    const subnavCount = await page.$$eval('.admin-subnav-item', els => els.length);
+    smoke('Admin sub-nav has 8 items', subnavCount === 8, `found ${subnavCount}`);
+    const subnavLabels = await page.$$eval('.admin-subnav-item .admin-subnav-label', els => els.map(e => e.textContent.trim()));
+    smoke('Admin sub-nav includes Activity', subnavLabels.includes('Activity'), `labels: ${subnavLabels.join(', ')}`);
     const activeLabel = await page.$eval('.admin-subnav-item.active', el => el.textContent.trim()).catch(() => '');
     smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
