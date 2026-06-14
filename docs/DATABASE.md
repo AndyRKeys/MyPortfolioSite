@@ -104,6 +104,11 @@ Unified table for both blog posts and travel memories. Discriminated by `post_ty
 
 **Draft vs published:** `published_at IS NULL` = draft (hidden from public routes). Public API routes add `AND published_at IS NOT NULL` to all queries.
 
+**Migration note — search_vector column:** Adding a `GENERATED ALWAYS AS ... STORED` column rewrites
+every existing row under an `ACCESS EXCLUSIVE` lock. On first deploy to a populated database this
+is automatic (schema.sql uses `ADD COLUMN IF NOT EXISTS`) but takes a moment proportional to post
+count. The site has few posts so this completes in milliseconds; no manual step is needed.
+
 ---
 
 ### `post_media`
