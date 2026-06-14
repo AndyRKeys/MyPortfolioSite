@@ -4,28 +4,10 @@
  * Calls GET /api/search?q=<term>&type=<all|blog|travel>&limit=20
  * and renders ranked results with highlighted matched terms.
  */
-import { API_BASE }   from './config.js';
-import { escapeHtml } from './utils/html.js';
+import { API_BASE }            from './config.js';
+import { escapeHtml, highlight } from './utils/html.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Highlight occurrences of each word in `query` within `text`.
- * Returns safe HTML with <mark> elements around matches.
- */
-function highlight(text, query) {
-  if (!text || !query) return escapeHtml(text || '');
-  const words   = query.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return escapeHtml(text);
-  const pattern = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-  return escapeHtml(text).replace(
-    // Work on the escaped string — escapeHtml has already made it safe,
-    // so we re-apply the pattern to the escaped result.
-    // Note: escapeHtml() replaces < > & " ' — query words should not match these.
-    pattern,
-    '<mark>$1</mark>'
-  );
-}
 
 function typeLabel(postType) {
   return postType === 'travel' ? 'Travel' : 'Blog';

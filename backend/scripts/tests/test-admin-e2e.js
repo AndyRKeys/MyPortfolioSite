@@ -229,6 +229,14 @@ try {
   const searchPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('Search page — no JS console errors', searchPageErrors.length === 0, searchPageErrors.join('; '));
 
+  // S7b: embedded search input present on /blog/ and /travel/ listing pages (#469)
+  await page.goto(`${baseUrl}/blog/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const blogSearchInputExists = await page.$('#listing-search-input') !== null;
+  smoke('Blog page — embedded search input present', blogSearchInputExists, '#listing-search-input not found on /blog/');
+  await page.goto(`${baseUrl}/travel/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const travelSearchInputExists = await page.$('#listing-search-input') !== null;
+  smoke('Travel page — embedded search input present', travelSearchInputExists, '#listing-search-input not found on /travel/');
+
   // S8: admin activity dashboard loads and shows table (#155)
   consoleErrors.length = 0;
   await page.goto(`${baseUrl}/admin/activity.html`, { waitUntil: 'networkidle0', timeout: 20000 });
