@@ -28,6 +28,7 @@ const postsRateLimit = rateLimit({
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
+  validate:        { positiveHits: false },
   store:           new PostgresStore({ windowMs: POSTS_RATE_WINDOW_MS, keyType: 'posts' }),
 });
 
