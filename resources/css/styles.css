@@ -2667,6 +2667,36 @@ a.travel-card:visited {
     border-radius: var(--radius-sm);
 }
 
+.activity-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.activity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.2em 0.55em;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--color-border);
+    color: var(--color-text);
+}
+
+.activity-badge.activity-success { background: rgba(39, 174, 96, 0.15);  color: #27ae60; }
+.activity-badge.activity-danger  { background: rgba(231, 76, 60, 0.15);  color: #e74c3c; }
+.activity-badge.activity-warn    { background: rgba(230, 126, 34, 0.15); color: #e67e22; }
+.activity-badge.activity-info    { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+
+[data-theme="dark"] .activity-badge.activity-success { color: #2ecc71; }
+[data-theme="dark"] .activity-badge.activity-danger  { color: #e74c3c; }
+[data-theme="dark"] .activity-badge.activity-warn    { color: #e67e22; }
+[data-theme="dark"] .activity-badge.activity-info    { color: #74b9ff; }
+
 .activity-detail {
     color: var(--color-text-secondary);
     max-width: 18rem;

@@ -33,6 +33,32 @@ function actionClass(action) {
   return ACTION_CLASS[action] || 'activity-info';
 }
 
+// ── Icon by action prefix ────────────────────────────────────────────────────
+
+const ACTION_ICON = {
+  'auth.login':        '✓',
+  'auth.login_failed': '✗',
+  'post.create':       '+',
+  'post.publish':      '▶',
+  'post.update':       '✎',
+  'post.unpublish':    '⏸',
+  'post.delete':       '✗',
+  'travel.create':     '+',
+  'travel.publish':    '▶',
+  'travel.update':     '✎',
+  'travel.unpublish':  '⏸',
+  'travel.delete':     '✗',
+  'cv.upload':         '↑',
+  'cv.delete':         '✗',
+  'deploy.start':      '▶',
+  'deploy.rollback':   '↩',
+  'deploy.fetch':      '↓',
+};
+
+function actionIcon(action) {
+  return ACTION_ICON[action] || '•';
+}
+
 // ── Relative time formatter ───────────────────────────────────────────────────
 
 function relativeTime(dateStr) {
@@ -72,13 +98,14 @@ function renderRows(rows) {
   }
   return rows.map(r => {
     const cls     = actionClass(r.action);
+    const icon    = actionIcon(r.action);
     const rel     = relativeTime(r.created_at);
     const abs     = absoluteTime(r.created_at);
     const detail  = detailSummary(r.detail);
     const entity  = r.entity_type ? escapeHtml(r.entity_type) : '';
     return `<tr class="${escapeHtml(cls)}">
       <td class="activity-ts" title="${escapeHtml(abs)}">${escapeHtml(rel)}</td>
-      <td class="activity-action"><code>${escapeHtml(r.action)}</code></td>
+      <td class="activity-action"><span class="activity-badge ${escapeHtml(cls)}" title="${escapeHtml(r.action)}"><span aria-hidden="true">${escapeHtml(icon)}</span>${escapeHtml(r.action)}</span></td>
       <td class="activity-entity">${entity}</td>
       <td class="activity-detail">${detail}</td>
       <td class="activity-user">${escapeHtml(r.username || '—')}</td>
