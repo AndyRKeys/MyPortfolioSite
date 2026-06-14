@@ -2,7 +2,7 @@
  * Audit route tests (#154)
  * GET /audit — auth required; supports ?limit and ?type filter
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../../app.js';
@@ -47,6 +47,11 @@ describe('GET /audit — auth gate', () => {
 });
 
 describe('GET /audit — authenticated', () => {
+  beforeEach(() => {
+    pool.query.mockReset();
+    pool.query.mockResolvedValue({ rows: [] });
+  });
+
   it('returns 200 with an empty array when no entries', async () => {
     pool.query.mockResolvedValue({ rows: [] });
     const res = await request(app)
@@ -73,8 +78,9 @@ describe('GET /audit — authenticated', () => {
       .get('/audit?limit=10')
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
-    // Verify limit was passed to query (cap at 200)
-    const call = pool.query.mock.calls[0];
+    // Verify limit was passed to query (cap at 200); use .at(-1) because the
+    // PostgresStore rate-limiter makes prior pool.query calls in each request.
+    const call = pool.query.mock.calls.at(-1);
     expect(call[1][1]).toBe(10);
   });
 
@@ -83,7 +89,7 @@ describe('GET /audit — authenticated', () => {
     await request(app)
       .get('/audit?limit=9999')
       .set('Authorization', `Bearer ${makeToken()}`);
-    const call = pool.query.mock.calls[0];
+    const call = pool.query.mock.calls.at(-1);
     expect(call[1][1]).toBe(200);
   });
 
@@ -92,7 +98,7 @@ describe('GET /audit — authenticated', () => {
     await request(app)
       .get('/audit?type=post')
       .set('Authorization', `Bearer ${makeToken()}`);
-    const call = pool.query.mock.calls[0];
+    const call = pool.query.mock.calls.at(-1);
     expect(call[1][0]).toBe('post');
   });
 
@@ -101,7 +107,27 @@ describe('GET /audit — authenticated', () => {
     await request(app)
       .get('/audit?type=all')
       .set('Authorization', `Bearer ${makeToken()}`);
-    const call = pool.query.mock.calls[0];
+    const call = pool.query.mock.calls.at(-1);
     expect(call[1][0]).toBeNull();
+  });
+
+  it('treats wildcard chars in ?type= as null (no filter)', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+    const res = await request(app)
+      .get('/audit?type=p%25st')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(200);
+    const call = pool.query.mock.calls.at(-1);
+    expect(call[1][0]).toBeNull();
+  });
+
+  it('accepts a valid dot-namespaced ?type=', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+    const res = await request(app)
+      .get('/audit?type=post.create')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(200);
+    const call = pool.query.mock.calls.at(-1);
+    expect(call[1][0]).toBe('post.create');
   });
 });

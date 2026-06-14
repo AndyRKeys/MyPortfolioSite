@@ -15,7 +15,8 @@ const router = Router();
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-    const type  = req.query.type && req.query.type !== 'all' ? req.query.type : null;
+    const rawType = req.query.type && req.query.type !== 'all' ? req.query.type : null;
+    const type    = rawType && /^[a-z_]+(\.[a-z_]+)?$/.test(rawType) ? rawType : null;
 
     const result = await pool.query(
       `SELECT
