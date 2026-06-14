@@ -242,22 +242,24 @@ describe('DELETE /cv/:id', () => {
   });
 
   it('returns 400 when trying to delete the current version', async () => {
-    pool.query.mockResolvedValue({ rows: [{ id: 'abc', filename: 'cv.pdf', is_current: true }] });
+    const cvId = '00000000-0000-0000-0000-000000000001';
+    pool.query.mockResolvedValue({ rows: [{ id: cvId, filename: 'cv.pdf', is_current: true }] });
     const res = await request(app)
-      .delete('/cv/abc')
+      .delete(`/cv/${cvId}`)
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/current/i);
   });
 
   it('deletes a non-current version and returns { deleted: true }', async () => {
+    const cvId = '00000000-0000-0000-0000-000000000002';
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 'old-id', filename: 'cv-old.pdf', is_current: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: cvId, filename: 'cv-old.pdf', is_current: false }] })
       .mockResolvedValueOnce({ rows: [] }); // DELETE
     spyExistsSync.mockReturnValue(false);
 
     const res = await request(app)
-      .delete('/cv/old-id')
+      .delete(`/cv/${cvId}`)
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(true);
@@ -308,9 +310,10 @@ describe('POST /cv/:id/confirm', () => {
   });
 
   it('promotes a staged CV to current and returns confirmed:true', async () => {
+    const cvId = '00000000-0000-0000-0000-000000000003';
     const fakeClient = makeFakeClient(async (sql) => {
       if (typeof sql === 'string' && sql.includes('SELECT id, filename FROM cvs WHERE id')) {
-        return { rows: [{ id: 'staged-id', filename: 'cv-20260614120000-abc123.pdf' }] };
+        return { rows: [{ id: cvId, filename: 'cv-20260614120000-abc123.pdf' }] };
       }
       return { rows: [] };
     });
@@ -318,7 +321,7 @@ describe('POST /cv/:id/confirm', () => {
     spyExistsSync.mockReturnValue(true);
 
     const res = await request(app)
-      .post('/cv/staged-id/confirm')
+      .post(`/cv/${cvId}/confirm`)
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
     expect(res.body.confirmed).toBe(true);

@@ -29,6 +29,8 @@ import { pool }          from '../db/pool.js';
 
 const router = Router();
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Per-IP backstop on CV write operations.
 const cvRateLimit = rateLimit({
   windowMs:        CV_RATE_WINDOW_MS,
@@ -221,6 +223,7 @@ router.post('/', cvRateLimit, authenticate, wrapMulter(upload.single('cv')), asy
 
 // Admin: set a specific version as current
 router.put('/:id/set-current', cvRateLimit, authenticate, async (req, res, next) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'CV version not found' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -254,6 +257,7 @@ router.put('/:id/set-current', cvRateLimit, authenticate, async (req, res, next)
 
 // Admin: confirm a staged (pending) CV version — sets it as current
 router.post('/:id/confirm', cvRateLimit, authenticate, async (req, res, next) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'CV version not found' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -293,6 +297,7 @@ router.post('/:id/confirm', cvRateLimit, authenticate, async (req, res, next) =>
 
 // Admin: delete a specific CV version
 router.delete('/:id', cvRateLimit, authenticate, async (req, res, next) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'CV version not found' });
   try {
     const check = await pool.query(`SELECT id, filename, is_current FROM cvs WHERE id = $1`, [req.params.id]);
     if (!check.rows.length) return res.status(404).json({ error: 'CV version not found' });
