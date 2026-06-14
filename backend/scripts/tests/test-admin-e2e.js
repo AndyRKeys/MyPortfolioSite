@@ -201,9 +201,9 @@ try {
     smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
 
-  // S4: all 6 dashboard navigation cards present (#378)
+  // S4: all 7 dashboard navigation cards present (#378, +Activity card from #155)
   const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
-  smoke('Dashboard has 6 navigation cards', cardCount === 6, `found ${cardCount}`);
+  smoke('Dashboard has 7 navigation cards', cardCount === 7, `found ${cardCount}`);
 
   // ── Interaction tests ────────────────────────────────────────────────────
 
