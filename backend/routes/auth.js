@@ -21,35 +21,43 @@ import {
   PasskeyRegisterFinishSchema,
   PasskeyLoginFinishSchema,
 } from '../middleware/validate.js';
+import {
+  EMAIL_RATE_WINDOW_MS,   EMAIL_RATE_LIMIT,
+  PASSKEY_RATE_WINDOW_MS, PASSKEY_RATE_LIMIT,
+  ACCOUNT_RATE_WINDOW_MS, ACCOUNT_RATE_LIMIT,
+  WEBAUTHN_CHALLENGE_TTL, MAGIC_LINK_TTL,
+} from '../utils/constants.js';
 
 const router = Router();
 
-const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
-const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
-const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
+// validateEnv.js requires WEBAUTHN_RP_ID, WEBAUTHN_ORIGIN, and WEBAUTHN_RP_NAME
+// at startup — no fallback defaults here (#433).
+const RP_NAME    = process.env.WEBAUTHN_RP_NAME;
+const RP_ID      = process.env.WEBAUTHN_RP_ID;
+const ORIGIN     = process.env.WEBAUTHN_ORIGIN;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 // Rate limiters for sensitive auth endpoints (per IP)
 const emailRateLimit = rateLimit({
-  windowMs:        60 * 60 * 1000, // 5 per hour
-  limit:           5,
+  windowMs:        EMAIL_RATE_WINDOW_MS,
+  limit:           EMAIL_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfServiceAccount,
   message:         { error: 'Too many login attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'email' }),
+  store:           new PostgresStore({ windowMs: EMAIL_RATE_WINDOW_MS, keyType: 'email' }),
 });
 
 const passkeyRateLimit = rateLimit({
-  windowMs:        60 * 60 * 1000, // 10 per hour
-  limit:           10,
+  windowMs:        PASSKEY_RATE_WINDOW_MS,
+  limit:           PASSKEY_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfServiceAccount,
   message:         { error: 'Too many authentication attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'passkey' }),
+  store:           new PostgresStore({ windowMs: PASSKEY_RATE_WINDOW_MS, keyType: 'passkey' }),
 });
 
 // Account-management surface (/setup/status, /me, /passkeys, /passkeys/:id).
@@ -59,14 +67,14 @@ const passkeyRateLimit = rateLimit({
 // The limiter precedes resolveUser in each route so CodeQL's
 // js/missing-rate-limiting detector sees it before any authorization step.
 const accountRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
+  windowMs:        ACCOUNT_RATE_WINDOW_MS,
+  limit:           ACCOUNT_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'account' }),
+  store:           new PostgresStore({ windowMs: ACCOUNT_RATE_WINDOW_MS, keyType: 'account' }),
 });
 
 function signJWT(user) {
@@ -82,7 +90,7 @@ function signJWT(user) {
 router.get('/setup/status', accountRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
-    res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
+    res.json({ has_users: parseInt(result.rows[0].count) > 0 });
   } catch (err) {
     logger.error({ err }, '[auth] setup/status DB error');
     next(err);
@@ -151,11 +159,11 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, user_id, expires_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '5 minutes')`,
+       VALUES ($1, $2, $3, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
       [sessionKey, options.challenge, userId]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey register start failed');
     next(err);
@@ -164,7 +172,7 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
 
 router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey, passkeyName } = req.body;
+    const { response, session_key: sessionKey, passkey_name: passkeyName } = req.body;
 
     const challengeRow = await pool.query(
       `SELECT * FROM webauthn_challenges
@@ -245,11 +253,11 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, expires_at)
-       VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
+       VALUES ($1, $2, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
       [sessionKey, options.challenge]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login start failed');
     next(err);
@@ -258,7 +266,7 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
 
 router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey } = req.body;
+    const { response, session_key: sessionKey } = req.body;
 
     const challengeRow = await pool.query(
       'SELECT * FROM webauthn_challenges WHERE session_key = $1 AND expires_at > NOW()',
@@ -359,7 +367,7 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     const token = uuidv4();
     await pool.query(
       `INSERT INTO email_tokens (user_id, token, expires_at)
-       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
+       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '${MAGIC_LINK_TTL}')`,
       [userId, token]
     );
     logger.info('[auth/email/send] Token inserted — attempting email send');

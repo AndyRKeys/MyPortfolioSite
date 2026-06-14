@@ -205,17 +205,17 @@ describe('EmailSendSchema', () => {
 describe('PasskeyRegisterFinishSchema', () => {
   it('accepts valid input', () => {
     const { nextCalled } = runValidate(PasskeyRegisterFinishSchema, {
-      response: { id: 'abc', type: 'public-key' }, sessionKey: 'sess_123',
+      response: { id: 'abc', type: 'public-key' }, session_key: 'sess_123',
     });
     expect(nextCalled).toBe(true);
   });
 
-  it('rejects missing sessionKey', () => {
+  it('rejects missing session_key', () => {
     const { res } = runValidate(PasskeyRegisterFinishSchema, {
       response: { id: 'abc', type: 'public-key' },
     });
     expect(res._status).toBe(400);
-    expect(res._json.error).toMatch(/sessionKey/i);
+    expect(res._json.error).toMatch(/session_key/i);
   });
 });
 
@@ -224,16 +224,16 @@ describe('PasskeyRegisterFinishSchema', () => {
 describe('PasskeyLoginFinishSchema', () => {
   it('accepts valid input', () => {
     const { nextCalled } = runValidate(PasskeyLoginFinishSchema, {
-      response: { id: 'xyz' }, sessionKey: 'sess_456',
+      response: { id: 'xyz' }, session_key: 'sess_456',
     });
     expect(nextCalled).toBe(true);
   });
 
-  it('rejects missing sessionKey', () => {
+  it('rejects missing session_key', () => {
     const { res } = runValidate(PasskeyLoginFinishSchema, {
       response: { id: 'xyz' },
     });
     expect(res._status).toBe(400);
-    expect(res._json.error).toMatch(/sessionKey/i);
+    expect(res._json.error).toMatch(/session_key/i);
   });
 });

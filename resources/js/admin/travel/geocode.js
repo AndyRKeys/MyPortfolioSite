@@ -1,5 +1,15 @@
 import { setMessage } from './messages.js';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+// Nominatim base URL — shared by reverse-geocode (reverseGeocodeToLocation)
+// and forward-geocode (geocodeLocation) to avoid drift between the two calls.
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
+
+// Duration (ms) to flash a success outline on the location input after
+// Geocode normalises the field value.
+const LOCATION_FLASH_MS = 1500;
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 let geoconfirmMap    = null;
@@ -66,7 +76,7 @@ function normaliseLocation(address, displayName) {
 export async function reverseGeocodeToLocation(lat, lng) {
     if (document.getElementById('travel-location').value.trim()) return;
     try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+        const url = `${NOMINATIM_URL}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         if (!res.ok) return;
         const data = await res.json();
@@ -87,7 +97,7 @@ async function geocodeLocation() {
     btn.textContent = 'Looking up…';
     setMessage('');
     try {
-        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=' + encodeURIComponent(q);
+        const url = `${NOMINATIM_URL}/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         const results = await res.json();
         if (!results.length) { setMessage('Location not found — try a more specific name.', true); return; }
@@ -102,7 +112,7 @@ async function geocodeLocation() {
             const locationInput = document.getElementById('travel-location');
             locationInput.value = normalised;
             locationInput.style.outline = '2px solid var(--color-success)';
-            setTimeout(() => { locationInput.style.outline = ''; }, 1500);
+            setTimeout(() => { locationInput.style.outline = ''; }, LOCATION_FLASH_MS);
         }
 
         setMessage(`Coordinates set — confirm pin location on the map below (matched: ${display_name.split(',').slice(0, 3).join(',')}).`, false, true);

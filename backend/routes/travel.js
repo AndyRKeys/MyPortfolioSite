@@ -8,6 +8,8 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
+import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 
 const router = Router();
 
@@ -17,14 +19,14 @@ const router = Router();
 // surface. The limiter precedes resolveUser in the chain so CodeQL's
 // js/missing-rate-limiting detector sees it before any authorization step.
 const travelRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           120,
+  windowMs:        TRAVEL_RATE_WINDOW_MS,
+  limit:           TRAVEL_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'travel' }),
+  store:           new PostgresStore({ windowMs: TRAVEL_RATE_WINDOW_MS, keyType: 'travel' }),
 });
 
 const TRAVEL_COLS = `
@@ -82,7 +84,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
+router.get('/', travelRateLimit, resolveUser, publicCache(60), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -98,7 +100,7 @@ router.get('/', travelRateLimit, resolveUser, async (req, res, next) => {
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
+router.get('/all', travelRateLimit, resolveUser, authenticate, noStore, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -129,7 +131,7 @@ router.get('/admin/:id', travelRateLimit, resolveUser, authenticate, async (req,
 });
 
 // Public: single published travel post by id
-router.get('/:id', travelRateLimit, resolveUser, async (req, res, next) => {
+router.get('/:id', travelRateLimit, resolveUser, publicCache(300), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p

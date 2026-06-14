@@ -8,6 +8,8 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
+import { EXCERPT_LENGTH, POSTS_RATE_WINDOW_MS, POSTS_RATE_LIMIT } from '../utils/constants.js';
+import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 
 const router = Router();
 
@@ -18,14 +20,14 @@ const router = Router();
 // random JWTs. The limiter is placed before resolveUser in the chain so
 // CodeQL's js/missing-rate-limiting detector sees it precede authorization.
 const postsRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           120,
+  windowMs:        POSTS_RATE_WINDOW_MS,
+  limit:           POSTS_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'posts' }),
+  store:           new PostgresStore({ windowMs: POSTS_RATE_WINDOW_MS, keyType: 'posts' }),
 });
 
 // ── Helpers
@@ -44,11 +46,11 @@ async function insertPost(post_type, title, body_markdown, post_date, published_
 // ── Routes
 
 // Public: list published blog posts
-router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
+router.get('/', postsRateLimit, resolveUser, publicCache(60), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
-              left(body_markdown, 300) AS excerpt
+              left(body_markdown, ${EXCERPT_LENGTH}) AS excerpt
        FROM posts
        WHERE post_type = 'blog' AND published_at IS NOT NULL
        ORDER BY COALESCE(post_date, published_at::date) DESC`
@@ -61,11 +63,11 @@ router.get('/', postsRateLimit, resolveUser, async (req, res, next) => {
 });
 
 // Admin: list all blog posts (drafts + published)
-router.get('/all', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
+router.get('/all', postsRateLimit, resolveUser, authenticate, noStore, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, post_date, published_at, created_at,
-              left(body_markdown, 300) AS excerpt
+              left(body_markdown, ${EXCERPT_LENGTH}) AS excerpt
        FROM posts
        WHERE post_type = 'blog'
        ORDER BY created_at DESC`
@@ -94,7 +96,7 @@ router.get('/admin/:id', postsRateLimit, resolveUser, authenticate, async (req, 
 });
 
 // Public: single blog post by slug
-router.get('/:slug', postsRateLimit, resolveUser, async (req, res, next) => {
+router.get('/:slug', postsRateLimit, resolveUser, publicCache(300), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, title, slug, body_markdown, post_date, published_at, created_at

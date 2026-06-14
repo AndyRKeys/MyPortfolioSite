@@ -7,18 +7,22 @@ import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { UPLOADS_DIR } from '../utils/paths.js';
 import { wrapMulter }  from '../utils/wrapMulter.js';
+import {
+  UPLOAD_RATE_WINDOW_MS, UPLOAD_RATE_LIMIT,
+  MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME,
+} from '../utils/constants.js';
 
 // Per-IP backstop on media uploads. Limiter precedes authenticate so
 // CodeQL's js/missing-rate-limiting detector sees it before auth.
 const uploadRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           30,
+  windowMs:        UPLOAD_RATE_WINDOW_MS,
+  limit:           UPLOAD_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'upload' }),
+  store:           new PostgresStore({ windowMs: UPLOAD_RATE_WINDOW_MS, keyType: 'upload' }),
 });
 
 const storage = multer.diskStorage({
@@ -29,18 +33,11 @@ const storage = multer.diskStorage({
   },
 });
 
-const ALLOWED_MIME = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'video/mp4', 'video/webm', 'video/quicktime',
-]);
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_FILE_SIZE },
+  limits: { fileSize: MEDIA_MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    ALLOWED_MIME.has(file.mimetype)
+    MEDIA_ALLOWED_MIME.has(file.mimetype)
       ? cb(null, true)
       : cb(new Error('File type not allowed'));
   },

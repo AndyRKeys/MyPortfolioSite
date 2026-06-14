@@ -1,3 +1,4 @@
+// Version pin: keep in sync with login.js (#434).
 import { startRegistration } from 'https://esm.sh/@simplewebauthn/browser@7';
 import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
@@ -52,12 +53,12 @@ async function addPasskey() {
     setMessage('Follow the passkey prompt on your device…');
     try {
         const startRes = await authFetch('/auth/passkey/register/start', { method: 'POST', body: JSON.stringify({}) });
-        const { options, sessionKey } = await startRes.json();
+        const { options, session_key } = await startRes.json();
         const response = await startRegistration(options);
         const name = prompt('Give this passkey a name (e.g. "MacBook", "iPhone"):') || 'My passkey';
         const finishRes = await authFetch('/auth/passkey/register/finish', {
             method: 'POST',
-            body: JSON.stringify({ response, sessionKey, passkeyName: name }),
+            body: JSON.stringify({ response, session_key, passkey_name: name }),
         });
         const data = await finishRes.json();
         if (!finishRes.ok) throw new Error(data.error || 'Registration failed');
