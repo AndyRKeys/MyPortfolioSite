@@ -274,6 +274,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
       [sessionKey]
     );
     if (!challengeRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'invalid_challenge' });
       return res.status(400).json({ error: 'Invalid or expired challenge' });
     }
     await pool.query('DELETE FROM webauthn_challenges WHERE session_key = $1', [sessionKey]);
@@ -287,6 +288,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
       [credentialId]
     );
     if (!passkeyRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'unknown_credential' });
       return res.status(400).json({ error: 'Unknown credential' });
     }
 
@@ -306,6 +308,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     });
 
     if (!verification.verified) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'verification_failed' });
       return res.status(401).json({ error: 'Authentication failed' });
     }
 
@@ -450,6 +453,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
           '[auth/email/verify] Legacy non-bcrypt row(s) present — boot cleanup may not have run (#134)'
         );
       }
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'email_magic_link', reason: 'invalid_token' });
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
