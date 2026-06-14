@@ -11,14 +11,15 @@ import { pool } from '../db/pool.js';
 import { logger } from './logger.js';
 
 /**
- * @param {import('express').Request} req        - Express request (for user_id and IP)
- * @param {string}                    action      - Dot-namespaced action, e.g. 'post.publish'
- * @param {string|null}               entityType  - e.g. 'post', 'travel', 'cv', 'deploy'
- * @param {string|null}               entityId    - ID of the affected record
- * @param {object|null}               detail      - Structured context (no secrets)
+ * @param {import('express').Request}              req        - Express request (for user_id and IP)
+ * @param {string}                                 action      - Dot-namespaced action, e.g. 'post.publish'
+ * @param {string|null}                            entityType  - e.g. 'post', 'travel', 'cv', 'deploy'
+ * @param {string|null}                            entityId    - ID of the affected record
+ * @param {object|null}                            detail      - Structured context (no secrets)
+ * @param {{ userId?: string|number|null }}        [opts]      - Optional overrides (e.g. userId for login routes that lack req.user)
  */
-export async function logAudit(req, action, entityType = null, entityId = null, detail = null) {
-  const userId = req.user?.userId ?? req.user?.id ?? null;
+export async function logAudit(req, action, entityType = null, entityId = null, detail = null, opts = {}) {
+  const userId = opts.userId ?? req.user?.userId ?? req.user?.id ?? null;
   const ip     = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
               ?? req.socket?.remoteAddress
               ?? null;
