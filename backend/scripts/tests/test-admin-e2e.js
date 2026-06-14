@@ -209,7 +209,19 @@ try {
   const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
   smoke('Dashboard has 7 navigation cards', cardCount === 7, `found ${cardCount}`);
 
-  // S5: public search page loads without errors (#157)
+  // S5: Search link present in public nav on blog and travel pages (#157)
+  const blogNav = await page.evaluate(async (url) => {
+    const r = await fetch(url); const html = await r.text();
+    return html.includes('href="/search/"');
+  }, `${baseUrl}/blog/`);
+  smoke('Blog page — Search link in nav', blogNav, 'href="/search/" not found in /blog/');
+  const travelNav = await page.evaluate(async (url) => {
+    const r = await fetch(url); const html = await r.text();
+    return html.includes('href="/search/"');
+  }, `${baseUrl}/travel/`);
+  smoke('Travel page — Search link in nav', travelNav, 'href="/search/" not found in /travel/');
+
+  // S7: public search page loads without errors (#157)
   consoleErrors.length = 0;
   await page.goto(`${baseUrl}/search/`, { waitUntil: 'networkidle0', timeout: 20000 });
   const searchFormExists = await page.$('#search-form') !== null;
@@ -217,7 +229,7 @@ try {
   const searchPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('Search page — no JS console errors', searchPageErrors.length === 0, searchPageErrors.join('; '));
 
-  // S6: admin activity dashboard loads and shows table (#155)
+  // S8: admin activity dashboard loads and shows table (#155)
   consoleErrors.length = 0;
   await page.goto(`${baseUrl}/admin/activity.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   const activityTableExists = await page.$('#activity-tbody') !== null;
@@ -225,7 +237,7 @@ try {
   const activityPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
   smoke('Activity dashboard — no JS console errors', activityPageErrors.length === 0, activityPageErrors.join('; '));
 
-  // S7: CV history section present on media page (#109)
+  // S9: CV history section present on media page (#109)
   consoleErrors.length = 0;
   await page.goto(`${baseUrl}/admin/media.html`, { waitUntil: 'networkidle0', timeout: 20000 });
   const cvHistoryExists = await page.$('#cv-history') !== null;
