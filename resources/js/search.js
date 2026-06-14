@@ -114,7 +114,9 @@ const urlParams = new URLSearchParams(window.location.search);
 const initialQ  = urlParams.get('q');
 if (initialQ) {
   input.value = initialQ;
-  const initialType = urlParams.get('type') || 'all';
+  const VALID_SEARCH_TYPES = ['blog', 'travel', 'all'];
+  const rawType = urlParams.get('type');
+  const initialType = VALID_SEARCH_TYPES.includes(rawType) ? rawType : 'all';
   const radio = form.querySelector(`input[name="type"][value="${initialType}"]`);
   if (radio) radio.checked = true;
   runSearch(initialQ, initialType);
