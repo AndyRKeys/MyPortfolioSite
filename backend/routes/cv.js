@@ -124,7 +124,7 @@ async function currentCvRow() {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // Public: check whether a current CV exists
-router.get('/exists', async (_req, res, next) => {
+router.get('/exists', cvRateLimit, async (_req, res, next) => {
   try {
     const row = await currentCvRow();
     const exists = row ? fs.existsSync(cvPath(row.filename)) : false;
@@ -135,7 +135,7 @@ router.get('/exists', async (_req, res, next) => {
 });
 
 // Public: download the current CV
-router.get('/', async (req, res, next) => {
+router.get('/', cvRateLimit, async (req, res, next) => {
   try {
     const row = await currentCvRow();
     if (!row) return res.status(404).json({ error: 'No CV uploaded yet' });

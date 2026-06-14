@@ -3,16 +3,30 @@
  *
  * GET /audit?limit=50&type=all  → recent audit log entries (auth required)
  */
-import { Router }      from 'express';
-import { pool }        from '../db/pool.js';
-import { authenticate } from '../middleware/authenticate.js';
-import { logger }      from '../utils/logger.js';
+import { Router }        from 'express';
+import { rateLimit }     from 'express-rate-limit';
+import { pool }          from '../db/pool.js';
+import { authenticate }  from '../middleware/authenticate.js';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { logger }        from '../utils/logger.js';
 
 const router = Router();
 
+const auditRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'audit' }),
+});
+
 // Admin: list recent audit log entries
 // Supports ?limit=<n> (max 200, default 50) and ?type=<action-prefix|all>
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', auditRateLimit, authenticate, async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const rawType = req.query.type && req.query.type !== 'all' ? req.query.type : null;
