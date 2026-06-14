@@ -271,10 +271,10 @@ describe('DELETE /cv/:id', () => {
 describe('POST /cv — clean upload', () => {
   it('sets is_current=TRUE immediately when no warnings', async () => {
     spyExistsSync.mockReturnValue(false);
-    let insertSql = '';
-    const fakeClient = makeFakeClient(async (sql) => {
+    let insertParams = null;
+    const fakeClient = makeFakeClient(async (sql, params) => {
       if (typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
-        insertSql = sql;
+        insertParams = params;
         return { rows: [{ id: 'new-cv-id' }] };
       }
       return { rows: [] };
@@ -288,7 +288,7 @@ describe('POST /cv — clean upload', () => {
     expect(res.status).toBe(200);
     expect(res.body.uploaded).toBe(true);
     expect(res.body.pending).toBeUndefined();
-    expect(insertSql).toContain('TRUE');
+    expect(insertParams[1]).toBe(true); // is_current param is boolean true, not literal 'TRUE'
   });
 });
 
