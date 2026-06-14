@@ -223,3 +223,56 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value      TEXT NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ── Audit log (#154) ─────────────────────────────────────────────────────────
+-- Records admin actions with user, timestamp, action type, and structured detail.
+-- Provides a security trail and powers the admin activity dashboard (#155).
+-- Retention: rows are never auto-pruned — low volume expected for a single-admin site.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
+  action      TEXT        NOT NULL,   -- e.g. 'post.publish', 'cv.upload', 'auth.login'
+  entity_type TEXT,                   -- e.g. 'post', 'travel', 'cv', 'deploy'
+  entity_id   TEXT,                   -- id of the affected record (if applicable)
+  detail      JSONB,                  -- structured context; NEVER include secrets/tokens
+  ip          TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS audit_log_created_at
+  ON audit_log (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS audit_log_user_id
+  ON audit_log (user_id);
+
+-- ── Full-text search (#157) ───────────────────────────────────────────────────
+-- Generated tsvector column with GIN index for fast full-text search across
+-- blog and travel posts. Weighted: title (A) > excerpt (B) > body (C).
+-- The column is STORED so search is a pure index scan — no re-computation.
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS search_vector tsvector
+    GENERATED ALWAYS AS (
+      setweight(to_tsvector('english', coalesce(title, '')),         'A') ||
+      setweight(to_tsvector('english', coalesce(location, '')),      'B') ||
+      setweight(to_tsvector('english', coalesce(body_markdown, '')), 'C')
+    ) STORED;
+
+CREATE INDEX IF NOT EXISTS posts_search_vector_idx
+  ON posts USING GIN (search_vector);
+
+-- ── CV version history (#109) ─────────────────────────────────────────────────
+-- Tracks every uploaded CV with a timestamp. Only one row may have is_current=TRUE
+-- at a time (enforced by the partial unique index below). The public download
+-- endpoint serves whichever file has is_current=TRUE; older versions are kept for
+-- archival. Maximum 5 versions are retained — the oldest is pruned on each upload
+-- once the limit is exceeded.
+CREATE TABLE IF NOT EXISTS cvs (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  filename    TEXT        NOT NULL,           -- stored filename, e.g. cv-20260604-120000.pdf
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_current  BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+-- Only one current CV at a time
+CREATE UNIQUE INDEX IF NOT EXISTS cvs_one_current
+  ON cvs (is_current) WHERE is_current = TRUE;

@@ -14,7 +14,8 @@ import { rateLimit } from 'express-rate-limit';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
-import { logger } from '../utils/logger.js';
+import { logger }   from '../utils/logger.js';
+import { logAudit } from '../utils/audit.js';
 import {
   validate,
   EmailSendSchema,
@@ -273,6 +274,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
       [sessionKey]
     );
     if (!challengeRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'invalid_challenge' });
       return res.status(400).json({ error: 'Invalid or expired challenge' });
     }
     await pool.query('DELETE FROM webauthn_challenges WHERE session_key = $1', [sessionKey]);
@@ -286,6 +288,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
       [credentialId]
     );
     if (!passkeyRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'unknown_credential' });
       return res.status(400).json({ error: 'Unknown credential' });
     }
 
@@ -305,6 +308,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     });
 
     if (!verification.verified) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'verification_failed' });
       return res.status(401).json({ error: 'Authentication failed' });
     }
 
@@ -314,6 +318,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     ]);
 
     const token = signJWT({ id: passkey.user_id, email: passkey.email, username: passkey.username });
+    await logAudit(req, 'auth.login', 'user', passkey.user_id, { method: 'passkey' }, { userId: passkey.user_id });
     res.json({ token, user: { id: passkey.user_id, email: passkey.email, username: passkey.username } });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login finish failed');
@@ -448,6 +453,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
           '[auth/email/verify] Legacy non-bcrypt row(s) present — boot cleanup may not have run (#134)'
         );
       }
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'email_magic_link', reason: 'invalid_token' });
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
@@ -456,6 +462,7 @@ router.get('/email/verify', emailRateLimit, async (req, res, next) => {
     logger.info({ userId: row.user_id }, '[auth/email/verify] Match — token consumed; issuing JWT');
 
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
+    await logAudit(req, 'auth.login', 'user', row.user_id, { method: 'email_magic_link' }, { userId: row.user_id });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
     // Log the failure reason (not the token) so crypt/DB errors are diagnosable.

@@ -5,7 +5,7 @@
     <script type="module" src="/resources/js/error-logger.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Blog | AK Portfolio</title>
+    <title>Search | AK Portfolio</title>
     <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
     <link rel="stylesheet" href="/resources/css/reset.css" />
     <link rel="stylesheet" href="/resources/css/styles.css" />
@@ -17,7 +17,7 @@
     <header id="home">
         <h1>A|K</h1>
         <h2>Andy | Keys</h2>
-        <h2>Writing</h2>
+        <h2>Search</h2>
     </header>
     <nav>
         <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
@@ -27,48 +27,50 @@
         <ul class="nav">
             <li><a href="/">🏠 Home</a></li>
             <li><a href="/#about">👤 About</a></li>
-            <li><a href="/#portfolio">💼 Projects</a></li>
-            <li><a href="/#ai-dev">🤖 AI Dev</a></li>
-            <li><a href="/#timeline">📅 Timeline</a></li>
-            <li><a href="/#skills">🛠 Skills</a></li>
-            <li><a href="/#github-activity">🐙 GitHub</a></li>
-            <li><a href="/#contact">✉ Contact</a></li>
             <li><a href="/blog/">✏ Blog</a></li>
             <li><a href="/travel/">✈ Travel</a></li>
-            <li><a href="/search/">🔍 Search</a></li>
             <li><a href="/login/">🔒 Admin</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
     </nav>
 
     <main>
-        <section class="sec-cont" id="blog">
-            <h2>Posts</h2>
+        <section class="sec-cont" id="search">
+            <h2>Search</h2>
 
-            <div class="blog-view-toggle" role="tablist">
-                <button type="button" class="view-toggle-btn active" data-view="timeline" role="tab" aria-selected="true">Timeline</button>
-                <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards</button>
-            </div>
+            <form id="search-form" class="search-form" role="search">
+                <div class="search-input-wrap">
+                    <input
+                        id="search-input"
+                        type="search"
+                        placeholder="Search posts and travel memories…"
+                        aria-label="Search"
+                        autocomplete="off"
+                        class="search-input"
+                    />
+                    <button type="submit" class="btn-primary search-submit">Search</button>
+                </div>
 
-            <div id="posts-list" class="posts-list hidden"></div>
-            <div id="blog-timeline" class="timeline"></div>
-            <div id="posts-empty" class="posts-empty hidden">
-                <p>No posts yet &mdash; check back soon.</p>
-            </div>
+                <div class="search-filters" role="group" aria-label="Filter by type">
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="all" checked /> All
+                    </label>
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="blog" /> Blog
+                    </label>
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="travel" /> Travel
+                    </label>
+                </div>
+            </form>
+
+            <div id="search-results" aria-live="polite"></div>
         </section>
     </main>
-
-    <footer>
-        <section class="sec-cont" id="contact">
-            <div class="footer-bottom">
-                <p>&copy; 2026 Andrew Keys. All Rights Reserved.</p>
-            </div>
-        </section>
-    </footer>
 
     <script src="/resources/js/dev-env.js"></script>
     <script src="/resources/js/darkmode.js"></script>
     <script src="/resources/js/nav.js"></script>
-    <script type="module" src="/resources/js/blog.js"></script>
+    <script type="module" src="/resources/js/search.js"></script>
 </body>
 </html>

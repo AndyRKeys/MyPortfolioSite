@@ -10,6 +10,7 @@ import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/vali
 import { logger } from '../utils/logger.js';
 import { EXCERPT_LENGTH, POSTS_RATE_WINDOW_MS, POSTS_RATE_LIMIT } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = Router();
 
@@ -120,6 +121,7 @@ router.post('/', postsRateLimit, resolveUser, authenticate, validate(CreatePostS
     const publishedAt = publish ? new Date() : null;
     const postDateVal  = post_date || null;
     const result = await insertPost('blog', title, body_markdown, postDateVal, publishedAt);
+    await logAudit(req, 'post.create', 'post', result.id, { title: result.title, published: !!publishedAt });
     res.status(201).json(result);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
@@ -153,7 +155,15 @@ router.put('/:id', postsRateLimit, resolveUser, authenticate, validate(UpdatePos
        RETURNING *`,
       [title.trim(), slug, body_markdown || '', post_date || null, published_at, req.params.id]
     );
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    // Determine if this was a publish/unpublish action
+    const wasPublished   = !!existing.rows[0].published_at;
+    const nowPublished   = !!updated.published_at;
+    const auditAction    = !wasPublished && nowPublished ? 'post.publish'
+                         : wasPublished && !nowPublished ? 'post.unpublish'
+                         : 'post.update';
+    await logAudit(req, auditAction, 'post', updated.id, { title: updated.title });
+    res.json(updated);
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
     next(err);
@@ -164,10 +174,11 @@ router.put('/:id', postsRateLimit, resolveUser, authenticate, validate(UpdatePos
 router.delete('/:id', postsRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
-      `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id`,
+      `DELETE FROM posts WHERE id = $1 AND post_type = 'blog' RETURNING id, title`,
       [req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Post not found' });
+    await logAudit(req, 'post.delete', 'post', result.rows[0].id, { title: result.rows[0].title });
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[posts] Request failed');
