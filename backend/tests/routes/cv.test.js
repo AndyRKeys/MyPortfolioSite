@@ -160,7 +160,7 @@ describe('POST /cv — size limit', () => {
 // ── POST /cv — private info scan ──────────────────────────────────────────────
 
 describe('POST /cv — private info scan', () => {
-  it('returns warnings for a PDF containing a card-number pattern', async () => {
+  it('returns warnings array and pending:true when private info detected', async () => {
     const cardPdf = Buffer.from('%PDF-1.4 card: 1234 5678 9012 3456 end');
     spyExistsSync.mockReturnValue(false);
     const fakeClient = makeFakeClient(async (sql) => {
@@ -177,6 +177,8 @@ describe('POST /cv — private info scan', () => {
       .attach('cv', cardPdf, { filename: 'cv.pdf', contentType: 'application/pdf' });
     expect(res.status).toBe(200);
     expect(res.body.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/card/i)]));
+    expect(res.body.pending).toBe(true);
+    expect(res.body.uploaded).toBeUndefined();
   });
 
   it('returns no warnings for a clean PDF', async () => {
@@ -259,5 +261,66 @@ describe('DELETE /cv/:id', () => {
       .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(true);
+  });
+});
+
+// ── POST /cv — clean upload auto-publishes ────────────────────────────────────
+
+describe('POST /cv — clean upload', () => {
+  it('sets is_current=TRUE immediately when no warnings', async () => {
+    spyExistsSync.mockReturnValue(false);
+    let insertSql = '';
+    const fakeClient = makeFakeClient(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
+        insertSql = sql;
+        return { rows: [{ id: 'new-cv-id' }] };
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
+    const res = await request(app)
+      .post('/cv')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('cv', minPdf, { filename: 'cv.pdf', contentType: 'application/pdf' });
+    expect(res.status).toBe(200);
+    expect(res.body.uploaded).toBe(true);
+    expect(res.body.pending).toBeUndefined();
+    expect(insertSql).toContain('TRUE');
+  });
+});
+
+// ── POST /cv/:id/confirm ──────────────────────────────────────────────────────
+
+describe('POST /cv/:id/confirm', () => {
+  it('returns 401 without a JWT', async () => {
+    const res = await request(app).post('/cv/00000000-0000-0000-0000-000000000001/confirm');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 when the CV version does not exist', async () => {
+    const fakeClient = makeFakeClient(async () => ({ rows: [] }));
+    pool.connect.mockResolvedValue(fakeClient);
+    const res = await request(app)
+      .post('/cv/00000000-0000-0000-0000-000000000001/confirm')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('promotes a staged CV to current and returns confirmed:true', async () => {
+    const fakeClient = makeFakeClient(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('SELECT id, filename FROM cvs WHERE id')) {
+        return { rows: [{ id: 'staged-id', filename: 'cv-20260614120000-abc123.pdf' }] };
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+    spyExistsSync.mockReturnValue(true);
+
+    const res = await request(app)
+      .post('/cv/staged-id/confirm')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.confirmed).toBe(true);
   });
 });

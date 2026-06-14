@@ -160,13 +160,14 @@ router.get('/history', cvRateLimit, authenticate, async (_req, res, next) => {
   }
 });
 
-// Admin: upload a new CV version (becomes current immediately)
+// Admin: upload a new CV version — auto-publishes only when no privacy warnings
 router.post('/', cvRateLimit, authenticate, wrapMulter(upload.single('cv')), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const warnings  = scanForPrivateInfo(req.file.buffer);
   const filename  = timestampedFilename();
   const filePath  = cvPath(filename);
+  const isCurrent = warnings.length === 0;
 
   const client = await pool.connect();
   try {
@@ -175,34 +176,39 @@ router.post('/', cvRateLimit, authenticate, wrapMulter(upload.single('cv')), asy
 
     await client.query('BEGIN');
 
-    // Demote current version
-    await client.query(`UPDATE cvs SET is_current = FALSE WHERE is_current = TRUE`);
+    if (isCurrent) {
+      await client.query(`UPDATE cvs SET is_current = FALSE WHERE is_current = TRUE`);
+    }
 
-    // Insert new version as current
     const { rows } = await client.query(
-      `INSERT INTO cvs (filename, is_current) VALUES ($1, TRUE) RETURNING id`,
-      [filename]
+      `INSERT INTO cvs (filename, is_current) VALUES ($1, $2) RETURNING id`,
+      [filename, isCurrent]
     );
     const newId = rows[0].id;
 
-    // Prune oldest versions beyond MAX_CV_VERSIONS
-    const all = await client.query(
-      `SELECT id, filename FROM cvs ORDER BY uploaded_at DESC OFFSET $1`,
-      [MAX_CV_VERSIONS]
-    );
-    for (const old of all.rows) {
-      try { fs.unlinkSync(cvPath(old.filename)); } catch { /* already gone */ }
-      await client.query(`DELETE FROM cvs WHERE id = $1`, [old.id]);
+    if (isCurrent) {
+      const all = await client.query(
+        `SELECT id, filename FROM cvs ORDER BY uploaded_at DESC OFFSET $1`,
+        [MAX_CV_VERSIONS]
+      );
+      for (const old of all.rows) {
+        try { fs.unlinkSync(cvPath(old.filename)); } catch { /* already gone */ }
+        await client.query(`DELETE FROM cvs WHERE id = $1`, [old.id]);
+      }
     }
 
     await client.query('COMMIT');
 
-    await logAudit(req, 'cv.upload', 'cv', newId, { filename, size: req.file.size });
-    logger.info({ filename, id: newId }, '[cv] New CV version uploaded and set as current');
-    res.status(200).json({ uploaded: true, id: newId, filename, warnings });
+    await logAudit(req, 'cv.upload', 'cv', newId, { filename, size: req.file.size, pending: !isCurrent });
+    logger.info({ filename, id: newId, isCurrent }, '[cv] CV version uploaded');
+
+    if (isCurrent) {
+      res.status(200).json({ uploaded: true, id: newId, filename, warnings: [] });
+    } else {
+      res.status(200).json({ pending: true, id: newId, filename, warnings });
+    }
   } catch (err) {
     await client.query('ROLLBACK');
-    // Clean up file if DB failed
     try { fs.unlinkSync(filePath); } catch { /* ignore */ }
     logger.error({ err }, '[cv] CV upload failed');
     next(err);
@@ -238,6 +244,45 @@ router.put('/:id/set-current', cvRateLimit, authenticate, async (req, res, next)
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[cv] set-current failed');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// Admin: confirm a staged (pending) CV version — sets it as current
+router.post('/:id/confirm', cvRateLimit, authenticate, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const check = await client.query(`SELECT id, filename FROM cvs WHERE id = $1`, [req.params.id]);
+    if (!check.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'CV version not found' });
+    }
+    const { filename } = check.rows[0];
+
+    await client.query(`UPDATE cvs SET is_current = FALSE WHERE is_current = TRUE`);
+    await client.query(`UPDATE cvs SET is_current = TRUE WHERE id = $1`, [req.params.id]);
+
+    const all = await client.query(
+      `SELECT id, filename FROM cvs ORDER BY uploaded_at DESC OFFSET $1`,
+      [MAX_CV_VERSIONS]
+    );
+    for (const old of all.rows) {
+      try { fs.unlinkSync(cvPath(old.filename)); } catch { /* already gone */ }
+      await client.query(`DELETE FROM cvs WHERE id = $1`, [old.id]);
+    }
+
+    await client.query('COMMIT');
+
+    await logAudit(req, 'cv.confirm', 'cv', req.params.id, { filename });
+    logger.info({ id: req.params.id, filename }, '[cv] Staged CV version confirmed as current');
+    res.json({ confirmed: true, id: req.params.id, filename });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error({ err }, '[cv] CV confirm failed');
     next(err);
   } finally {
     client.release();

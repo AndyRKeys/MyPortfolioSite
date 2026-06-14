@@ -148,18 +148,20 @@ async function uploadCv(file) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Upload failed');
 
-        if (data.warnings && data.warnings.length) {
+        if (data.pending && data.warnings && data.warnings.length) {
             const warningList = data.warnings.join('\n• ');
             const proceed = confirm(
                 `The scan found potential private information in this PDF:\n• ${warningList}\n\nDo you still want to publish it?`
             );
             if (!proceed) {
-                // Delete the just-uploaded version
                 await authFetch(`/cv/${data.id}`, { method: 'DELETE' });
                 setMessage('Upload cancelled — CV removed from server.', true);
                 await Promise.all([loadStatus(), loadHistory()]);
                 return;
             }
+            // Admin confirmed — promote the staged version to current
+            const confirmRes = await authFetch(`/cv/${data.id}/confirm`, { method: 'POST' });
+            if (!confirmRes.ok) throw new Error('Failed to confirm CV upload');
         }
 
         setMessage('CV uploaded successfully — now set as current.');
