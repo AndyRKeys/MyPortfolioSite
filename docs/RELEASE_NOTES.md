@@ -1,5 +1,67 @@
 # Release Notes
 
+## Release 2026-06-15
+
+**Released:** 2026-06-15
+**Branch:** release/2026-06-15
+**PR:** [#477](https://github.com/AndyRKeys/MyPortfolioSite/pull/477)
+**Closes:** #475, #469, #466, #468, #465, #464, #438, #371, #429, #432, #435, #185, #455, #453, #450, #426, #430, #424, #447, #425, #445, #427, #431, #379, #248, #418, #420, #433, #434, #150, #376, #111, #158
+
+### Summary
+
+Security hardening, new features, and a large batch of code quality refactors. 29 commits bundled from `dev` since the 2026-05-31-3 release. Highlights: nginx `X-Forwarded-For` spoofing closed (#475), DOMPurify replaces hand-rolled XSS sanitizer (#427), rate-limit counter isolation (#445), embedded search on public pages (#469), audit log UI overhaul (#464, #468), mobile GPS upload button (#466), and a comprehensive code quality sweep.
+
+### Features
+
+- **feat(#469):** Embed search input on blog and travel listing pages — users can filter posts without navigating away
+- **feat(#466):** Upload button to trigger GPS coordinate extraction on mobile — restores one-tap GPS import when drag-and-drop is unavailable
+- **feat(#468):** Audit log UI improvements — status badges, scrollable feed, colour-coded event types
+- **feat(#464):** Audit log table, activity dashboard in admin stats, full-text search route, CV version history, dev seed script, compose file deduplication
+- **feat(#248):** Location field normalised to "City, Country" format on geocode — consistent presentation across all travel memories
+- **feat(#418):** Authenticated sessions exempted from rate limiting — admin workflows no longer blocked by rate limits
+- **fix(#420):** Contact form now delivers to `ADMIN_EMAIL` with structured delivery logging — was silently sending to a hardcoded address
+
+### Security
+
+- **fix(#475):** nginx `X-Forwarded-For` header stripped at the proxy boundary to prevent IP spoofing; search query length capped at 200 chars
+- **fix(#427):** Hand-rolled HTML sanitizer replaced with DOMPurify — eliminates entire class of XSS bypass risk
+- **fix(#445):** Rate limit counters isolated per endpoint via `key_type` column — prevents one endpoint's burst from consuming another's quota
+- **refactor+security(#453):** `next(err)` used in all DB-error catch blocks; rate limiting added to posts, travel, and account management routes
+
+### Bug Fixes
+
+- **fix(#465):** `ERR_ERL_INVALID_HITS` suppressed in test output
+- **fix(#371):** Error alert cooldown persisted in DB across container restarts — was reset on every container cycle, allowing repeated alert storms
+- **fix(#426):** CV download filename aligned to `Andy_Keys_CV.pdf`
+- **fix(#424):** `isAdminSession()` removed from `config.js`
+- **fix(#447):** Backup schedule check tightened to prevent false positives
+- **fix(#425):** `JWT_EXPIRY` env var now wired through in `auth.js` — was ignored, causing tokens to use the hardcoded default
+- **fix(#450):** `docker.sock` privilege escalation risk documented
+
+### Refactoring
+
+- **refactor(#438):** `admin/travel.js` split into focused sub-modules
+- **refactor(#455):** `dc()` wrapper added; 37 raw `docker compose` invocations in deploy scripts replaced
+- **refactor(#429):** `UPLOADS_DIR`, `wrapMulter`, `findUniqueSlug` extracted as shared backend utilities
+- **refactor(#432):** `recordVisit()` extracted with admin-session guard
+- **refactor(#430):** Lightbox extracted to `utils/lightbox.js` — shared across blog and travel pages
+- **refactor(#431):** `createMessenger` factory extracted for admin modules
+- **refactor:** Batch refactors closing #433, #434, #150, #376, #111, #158
+
+### Ops / Docs
+
+- **ops(#435):** Deprecated deploy files deleted; `|| true` on rollback fixed; `server-setup.sh` hardened
+- **docs(#185):** Daily backup cron documented in `docs/BACKUP.md`; stale references corrected
+- **docs(#379):** `docs/TECH_DEBT.md` added — full codebase tech debt audit
+
+### Deployment Notes
+
+- No breaking changes
+- DB schema: `audit_log` table added (`CREATE TABLE IF NOT EXISTS` — safe on existing DB, no data at risk)
+- No new required env vars
+
+---
+
 ## Release 2026-05-31-3
 
 **Released:** 2026-05-31
