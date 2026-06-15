@@ -1,6 +1,6 @@
 # Architecture
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-06-15_
 
 This document describes the system architecture at a high level — how the pieces fit together, the request flow, and the overall design. Read this to understand the "big picture" before diving into code.
 
@@ -247,7 +247,7 @@ As an example of how the system works end-to-end:
 | `auth.js` | Complex WebAuthn + JWT state machine | Auth bugs have security implications | High test coverage, careful code review |
 | PostgreSQL (single instance) | No replication, no backup | Data loss if the server disk fails | Backup hardening outstanding — see ROADMAP §4.5 (#164) |
 | Nginx reverse proxy | Single point of failure | If Nginx breaks, entire site is down | Keep Nginx config simple and tested |
-| PM2 (process manager) | Limited visibility into errors | Crashes not always obvious | Health endpoint planned (#163) |
+| Docker Compose (process supervisor) | Container restart on crash | Crashes restart automatically; logs via `docker logs` | Monitor with `docker compose ps` and `/api/health` |
 
 ---
 
