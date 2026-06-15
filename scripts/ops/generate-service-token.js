@@ -14,9 +14,9 @@ if (!secret) {
 }
 
 const token = jwt.sign(
-  { role: 'service', service: serviceName },
+  { role: 'service', service: serviceName, sub: `service:${serviceName}` },
   secret,
-  { expiresIn: `${expiryDays}d` }
+  { expiresIn: `${expiryDays}d`, algorithm: 'HS256' }
 );
 
 console.log(token);

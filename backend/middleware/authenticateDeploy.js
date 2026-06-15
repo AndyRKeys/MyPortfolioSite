@@ -14,17 +14,28 @@ export function authenticateDeploy(req, res, next) {
 
   // Try admin JWT first
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    // A service-shaped payload signed with JWT_SECRET must be rejected — the
+    // admin path has no scope enforcement and must not accidentally accept it.
+    if (payload.role === 'service') {
+      return res.status(403).json({ error: 'Invalid service token scope' });
+    }
+    req.user = payload;
     return next();
   } catch {}
 
-  // Try service JWT
+  // Service token path: disabled when SERVICE_JWT_SECRET is missing or equals
+  // JWT_SECRET — equal secrets collapse the isolation the two paths provide.
   const serviceSecret = process.env.SERVICE_JWT_SECRET;
-  if (!serviceSecret) {
+  if (!serviceSecret || serviceSecret === process.env.JWT_SECRET) {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
   try {
-    const payload = jwt.verify(token, serviceSecret);
+    const payload = jwt.verify(token, serviceSecret, { algorithms: ['HS256'] });
+    // exp is required — tokens without a finite lifetime are not accepted.
+    if (!payload.exp) {
+      return res.status(403).json({ error: 'Service token must have an expiry' });
+    }
     if (payload.role !== 'service') {
       return res.status(403).json({ error: 'Invalid service token scope' });
     }

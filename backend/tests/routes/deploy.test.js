@@ -47,7 +47,8 @@ function adminToken() {
 function serviceToken(overrides = {}) {
   return jwt.sign(
     { role: 'service', service: 'deploy-webhook', ...overrides },
-    SERVICE_SECRET
+    SERVICE_SECRET,
+    { expiresIn: '1d' }
   );
 }
 
@@ -79,7 +80,7 @@ describe('GET /deploy/status — authenticateDeploy', () => {
   });
 
   it('returns 403 when service JWT has role:admin instead of role:service', async () => {
-    const token = jwt.sign({ role: 'admin', service: 'deploy-webhook' }, SERVICE_SECRET);
+    const token = jwt.sign({ role: 'admin', service: 'deploy-webhook' }, SERVICE_SECRET, { expiresIn: '1d' });
     const res = await request(app)
       .get('/deploy/status')
       .set('Authorization', `Bearer ${token}`);
@@ -99,6 +100,33 @@ describe('GET /deploy/status — authenticateDeploy', () => {
   it('returns 401 with no Authorization header', async () => {
     const res = await request(app).get('/deploy/status');
     expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when a service-claim token is signed with the admin secret', async () => {
+    // A service-shaped payload signed with JWT_SECRET (not SERVICE_JWT_SECRET)
+    // must be rejected — the admin path must not accept service-scoped tokens.
+    const token = jwt.sign(
+      { role: 'service', service: 'deploy-webhook' },
+      ADMIN_SECRET,
+      { algorithm: 'HS256' }
+    );
+    const res = await request(app)
+      .get('/deploy/status')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when service JWT has no expiry claim', async () => {
+    // Tokens without exp must be rejected to prevent indefinite-lifetime service tokens.
+    const token = jwt.sign(
+      { role: 'service', service: 'deploy-webhook' },
+      SERVICE_SECRET,
+      { algorithm: 'HS256' }
+    );
+    const res = await request(app)
+      .get('/deploy/status')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });
 
