@@ -11,9 +11,9 @@ import { escapeHtml, highlight } from './utils/html.js';
 
 function showLoadingSkeleton(container) {
   container.innerHTML = [1, 2, 3].map(() => `
-    <div class="search-result-item skeleton-item" aria-hidden="true">
-      <div class="skeleton-line" style="width:55%;height:1rem;margin-bottom:0.5rem"></div>
-      <div class="skeleton-line" style="width:85%;height:0.75rem"></div>
+    <div class="search-result-item skeleton-item" aria-hidden="true" style="pointer-events:none">
+      <div class="skeleton-line skeleton-line--title"></div>
+      <div class="skeleton-line skeleton-line--body"></div>
     </div>
   `).join('');
 }
@@ -88,7 +88,7 @@ async function runSearch(query, type) {
     const res = await fetch(`${API_BASE}/search?${qs}`);
 
     if (res.status === 400) {
-      showEmptyState(resultsEl, query);
+      resultsEl.innerHTML = '<p class="search-empty">Please enter a search term.</p>';
       return;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -2775,7 +2775,7 @@ a.travel-card:visited {
 
 .filter-pill input:checked + span {
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-nav-text, #fff);
     border-color: transparent;
 }
 
@@ -2784,11 +2784,6 @@ a.travel-card:visited {
 [data-theme="dark"] .filter-pill span {
     border-color: var(--color-border);
     color: var(--color-text-secondary);
-}
-
-[data-theme="dark"] .filter-pill input:checked + span {
-    background: var(--color-accent);
-    color: #fff;
 }
 
 .search-summary {
@@ -2822,11 +2817,11 @@ a.travel-card:visited {
 }
 
 .search-result-item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 8px var(--color-shadow, rgba(0,0,0,0.08));
 }
 
 [data-theme="dark"] .search-result-item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    box-shadow: 0 2px 8px var(--color-shadow-hover, rgba(0,0,0,0.4));
 }
 
 .search-result-link {
@@ -2915,6 +2910,9 @@ a.travel-card:visited {
     border-radius: 3px;
     display: block;
 }
+
+.skeleton-line--title { width: 55%; height: 1rem; margin-bottom: 0.5rem; }
+.skeleton-line--body  { width: 85%; height: 0.75rem; }
 
 @keyframes skeleton-shimmer {
     0%   { background-position: 200% 0; }
