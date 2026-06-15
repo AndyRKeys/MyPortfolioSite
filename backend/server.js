@@ -4,6 +4,7 @@ import { logger } from './utils/logger.js';
 import { pool } from './db/pool.js';
 import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
 import { validateEnvOrExit } from './utils/validateEnv.js';
+import { pruneAuditLog } from './utils/auditLog.js';
 
 // Fail fast if any required env var is missing/empty — catches vars defined in
 // .env but not bridged into the container's compose `environment` block (#357).
@@ -27,6 +28,13 @@ async function runStartupPreflight() {
     logger.info('[startup:preflight] DB connection OK');
   } catch (err) {
     logger.warn({ err: err.message }, '[startup:preflight] DB connection failed — check DB service and credentials');
+  }
+
+  // Prune stale audit_log rows (GDPR/PII: IPs retained max 90 days — #467)
+  try {
+    await pruneAuditLog();
+  } catch (err) {
+    logger.warn({ err: err.message }, '[startup:preflight] audit_log prune failed — stale rows may accumulate');
   }
 
   // Outlook OAuth2 check (only if configured)
