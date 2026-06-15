@@ -39,6 +39,9 @@ router.get('/', searchRateLimit, publicCache(60), async (req, res, next) => {
     if (!q) {
       return res.status(400).json({ error: 'Query parameter "q" is required' });
     }
+    if (q.length > 500) {
+      return res.status(400).json({ error: 'Search query too long (max 500 characters).' });
+    }
 
     logger.info({ q, type, limit }, '[search] Full-text search request');
 
