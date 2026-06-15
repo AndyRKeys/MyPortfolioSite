@@ -45,6 +45,14 @@
         <section class="sec-cont" id="blog">
             <h2>Posts</h2>
 
+            <form id="listing-search-form" class="search-form listing-search-form" role="search">
+                <div class="search-input-wrap">
+                    <input id="listing-search-input" type="search" name="q" placeholder="Search posts…" class="search-input" aria-label="Search blog posts" autocomplete="off" />
+                    <button type="submit" class="btn-primary search-submit">Search</button>
+                </div>
+            </form>
+            <div id="listing-search-results" class="listing-search-results" aria-live="polite" hidden></div>
+
             <div class="blog-view-toggle" role="tablist">
                 <button type="button" class="view-toggle-btn active" data-view="timeline" role="tab" aria-selected="true">Timeline</button>
                 <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards</button>

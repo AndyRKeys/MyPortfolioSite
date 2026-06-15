@@ -1,5 +1,5 @@
 import { API_BASE } from './config.js';
-import { escapeHtml } from './utils/html.js';
+import { escapeHtml, highlight } from './utils/html.js';
 import { formatVisitDate } from './utils/date.js';
 import { buildTimelineItem, buildPublicTravelCard } from './utils/dom.js';
 import { initLightbox } from './utils/lightbox.js';
@@ -185,3 +185,84 @@ function loadPublicTravelPosts() {
 recordVisit('travel');
 loadPublicTravelPosts();
 initLightbox();
+
+// ── Embedded listing search (#469) ────────────────────────────────────────────
+
+(function initListingSearch() {
+    var form    = document.getElementById('listing-search-form');
+    var input   = document.getElementById('listing-search-input');
+    var results = document.getElementById('listing-search-results');
+    var mapEl   = document.getElementById('travel-map');
+    var grid    = document.getElementById('travel-grid');
+    var timeline = document.getElementById('travel-timeline');
+    var toggle  = document.querySelector('.travel-view-toggle');
+
+    if (!form || !input || !results) return;
+
+    function setListingHidden(hidden) {
+        if (mapEl)    mapEl.classList.toggle('hidden', hidden);
+        if (grid)     grid.classList.toggle('hidden', hidden);
+        if (timeline) timeline.classList.toggle('hidden', hidden);
+        if (toggle)   toggle.classList.toggle('hidden', hidden);
+    }
+
+    function restoreListing() {
+        // Re-apply the active view so the right containers are shown.
+        if (toggle) toggle.classList.remove('hidden');
+        var activeBtn = document.querySelector('.travel-view-toggle .view-toggle-btn.active');
+        var activeView = (activeBtn && activeBtn.dataset.view) || 'map-timeline';
+        applyTravelView(activeView);
+    }
+
+    var urlQ = new URLSearchParams(window.location.search).get('q') || '';
+    if (urlQ) { input.value = urlQ; runSearch(urlQ); }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q   = input.value.trim();
+        var url = new URL(window.location.href);
+        if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+        history.replaceState(null, '', url);
+        runSearch(q);
+    });
+
+    input.addEventListener('input', function () {
+        if (!input.value.trim()) runSearch('');
+    });
+
+    async function runSearch(q) {
+        if (!q) {
+            results.hidden = true;
+            results.innerHTML = '';
+            restoreListing();
+            return;
+        }
+        setListingHidden(true);
+        results.hidden = false;
+        results.innerHTML = '<p class="hint">Searching…</p>';
+        try {
+            var res  = await fetch(API_BASE + '/search?q=' + encodeURIComponent(q) + '&type=travel&limit=20');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var data = await res.json();
+            if (!data.results || !data.results.length) {
+                results.innerHTML = '<p class="search-empty">No travel memories found.</p>';
+                return;
+            }
+            results.innerHTML = '<ul class="search-result-list">' + data.results.map(function (r) {
+                var href    = '/travel/post/?id=' + encodeURIComponent(r.id);
+                var dateStr = r.post_date || r.published_at || '';
+                return '<li class="search-result-item">' +
+                    '<a href="' + escapeHtml(href) + '" class="search-result-link">' +
+                        '<span class="search-result-title">' + highlight(r.title, q) + '</span>' +
+                        (r.location ? '<span class="search-result-meta">' + escapeHtml(r.location) + '</span>' : '') +
+                        (r.excerpt ? '<p class="search-result-excerpt">' + highlight(r.excerpt, q) + '</p>' : '') +
+                        '<span class="search-result-meta">' + escapeHtml(formatVisitDate(dateStr) || '') + '</span>' +
+                    '</a>' +
+                '</li>';
+            }).join('') + '</ul>';
+        } catch (err) {
+            console.error('[travel-search] failed:', err && (err.message || String(err)));
+            results.innerHTML = '<p class="search-empty">Search failed — please try again.</p>';
+        }
+    }
+})();
