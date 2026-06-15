@@ -9,6 +9,23 @@ import { escapeHtml, highlight } from './utils/html.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function showLoadingSkeleton(container) {
+  container.innerHTML = [1, 2, 3].map(() => `
+    <div class="search-result-item skeleton-item" aria-hidden="true">
+      <div class="skeleton-line" style="width:55%;height:1rem;margin-bottom:0.5rem"></div>
+      <div class="skeleton-line" style="width:85%;height:0.75rem"></div>
+    </div>
+  `).join('');
+}
+
+function showEmptyState(container, query) {
+  container.innerHTML = `
+    <div class="search-empty">
+      <p>No results for <strong>${escapeHtml(query)}</strong>.</p>
+      <p class="search-empty-hint">Try fewer words or check the spelling.</p>
+    </div>`;
+}
+
 function typeLabel(postType) {
   return postType === 'travel' ? 'Travel' : 'Blog';
 }
@@ -27,9 +44,7 @@ function formatDate(dateStr) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderResults(data, query) {
-  if (!data.results.length) {
-    return `<p class="search-empty">No results for <strong>${escapeHtml(query)}</strong>.</p>`;
-  }
+  if (!data.results.length) return null;
 
   const grouped = { blog: [], travel: [] };
   data.results.forEach(r => grouped[r.post_type]?.push(r));
@@ -65,7 +80,7 @@ function renderResults(data, query) {
 
 async function runSearch(query, type) {
   const resultsEl = document.getElementById('search-results');
-  resultsEl.innerHTML = '<p class="hint">Searching…</p>';
+  showLoadingSkeleton(resultsEl);
 
   try {
     const qs  = new URLSearchParams({ q: query, limit: '20' });
@@ -73,13 +88,18 @@ async function runSearch(query, type) {
     const res = await fetch(`${API_BASE}/search?${qs}`);
 
     if (res.status === 400) {
-      resultsEl.innerHTML = '<p class="search-empty">Please enter a search term.</p>';
+      showEmptyState(resultsEl, query);
       return;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    resultsEl.innerHTML = renderResults(data, query);
+    const html = renderResults(data, query);
+    if (html === null) {
+      showEmptyState(resultsEl, query);
+    } else {
+      resultsEl.innerHTML = html;
+    }
   } catch {
     resultsEl.innerHTML = '<p class="hint" style="color:var(--color-error)">Search failed. Please try again.</p>';
   }
