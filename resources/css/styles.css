@@ -2756,15 +2756,34 @@ a.travel-card:visited {
 
 .search-filters {
     display: flex;
-    gap: 1rem;
-    font-size: var(--text-sm);
+    gap: 0.5rem;
+    margin: 1rem 0;
+    flex-wrap: wrap;
 }
 
-.search-filter-label {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
+.filter-pill span {
+    display: inline-block;
+    padding: 0.3rem 0.9rem;
+    border-radius: 1rem;
+    border: 1px solid var(--color-border);
     cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+    color: var(--color-text-secondary);
+}
+
+.filter-pill input:checked + span {
+    background: var(--color-accent);
+    color: var(--color-nav-text, #fff);
+    border-color: transparent;
+}
+
+.filter-pill:hover span { opacity: 0.85; }
+
+[data-theme="dark"] .filter-pill span {
+    border-color: var(--color-border);
+    color: var(--color-text-secondary);
 }
 
 .search-summary {
@@ -2789,12 +2808,24 @@ a.travel-card:visited {
 }
 
 .search-result-item {
-    border-bottom: 1px solid var(--color-border);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    margin-bottom: 0.6rem;
+    transition: box-shadow 0.15s;
+}
+
+.search-result-item:hover {
+    box-shadow: 0 2px 8px var(--color-shadow, rgba(0,0,0,0.08));
+}
+
+[data-theme="dark"] .search-result-item:hover {
+    box-shadow: 0 2px 8px var(--color-shadow-hover, rgba(0,0,0,0.4));
 }
 
 .search-result-link {
     display: block;
-    padding: 0.75rem 0;
     text-decoration: none;
     color: inherit;
 }
@@ -2855,7 +2886,37 @@ a.travel-card:visited {
 .search-empty {
     color: var(--color-text-muted);
     text-align: center;
-    padding: 2rem 0;
+    padding: 2.5rem 1rem;
+}
+
+.search-empty strong { color: inherit; }
+
+.search-empty-hint {
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    opacity: 0.75;
+}
+
+/* Skeleton loading state */
+
+.skeleton-item {
+    pointer-events: none;
+}
+
+.skeleton-line {
+    background: linear-gradient(90deg, var(--color-border) 25%, var(--color-surface-alt) 50%, var(--color-border) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+    border-radius: 3px;
+    display: block;
+}
+
+.skeleton-line--title { width: 55%; height: 1rem; margin-bottom: 0.5rem; }
+.skeleton-line--body  { width: 85%; height: 0.75rem; }
+
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 /* ── CV version history table (#109) ────────────────────────────────────────── */
