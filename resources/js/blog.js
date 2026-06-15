@@ -1,6 +1,8 @@
 import { API_BASE } from './config.js';
 import { formatPostDate } from './utils/date.js';
 import { buildPostCard, buildTimelineItem } from './utils/dom.js';
+import { escapeHtml, highlight } from './utils/html.js';
+import { recordVisit } from './utils/stats.js';
 
 function truncate(str, len) {
     if (!str) return '';
@@ -96,7 +98,93 @@ function loadPosts() {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-// Fire-and-forget visit counter — swallow errors so stats never break the page
-fetch(API_BASE + '/stats/visit?page=blog', { method: 'POST' }).catch(function () {});
+recordVisit('blog');
 
 loadPosts();
+
+// ── Embedded listing search (#469) ────────────────────────────────────────────
+
+(function initListingSearch() {
+    var form    = document.getElementById('listing-search-form');
+    var input   = document.getElementById('listing-search-input');
+    var results = document.getElementById('listing-search-results');
+    var list    = document.getElementById('posts-list');
+    var timeline = document.getElementById('blog-timeline');
+    var toggle  = document.querySelector('.blog-view-toggle');
+
+    if (!form || !input || !results) return;
+
+    function setListingHidden(hidden) {
+        // Don't unhide #posts-list directly — its visibility is owned by the
+        // view toggle (Cards vs Timeline). We hide both containers when
+        // searching, then defer to applyBlogView() via the toggle when clearing.
+        if (timeline) timeline.classList.toggle('hidden', hidden);
+        if (list)     list.classList.toggle('hidden', hidden);
+        if (toggle)   toggle.classList.toggle('hidden', hidden);
+    }
+
+    function restoreListing() {
+        // Re-apply the toggle's active view so the right container is shown.
+        if (toggle) toggle.classList.remove('hidden');
+        var activeBtn = document.querySelector('.blog-view-toggle .view-toggle-btn.active');
+        var activeView = (activeBtn && activeBtn.dataset.view) || 'timeline';
+        if (activeView === 'timeline') {
+            if (list)     list.classList.add('hidden');
+            if (timeline) timeline.classList.remove('hidden');
+        } else {
+            if (list)     list.classList.remove('hidden');
+            if (timeline) timeline.classList.add('hidden');
+        }
+    }
+
+    var urlQ = new URLSearchParams(window.location.search).get('q') || '';
+    if (urlQ) { input.value = urlQ; runSearch(urlQ); }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q   = input.value.trim();
+        var url = new URL(window.location.href);
+        if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+        history.replaceState(null, '', url);
+        runSearch(q);
+    });
+
+    input.addEventListener('input', function () {
+        if (!input.value.trim()) runSearch('');
+    });
+
+    async function runSearch(q) {
+        if (!q) {
+            results.hidden = true;
+            results.innerHTML = '';
+            restoreListing();
+            return;
+        }
+        setListingHidden(true);
+        results.hidden = false;
+        results.innerHTML = '<p class="hint">Searching…</p>';
+        try {
+            var res  = await fetch(API_BASE + '/search?q=' + encodeURIComponent(q) + '&type=blog&limit=20');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var data = await res.json();
+            if (!data.results || !data.results.length) {
+                results.innerHTML = '<p class="search-empty">No posts found.</p>';
+                return;
+            }
+            results.innerHTML = '<ul class="search-result-list">' + data.results.map(function (r) {
+                var href    = '/blog/post/?slug=' + encodeURIComponent(r.slug || '');
+                var dateStr = r.post_date || r.published_at || '';
+                return '<li class="search-result-item">' +
+                    '<a href="' + escapeHtml(href) + '" class="search-result-link">' +
+                        '<span class="search-result-title">' + highlight(r.title, q) + '</span>' +
+                        (r.excerpt ? '<p class="search-result-excerpt">' + highlight(r.excerpt, q) + '</p>' : '') +
+                        '<span class="search-result-meta">' + escapeHtml(formatPostDate({ post_date: dateStr }) || '') + '</span>' +
+                    '</a>' +
+                '</li>';
+            }).join('') + '</ul>';
+        } catch (err) {
+            console.error('[blog-search] failed:', err && (err.message || String(err)));
+            results.innerHTML = '<p class="search-empty">Search failed — please try again.</p>';
+        }
+    }
+})();

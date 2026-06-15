@@ -8,11 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Changed
+
+- Daily backup cron installed on `ak-home-server` and docs aligned (#185): `scripts/backup/db-backup.sh` now runs at 02:00 daily (`pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, log to `~/backup.log`). `docs/BACKUP.md` rewritten to lead with the automated flow, document verification + ad-hoc usage, and reflect the actual restore path (`db-restore.sh` uses `gunzip | psql`, not `pg_restore`). Offsite sync (rclone → B2) remains scaffolded but deliberately unconfigured — local-only is sufficient for now. `CLAUDE.md` fragile-areas list corrected from "No backups" to the actual state.
+
 ---
 
 ## Release 2026-05-25
 
 ### Added
+
 - Frontend error logger (#333, #336): `error-logger.js` captures uncaught JS errors, resource-load failures, unhandled promise rejections, CSP violations, and explicit `console.error`/`console.warn` calls. Reports delivered to `POST /api/debug/errors`, persisted to `client_errors` table, and surfaced in the admin stats panel. Resilient delivery: failed sends buffered in `localStorage` and flushed on next page load (#334). Request-ID correlation (#336) groups all errors from the same page view and links frontend reports to the exact backend log line via `X-Request-Id`.
 - Error alert emails (#333): admin receives an email when 20+ frontend errors arrive within a 15-minute window (configurable via `ERROR_ALERT_THRESHOLD` / `ERROR_ALERT_WINDOW_MS`). In-memory cooldown prevents repeated emails during sustained storms. Top error types/messages included in the alert body.
 - Backend startup env validation (#357): `backend/utils/validateEnv.js` asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty at startup via `validateEnvOrExit()`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container — the backend logs each missing var and exits 1, so the deploy rolls back instead of serving traffic with broken config.
@@ -23,6 +28,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Vitest test coverage for upload, cv, and debug routes (#335): auth gating, MIME filtering, size limits, private-info scan warnings, error ingestion/persistence, pagination, and sanitisation. `posts` tests extended with happy-path INSERT (201), PUT 404, and DELETE flows. Bug fix: `cv.js` `MulterError` now correctly returns 400 (was 500) via callback pattern.
 
 ### Fixed
+
 - Browser-extension errors filtered from error-logger (#356): uncaught errors and resource-load failures originating from `chrome-extension://`, `moz-extension://`, or `safari-extension://` URLs are discarded before reaching `/api/debug/errors`. Deploy-time Puppeteer tests now intercept and mock `POST /api/debug/errors` to prevent headless-Chromium noise (`Couldn't load fs/zlib`) from writing to `client_errors` and triggering false alert emails.
 - CORS smoke check added to regression suite (#357): `GET /api/health` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must succeed — catches the case where `SITE_HOST` is missing in the container and every site-origin request returns 500.
 - CSP violations handler made `async` (#360): `POST /api/debug/csp-violations` handler is now correctly `async` for CodeQL rate-limit pattern recognition.
@@ -31,11 +37,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Backup bootstrap on deploy (#352): deploy now creates the backup directory, installs the cron job, and takes an initial DB dump if none exists — ensures the backup schedule is active immediately after a fresh provision.
 
 ### Security
+
 - CSP `report-to` added alongside deprecated `report-uri` (#337): `Reporting-Endpoints` header names `/api/debug/csp-violations`; both directives present during transition.
 - Debug endpoint rate limiting migrated to DB-backed `createRateLimiter` (#337): limits survive container restarts and are consistent with auth/contact limiters.
 - `qs` dependency bumped (#321): resolves upstream prototype-pollution advisory.
 
 ### Changed
+
 - Deploy test-suite reporting normalised (#366): all five test phases (`vitest`, `error-logger`, `error-logger-contracts`, `csp-violations`, `regression`) now emit consistent `suite= tests= passed= failed=` counts in the deploy report. Backend Vitest counts read from the json reporter (immune to text-summary format drift). Deploy-time Puppeteer tests use `setRequestInterception` to mock `POST /api/debug/errors` so test sessions never write to `client_errors`. DEPLOY COMPLETE banner moved to after the report box.
 - Unified bash deploy scripts (#300): `dev-deploy.sh` and `prod-deploy.sh` replaced by a single `deploy.sh --env dev|prod`.
 - Project structure reorg (#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) giving clean URLs. `resources/java/` renamed to `resources/js/`. All internal links and the magic link email URL updated.
@@ -45,9 +53,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-26
 
 ### Added
+
 - Admin CRUD E2E test suite (#175): `test-admin-e2e.js` runs full authenticated Puppeteer CRUD flows (blog create/delete, travel create/delete, deploy panel smoke) on every deploy. Hard-fail on assertion error (triggers rollback); warn-only if Puppeteer fails to launch. Test records prefixed `[E2E]` are cleaned up at start and end of each run.
 
 ### Changed
+
 - Admin JS modularised (#175): 1,173-line `admin.js` monolith split into eight focused modules under `resources/js/admin/` (`posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`). `admin.js` is now a thin entry point that imports and initialises each module.
 - jQuery removed from admin panel (#176): all admin JS migrated to vanilla DOM APIs and `fetch`. No behaviour change.
 - Travel date field unified (#132): `visit_date`/`visitDate` alias removed from `TRAVEL_COLS`; field is now consistently `post_date` throughout the stack (backend routes, middleware schemas, frontend JS, utils, tests).
@@ -57,6 +67,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-25
 
 ### Added
+
 - Frontend error logger (#333, #336): `error-logger.js` captures uncaught JS errors, resource-load failures, unhandled promise rejections, CSP violations, and explicit `console.error`/`console.warn` calls. Reports delivered to `POST /api/debug/errors`, persisted to `client_errors` table, and surfaced in the admin stats panel. Resilient delivery: failed sends buffered in `localStorage` and flushed on next page load (#334). Request-ID correlation (#336) groups all errors from the same page view and links frontend reports to the exact backend log line via `X-Request-Id`.
 - Error alert emails (#333): admin receives an email when 20+ frontend errors arrive within a 15-minute window (configurable via `ERROR_ALERT_THRESHOLD` / `ERROR_ALERT_WINDOW_MS`). In-memory cooldown prevents repeated emails during sustained storms. Top error types/messages included in the alert body.
 - Backend startup env validation (#357): `backend/utils/validateEnv.js` asserts every required env var (`PORT`, `DB_*`, `JWT_SECRET`, `WEBAUTHN_*`, `FRONTEND_URL`, `SITE_HOST`, `ADMIN_EMAIL`) is present and non-empty at startup via `validateEnvOrExit()`. A var defined in `.env` but not bridged into the compose `environment:` block resolves to empty in the container — the backend logs each missing var and exits 1, so the deploy rolls back instead of serving traffic with broken config.
@@ -67,6 +78,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Vitest test coverage for upload, cv, and debug routes (#335): auth gating, MIME filtering, size limits, private-info scan warnings, error ingestion/persistence, pagination, and sanitisation. `posts` tests extended with happy-path INSERT (201), PUT 404, and DELETE flows. Bug fix: `cv.js` `MulterError` now correctly returns 400 (was 500) via callback pattern.
 
 ### Fixed
+
 - Browser-extension errors filtered from error-logger (#356): uncaught errors and resource-load failures originating from `chrome-extension://`, `moz-extension://`, or `safari-extension://` URLs are discarded before reaching `/api/debug/errors`. Deploy-time Puppeteer tests now intercept and mock `POST /api/debug/errors` to prevent headless-Chromium noise (`Couldn't load fs/zlib`) from writing to `client_errors` and triggering false alert emails.
 - CORS smoke check added to regression suite (#357): `GET /api/health` with `Origin: https://<SITE_HOST>` (port omitted, as browsers send it) must succeed — catches the case where `SITE_HOST` is missing in the container and every site-origin request returns 500.
 - CSP violations handler made `async` (#360): `POST /api/debug/csp-violations` handler is now correctly `async` for CodeQL rate-limit pattern recognition.
@@ -75,11 +87,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Backup bootstrap on deploy (#352): deploy now creates the backup directory, installs the cron job, and takes an initial DB dump if none exists — ensures the backup schedule is active immediately after a fresh provision.
 
 ### Security
+
 - CSP `report-to` added alongside deprecated `report-uri` (#337): `Reporting-Endpoints` header names `/api/debug/csp-violations`; both directives present during transition.
 - Debug endpoint rate limiting migrated to DB-backed `createRateLimiter` (#337): limits survive container restarts and are consistent with auth/contact limiters.
 - `qs` dependency bumped (#321): resolves upstream prototype-pollution advisory.
 
 ### Changed
+
 - Deploy test-suite reporting normalised (#366): all five test phases (`vitest`, `error-logger`, `error-logger-contracts`, `csp-violations`, `regression`) now emit consistent `suite= tests= passed= failed=` counts in the deploy report. Backend Vitest counts read from the json reporter (immune to text-summary format drift). Deploy-time Puppeteer tests use `setRequestInterception` to mock `POST /api/debug/errors` so test sessions never write to `client_errors`. DEPLOY COMPLETE banner moved to after the report box.
 - Unified bash deploy scripts (#300): `dev-deploy.sh` and `prod-deploy.sh` replaced by a single `deploy.sh --env dev|prod`.
 - Project structure reorg (#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) giving clean URLs. `resources/java/` renamed to `resources/js/`. All internal links and the magic link email URL updated.
@@ -89,6 +103,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-18
 
 ### Added
+
 - Deployment hardening (#263 A+B+C, #270): `check_disk_space`, `prompt_missing_vars`, `auto_detect_lan_ip`, `log_deploy_summary`, and `run_deploy_tests` (Vitest in the live container post-health-check; failure triggers rollback). Non-blocking backend startup preflight (DB + Outlook OAuth2) in `server.js` — warns, never crashes
 - `scripts/tests/test-regression.sh` — server-side bash regression smoke suite, run as the final step of every deploy; JWT generated from the running container so it matches the server's `JWT_SECRET`. Covers public baseline, auth gating (deploy/upload/posts/travel must 401 without a token), and (dev only) rate-limit enforcement
 - Machine-readable deploy output (#276): `[deploy:<phase>]` checkpoint lines at every decision point plus a final AI-readable deploy-report box aggregating the current run's checkpoints; `-Quiet` mode suppresses verbose noise while keeping checkpoints, warnings, errors, and the report
@@ -104,10 +119,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `/health` endpoint made internal-only (#279): nginx no longer proxies the path; reachable only on the backend's direct port (localhost-bound in all compose files). Deploy health checks updated to use the direct port; `/api/health` alias removed
 
 ### Security
+
 - `POST /auth/setup` now enforces `ADMIN_EMAIL` server-side — wrong email and unconfigured server both return a generic 403; guard runs before any DB access (#274)
 - `/health` removed from public nginx routing — version, uptime, and DB status no longer exposed to the internet (#279)
 
 ### Changed
+
 - Regression tests moved server-side: `scripts/tests/Test-Regression.ps1` replaced by `test-regression.sh`; `dev-deploy.ps1` / `prod-deploy.ps1` stripped to thin SSH wrappers. Deploy scripts reach the running site via curl `--resolve` (server can't route to its own public DNS name); regression failure now always prints the report and exits non-zero rather than aborting silently
 - GitHub Actions CI disabled (`workflow_dispatch` only) — tests run in the deployed container instead (#270)
 - `docs/TESTING.md`, `docs/AI.md`, `CLAUDE.md` — updated for deploy-time Vitest + regression, `-SkipRegression`/`-Quiet`, the report box, and `test-regression.sh` replacing `Test-Regression.ps1`
@@ -119,6 +136,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Backend: all runtime `console.*` calls replaced with the structured logger (routes, middleware, utils, server/app entry); test/CLI scripts left as-is (#153)
 
 ### Removed
+
 - `docker/.env.example` — duplicate of root `.env.example`; README updated to reference the canonical file
 
 ---
@@ -126,6 +144,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-07
 
 ### Added
+
 - `/api/health` endpoint for deploy verification and uptime monitoring (#163)
 - Security headers to Nginx reverse proxy configuration (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
 - `docs/INFRASTRUCTURE.md` — comprehensive server layout, service architecture, operational procedures, troubleshooting guide (#167)
@@ -140,10 +159,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Dropbear SSH in initramfs for remote disk decryption on server reboot (#171)
 
 ### Fixed
+
 - Nginx template path bug in `docker-compose.yml` (was `scripts/nginx-*.conf.template`, now `scripts/config/nginx-*.conf.template`) (#152 merged)
 - SSH deploy target hostname changed from `portfolio-server` to `ak-home-server` (#179)
 
 ### Changed
+
 - Production architecture: from PM2 on host to Docker Compose containerized services (#165)
 - Nginx now reverse-proxies from Docker instead of system service (#165)
 - PostgreSQL now containerized with persistent volumes (#165)
@@ -151,6 +172,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `.env` now loaded by Docker Compose at repo root instead of per-service (#171)
 
 ### Removed
+
 - `test-results/` directory from version control; added to `.gitignore` (#170)
 
 ---
@@ -158,6 +180,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-06
 
 ### Fixed
+
 - Admin page completely non-functional — `initDeploySection()` declared twice in `admin.js` causing a `SyntaxError` that prevented the entire file from parsing (#144)
 - Root cause: bad merge conflict resolution in `release/2026-05-05-2` kept both the old and new versions of the function; `type="module"` strict mode made this fatal in browsers
 
@@ -166,6 +189,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-05-2
 
 ### Added
+
 - Git fetch button in deployment panel — retrieves latest commits from remote before deploying (#129)
 - `POST /api/deploy/fetch` endpoint with SSE streaming output (#129)
 - Contact form dev stub — returns success in local dev when SMTP not configured; returns 503 in production with no SMTP (#100)
@@ -175,6 +199,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - All root-level docs consolidated under `docs/` (#130)
 
 ### Fixed
+
 - Deploy script uses `git reset --hard` instead of `git pull` to prevent local change conflicts (#123)
 - Blog and travel admin clear buttons now show confirmation prompt before resetting (#94)
 - Date slicing — travel and blog edit forms now correctly populate date fields (#93, #95)
@@ -182,6 +207,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `$Host` reserved variable error in `prod-deploy.ps1` — renamed to `$Hostname`
 
 ### Changed
+
 - Scripts reorganised into logical subdirectories: `deploy/`, `dev/`, `infra/`, `monitoring/`, `config/`, `tests/`
 - All cross-references in docs updated to new `docs/` paths (#130)
 - PR template updated with smoke test and documentation checklist (#130)
@@ -191,6 +217,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## Release 2026-05-05
 
 ### Added
+
 - Admin deployment panel with live status, deploy history, and rollback capability (#98, #117)
 - `POST /api/deploy/` — SSE-streaming deploy endpoint
 - `POST /api/deploy/rollback` — rollback to a previous commit
@@ -199,6 +226,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `backend/utils/shell.js` — shared spawn utilities for streaming child processes
 
 ### Fixed
+
 - Unhandled `spawn` error (`ENOENT`) when git not available in dev — backend no longer crashes (#118)
 - Deploy endpoints gracefully degrade when git unavailable rather than returning 500
 
@@ -207,9 +235,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ## [Unreleased] — on `dev`, not yet in production
 
 ### Fixed
+
 - Delete button size/shape inconsistency — add `.btn-danger` variant to button system; `.travel-delete-btn` now composes from it, removing `!important` overrides (#137)
 
 ### Added
+
 - Travel post detail page (`travel-post.html`) with media gallery, Leaflet map, and lightbox (#78)
 - Public `GET /api/travel/:id` route for individual travel memories (#78)
 - Visit counter — tracks page visits per route, displayed in footer (#14)
@@ -236,6 +266,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `.github/pull_request_template.md` — Smoke Test and Documentation checklist sections added (#130)
 
 ### Fixed
+
 - Blog post 404 errors — corrected `API_BASE` in `blog-post.js` to always use `/api` (#81)
 - Lightbox close/escape/arrow key handlers rewritten using native `addEventListener` (#82)
 - Map rendering on travel detail page — initialise Leaflet after `post-body` is visible (#78)
@@ -245,6 +276,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - `npm test` in `docs/DEPENDENCIES.md` replaced with Docker wrapper command — aligns with project-wide rule (#130)
 
 ### Changed
+
 - Blog and travel post detail pages unified with consistent `.post-meta` date styling
 - Travel post section order changed to: map → gallery → notes
 - All cross-references in docs updated to new `docs/` paths (#130)
@@ -257,6 +289,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 > This is the state of `main` as of the initial CHANGELOG creation. Releases prior to this point are documented via git history.
 
 ### Fixed
+
 - API_BASE set correctly for prod vs localhost environments (#69, #70)
 - Nginx SSL template and deploy script reliability (#65, #67, #68)
 - npm install always runs in deploy script

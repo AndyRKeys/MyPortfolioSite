@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/authenticate.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
-import { exemptIfServiceAccount } from '../utils/serviceKey.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { isEmailConfigured, sendErrorAlertEmail } from '../utils/email.js';
 
 const router = Router();
@@ -12,20 +14,56 @@ const router = Router();
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-const debugRateLimit = createRateLimiter({
-  limit: 50,
-  windowMs: 60 * 1000,
-  message: 'Rate limited',
-  skip: exemptIfServiceAccount,
+const debugRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           50,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Rate limited' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'debug' }),
 });
 
 // ── Alert threshold ───────────────────────────────────────────────────────────
 // Fire an email when this many errors arrive within the window. Cooldown
 // prevents repeated alerts for sustained storms — one email per window max.
-const ALERT_THRESHOLD = parseInt(process.env.ERROR_ALERT_THRESHOLD || '20');
-const ALERT_WINDOW_MS = parseInt(process.env.ERROR_ALERT_WINDOW_MS  || String(15 * 60 * 1000));
-const ALERT_WINDOW_MIN = Math.round(ALERT_WINDOW_MS / 60_000);
+// The cooldown timestamp is persisted to the `app_settings` table (#371) so
+// that a container restart inside the window does not re-fire an alert that
+// was already sent before the restart.
+const ALERT_THRESHOLD        = parseInt(process.env.ERROR_ALERT_THRESHOLD || '20');
+const ALERT_WINDOW_MS        = parseInt(process.env.ERROR_ALERT_WINDOW_MS  || String(15 * 60 * 1000));
+const ALERT_WINDOW_MIN       = Math.round(ALERT_WINDOW_MS / 60_000);
+const LAST_ALERT_SETTING_KEY = 'last_error_alert_at';
 let _lastAlertAt = 0;
+
+// Restore the cooldown timestamp from the DB on module load. Fire-and-forget:
+// if the DB is not yet ready (boot ordering) or the row doesn't exist, log a
+// warning and leave _lastAlertAt at 0 — at worst we may send one extra alert
+// on the first request after startup, never one less.
+(async () => {
+  try {
+    const result = await pool.query(
+      'SELECT value FROM app_settings WHERE key = $1',
+      [LAST_ALERT_SETTING_KEY]
+    );
+    if (result.rows.length === 0) return;
+    const parsed = parseInt(result.rows[0].value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      _lastAlertAt = parsed;
+      logger.info(
+        { lastAlertAt: new Date(parsed).toISOString() },
+        '[debug/errors] Restored alert cooldown timestamp from app_settings'
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      { err: err.message },
+      '[debug/errors] Could not restore alert cooldown from app_settings — starting from 0'
+    );
+  }
+})();
 
 async function maybeAlert() {
   if (!isEmailConfigured()) return;
@@ -54,7 +92,25 @@ async function maybeAlert() {
     [windowStart]
   );
 
-  _lastAlertAt = Date.now();
+  const now = Date.now();
+  _lastAlertAt = now;
+  // Persist the new cooldown timestamp so a container restart in the next
+  // ALERT_WINDOW_MS does not re-fire (#371). Failure here must not block the
+  // email — the in-memory cooldown still holds until the next restart.
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value, updated_at = NOW()`,
+      [LAST_ALERT_SETTING_KEY, String(now)]
+    );
+  } catch (err) {
+    logger.error(
+      { err: err.message },
+      '[debug/errors] Failed to persist alert cooldown to app_settings — will reset on restart'
+    );
+  }
   logger.warn({ count, windowMin: ALERT_WINDOW_MIN }, '[debug/errors] Alert threshold reached — sending email');
   await sendErrorAlertEmail({ count, windowMinutes: ALERT_WINDOW_MIN, topErrors: top.rows, adminEmail });
 }
@@ -79,7 +135,7 @@ function isValidUuid(v) {
  * POST /debug/errors — Receive frontend errors from error-logger.js.
  * Persists to client_errors table and triggers threshold alerting (#333).
  */
-router.post('/errors', debugRateLimit, async (req, res) => {
+router.post('/errors', debugRateLimit, resolveUser, async (req, res) => {
   const { type, message, timestamp, url, filename, lineno, colno, stack, sessionId, requestId } = req.body;
 
   if (!type || !message) {
@@ -135,7 +191,7 @@ router.post('/errors', debugRateLimit, async (req, res) => {
 /**
  * POST /debug/csp-violations — Receive CSP policy violation reports.
  */
-router.post('/csp-violations', debugRateLimit, async (req, res) => {
+router.post('/csp-violations', debugRateLimit, resolveUser, async (req, res) => {
   const report = req.body['csp-report'] || req.body;
   const { 'document-uri': url, 'violated-directive': directive, 'blocked-uri': blocked, 'source-file': source } = report;
 

@@ -21,5 +21,8 @@ export function errorHandler(err, _req, res, _next) {
     logger.error({ err, status }, `[errorHandler] ${message}`);
   }
 
-  res.status(status).json({ error: message });
+  // For 5xx errors send a generic client message; err.message stays in logs only.
+  // Prevents raw DB error details (table names, constraints) leaking to clients.
+  const clientMessage = status >= 500 ? 'Internal server error' : message;
+  res.status(status).json({ error: clientMessage });
 }

@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **What is this?** A personal portfolio site at andykeys.me — blog, travel posts, admin console for managing content, and AI lab experiments. Self-hosted on an Ubuntu Server (`ak-home-server`, a repurposed gaming PC); the original Raspberry Pi has been retired. See `docs/TERMINOLOGY.md` for canonical names.
 
 **Tech stack:**
+
 - Frontend: vanilla JS/HTML/CSS (no build step), jQuery for legacy compatibility
 - Backend: Node.js/Express (ES modules), WebAuthn + JWT auth
 - Database: PostgreSQL
@@ -17,6 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - AI pair programmer: Claude Sonnet via Anthropic API
 
 **Key files:**
+
 - `backend/server.js` — Express app entry point, middleware, route registration
 - `backend/routes/` — API endpoints (auth, posts, travel, deploy, etc.)
 - `backend/db/schema.sql` — PostgreSQL schema (idempotent, uses IF NOT EXISTS)
@@ -133,6 +135,7 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 **Every PR must use and fully fill in the template at `.github/pull_request_template.md`** — summary, changes, detailed test plan, smoke test section, and documentation checklist (including ops docs). Treat any unchecked or "N/A" box as a deliberate decision that needs to be correct.
 
 **Issue labelling (AI-managed):**
+
 - **State labels**
   - When starting work on an issue: apply the `in progress` label.
   - When opening a PR to `dev` for that issue: switch the label to `awaiting review`.
@@ -164,6 +167,7 @@ gh pr create --base dev --title "Title" --body "Description. Closes #N"
 No build step. HTML pages load ES modules directly via `<script type="module">`.
 
 **Frontend JS structure:**
+
 - `resources/js/config.js` — exports `API_BASE` (empty string for same-origin, auto-detects localhost in dev)
 - `resources/js/script.js` — homepage only: GitHub widget, contact form, home visit counter
 - `resources/js/blog.js` — blog listing page
@@ -181,6 +185,7 @@ No build step. HTML pages load ES modules directly via `<script type="module">`.
 Express app in `backend/server.js`. Routes are well-separated by concern.
 
 **Key routes:**
+
 - `backend/routes/auth.js` (12KB) — WebAuthn registration/auth, JWT issuance, email magic links, passkey verification. Highest-risk route to modify.
 - `backend/routes/posts.js` — blog and travel CRUD
 - `backend/routes/travel.js` — travel listing + detail
@@ -189,11 +194,13 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 - `backend/routes/contact.js` — contact form with nodemailer
 
 **Middleware:**
+
 - `backend/middleware/errorHandler.js` — catches and formats errors
 - `backend/middleware/validate.js` — schema validation for request bodies
 - JWT auth check: routes check for valid JWT before running
 
 **Database:**
+
 - `schema.sql` is idempotent (IF NOT EXISTS throughout) — safe to re-run
 - Tables: users, passkeys, email_tokens, posts (blog and travel unified), uploads, audit_log (coming), stats
 - No migration tool yet — uses raw SQL applied at boot
@@ -211,12 +218,14 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 - **Protected routes:** Check `Authorization: Bearer <JWT>` header; JWT contains user ID + issued-at timestamp
 
 **JWT structure:**
+
 - Signed with `JWT_SECRET` (backend only)
 - 7-day expiry (configurable)
 - Contains userId
 - Verified on every protected route
 
 **Email magic links:**
+
 - User requests link at `/api/auth/email/send`
 - Backend generates random token, stores bcrypt hash in email_tokens table
 - Email contains `/login/?token=<raw-token>`
@@ -226,6 +235,7 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 ### Admin Panel
 
 Single HTML file (`admin/index.html`) with JS split across modular ES modules. Handles:
+
 - Blog post CRUD (`admin/posts.js`)
 - Travel memory CRUD (`admin/travel.js`)
 - CV upload + file browser (`admin/cv.js`)
@@ -242,23 +252,27 @@ Single HTML file (`admin/index.html`) with JS split across modular ES modules. H
 ### Code style
 
 **Naming:**
+
 - Camel case for JS variables and functions
 - Kebab case for HTML IDs, CSS classes
 - Underscore case for database columns (post_date, user_id, etc.)
 
 **Button variants (CSS):**
+
 - `.btn-primary` — large blue (0.8rem padding, 1.5rem horizontal)
 - `.btn-secondary` — large outlined (same padding, transparent bg, border)
 - `.btn-small` — compact dark (0.35rem padding, 0.85rem horizontal)
 - `.btn-danger` — red modifier (use with size class: `class="btn-small btn-danger"`)
 
 **Section headers (JS comments):**
+
 ```js
 // ── Section name (two em-dashes, space, label, NO trailing fill)
 function doSomething() { ... }
 ```
 
 **Database:** Always parameterised queries. Never string concatenation.
+
 ```js
 // Good
 const result = await pool.query('SELECT * FROM posts WHERE id = $1', [postId]);
@@ -267,6 +281,7 @@ const result = await pool.query(`SELECT * FROM posts WHERE id = ${postId}`);
 ```
 
 **DRY principle (Don't Repeat Yourself):**
+
 - **Frontend:** Reuse utility functions from `resources/js/utils/`. Don't duplicate escapeHtml, formatDate, buildDOM patterns across modules.
 - **Backend:** Extract common logic into middleware or route helpers. Don't repeat validation, error handling, or CORS logic.
 - **Deployment scripts:** Extract reusable functions into `scripts/deploy/deploy-lib.sh` (shared helpers like `ensure_repo_cloned()`, `update_to_branch()`, `validate_env()`, `ensure_dev_certs()`). Each `*-deploy.sh` focuses on environment-specific logic only. PowerShell wrappers (`.ps1`) are thin — mostly SSH + arg passing.
@@ -306,16 +321,19 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 ### Testing
 
 **Vitest suite:**
+
 - `tests/` folder mirrors `backend/` structure
 - Tests for middleware, validators, route handlers
 - Run via `npm test` inside the backend container
 - Coverage tracked; aim for routes and middleware, not 100% everywhere
 
 **Smoke tests (per-PR):**
+
 - `scripts/tests/test-regression.sh` — baseline (all basic flows); runs automatically post-deploy on the server
 - `scripts/tests/Test-PRNNN.ps1` — specific PR tests (created as needed); run from Windows against dev server
 
 **PR test plan rules (every PR that touches backend code):**
+
 - Every step must include the **exact copy-paste command** — no assumed knowledge, no "run the usual command"
 - Add a `# comment` above every command explaining what it verifies and why it matters for this PR
 - State the **expected output** after each command so the tester knows pass vs fail at a glance
@@ -329,29 +347,34 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 **Docs must move in lockstep with code.** Keeping them accurate is part of the change, not a later clean-up.
 
 **When to update docs (same PR):**
+
 - Scripts are added, removed, or renamed
 - Deploy / testing / operational workflows change (e.g. adding deploy-time Vitest or regression steps)
 - Routes, APIs, or env vars are added or changed
 - Any behaviour change that affects how someone develops, deploys, tests, or debugs the system
 
 **What to update:**
+
 - `README.md` — top-level workflow, script tables, command examples, directory trees
 - `docs/AI.md` — working rules for AI helpers (scope, branching, testing expectations, documentation hygiene)
 - `docs/TESTING.md` — test commands, deploy-time checks, regression scripts, PR smoke tests
 - Ops docs — `docs/RUNBOOK.md`, `docs/BACKUP.md`, `docs/INCIDENTS.md`, `docs/INFRASTRUCTURE.md`, `docs/DEV_ENVIRONMENT.md`, `docs/PROD_ENVIRONMENT.md`
 
 **How to avoid drift:**
+
 - Treat the documentation checklist in the PR template as mandatory. If no docs change is needed, explicitly state why (`N/A: behaviour and operator docs already match`).
 - When code and docs disagree, fix both in the same PR so history stays coherent.
 - Prefer small, incremental doc edits tied to each behavioural change over broad "docs tidy-up" PRs.
 - For detailed rules, follow **[docs/AI.md](docs/AI.md) → Documentation Hygiene**; this section is a summary, not a replacement.
 
 **When NOT to add extra docs:**
+
 - Generic "what this function does" explanations — prefer clear naming
 - Obvious patterns that match the existing style
 - Implementation details that don't affect future work or operator behaviour
 
 **Commit messages:**
+
 - Imperative present tense: "fix", "add", "refactor", not "fixed", "added", "refactored"
 - Short summary (50 chars), blank line, optional explanation
 - Always include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` footer
@@ -373,7 +396,7 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 
 ## Fragile / Incomplete Areas (from docs/PROJECT_ASSESSMENT.md)
 
-- **No backups:** Database and uploads have no automated backup. (#164)
+- **Local backups, no offsite:** `scripts/backup/db-backup.sh` runs daily at 02:00 via cron — `pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, written to `~/backups/prod/`. Offsite sync to B2 is scaffolded (`offsite-sync.sh`) but not configured — local-only is the deliberate current state. See [docs/BACKUP.md](docs/BACKUP.md) and #185.
 - **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.js modularised (#175):** admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
 - **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
@@ -411,6 +434,7 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
   - Mouse support for selection and clicking
 
 Set as your default editor:
+
 ```bash
 echo 'export EDITOR=micro' >> ~/.bashrc
 source ~/.bashrc

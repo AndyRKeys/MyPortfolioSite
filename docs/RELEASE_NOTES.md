@@ -66,18 +66,21 @@ Frontend modernisation, admin UX, auth hardening, and deploy reliability release
 ### Features
 
 **Admin sub-pages with responsive subnav (#378)**
+
 - Monolithic `admin/index.html` replaced with a dashboard and six dedicated sub-pages (posts, travel, deploy, CV, stats, notes/auth/passkeys)
 - `admin-subnav.js` injects a shared responsive horizontal navigation bar across all admin pages
 - Each page loads only its own JS module entry point — no unrelated code runs on load
 - E2E test updated to navigate sub-pages; JS runtime check extended to cover all admin pages
 
 **Puppeteer JS runtime check for all public pages (#390)**
+
 - `test-public-pages.js` added to the deploy pipeline: loads `/`, `/blog/`, `/travel/`, `/login/`, `/setup/`, and dynamically discovered blog/travel post pages after every deploy
 - Fails the deploy (warn-only) on any unhandled JS exception on public pages
 - `test-admin-e2e.js` extended with `pageerror` tracking during CRUD interactions
 - All Puppeteer API calls use browser-page fetch so `--ignore-certificate-errors` covers self-signed dev certs without Node-level overrides
 
 **Travel coordinate privacy (#244)**
+
 - Public endpoints `GET /travel` and `GET /travel/:id` now return coordinates rounded to 2 decimal places (~1km precision)
 - Admin endpoints (`GET /travel/all`, `GET /travel/admin/:id`) retain full 6-decimal precision for editing
 - Query-layer only via `TRAVEL_COLS_PUBLIC` constant — no schema changes
@@ -85,12 +88,14 @@ Frontend modernisation, admin UX, auth hardening, and deploy reliability release
 ### Changed
 
 **jQuery removed from all public pages (#385)**
+
 - `script.js`, `blog.js`, `travel.js`, `travel-post.js`, and `utils/dom.js` migrated to vanilla DOM APIs
 - `jquery-3.5.1.min.js` (87KB) removed from all public pages — no external JS dependency on the public site
 - Net: −1,575 lines; no behaviour change
 - Also adds hover lift to timeline cards and improves error logging in blog/travel catch handlers
 
 **Auth setup endpoint retired (#282, #283)**
+
 - `POST /auth/setup` returns 410 Gone; account creation now happens automatically on the first magic-link send via the existing upsert in `POST /api/auth/email/send`
 - `setup/index.html` replaces the account-creation form with a redirect to `/login/`
 - Deleting the last passkey now shows a warning that magic-link sign-in remains available
@@ -123,21 +128,25 @@ Admin panel refactoring release. Deconstructs the 1,173-line `admin.js` monolith
 ### Changed
 
 **Admin JS modularised (#175)**
+
 - 1,173-line `admin.js` split into per-feature ES modules under `resources/js/admin/`: `posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`
 - `admin.js` is now a thin entry point (~20 lines) that imports and initialises each module
 - Agents and maintainers can now target individual modules rather than reasoning about the full monolith
 
 **jQuery removed from admin panel (#176)**
+
 - All admin JS migrated to vanilla DOM APIs and `fetch`
 - No behaviour change; eliminates the jQuery/vanilla ambiguity in the admin codebase
 
 **Travel date field unified (#132)**
+
 - `visit_date`/`visitDate` alias removed from `TRAVEL_COLS`
 - Field is now consistently `post_date` throughout: backend routes, middleware schemas, frontend JS, utils, and tests
 
 ### Added
 
 **Admin CRUD E2E test suite (#175)**
+
 - `test-admin-e2e.js` — Puppeteer script covering authenticated blog create/delete, travel create/delete, and deploy panel smoke
 - Wired into `deploy.sh` as a hard-fail phase (triggers rollback on assertion failure)
 - Test records prefixed `[E2E]` cleaned up at start and end of each run
@@ -158,30 +167,37 @@ Observability and deploy-hardening release. Adds a frontend error logger with al
 ### Features
 
 **Frontend error logger (#333, #334, #336)**
+
 - feat(#333): `error-logger.js` captures uncaught JS errors, resource-load failures, unhandled promise rejections, CSP violations, and `console.error`/`console.warn` calls; reports to `POST /api/debug/errors`, persisted to `client_errors` table, surfaced in admin stats panel
 - feat(#333): admin alert email when 20+ frontend errors arrive within 15 minutes (`ERROR_ALERT_THRESHOLD` / `ERROR_ALERT_WINDOW_MS`); in-memory cooldown prevents repeated emails during sustained storms
 - feat(#334): failed error sends buffered in `localStorage` and flushed on next page load — delivery resilient across page navigations
 - feat(#336): request-ID correlation — `X-Request-Id` links every frontend error report to the exact backend log line for the same page view
 
 **Backend startup env validation (#357)**
+
 - feat(#357): `backend/utils/validateEnv.js` asserts every required env var at startup via `validateEnvOrExit()`; logs each missing var and exits 1, triggering deploy rollback instead of serving traffic with broken config
 - feat(#357): CORS smoke check added to regression suite — `GET /api/health` with `Origin: https://<SITE_HOST>` must succeed; catches the case where `SITE_HOST` is absent in the container
 
 **CSP scanning on every deploy (#341, #342)**
+
 - feat(#341): `test-csp-violations.js` loads all served pages (`/`, `/blog/`, `/travel/`, `/login/`, `/admin/`, `/setup/`) in Puppeteer after each deploy, flags any `securitypolicyviolation` event; warn-only with machine-parseable `[csp-violations]` summary line in the deploy report
 - feat(#342): `test-admin-e2e-csp.js` mints a JWT, injects it into `localStorage.adminToken`, loads `/admin/`, and drives Nominatim geocode interactions — catches auth-path CSP breaks like the original #330 incident
 
 **Dev hostname redirect (#358)**
+
 - feat(#358): `dev.andykeys.me:443` now redirects to `dev.andykeys.me:3001` via a prod-nginx `server` block, eliminating the port-confusion support burden
 
 **Vitest coverage (#335)**
+
 - feat(#335): upload, cv, and debug route test coverage — auth gating, MIME filtering, size limits, private-info scan warnings, error ingestion/persistence, pagination, sanitisation; posts tests extended with INSERT (201), PUT 404, and DELETE flows
 - fix(#335): `cv.js` `MulterError` now correctly returns 400 (was 500) via multer callback pattern
 
 **Unified deploy scripts (#300)**
+
 - feat(#300): `dev-deploy.sh` and `prod-deploy.sh` merged into `deploy.sh --env dev|prod`; env-specific behaviour gated by feature flags; PowerShell wrappers updated to match
 
 **Project structure reorg (#307)**
+
 - feat(#307): HTML pages moved into feature subfolders (`blog/`, `travel/`, `admin/`, `login/`, `setup/`) for clean URLs; `resources/java/` renamed to `resources/js/`; all internal links and magic-link email URL updated; Nginx `try_files` handles directory routing with no config changes
 
 ### Bug Fixes
@@ -202,6 +218,7 @@ Observability and deploy-hardening release. Adds a frontend error logger with al
 ### Deploy Test Reporting (#366)
 
 All five deploy test phases now emit consistent `suite= tests= passed= failed=` counts in the deploy report:
+
 - **vitest** — counts read from json reporter output file (immune to text-summary format drift)
 - **error-logger** — Puppeteer page-load checks for `[error-logger] Initializing`
 - **error-logger-contracts** — API contract checks for `POST /api/debug/errors` and `GET /api/debug/errors`
@@ -287,6 +304,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 ### Features
 
 **Dev environment on Ubuntu Server — LAN-only, port 3001 (PR #201)**
+
 - feat(#159): `docker-compose.dev-server.yml` — separate Docker stack running the `dev` branch alongside production; services: `postgres-dev` (`portfolio_dev` DB), `backend-dev` (port 8081 internal), `nginx-dev` (port 3001, LAN-only)
 - feat(#159): `scripts/config/nginx-dev-server.conf.template` — HTTP-only nginx on port 3001 with full security headers (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy)
 - feat(#159): `.env.dev-server.example` — env template documenting `LAN_IP`, separate DB and JWT secrets, and WebAuthn origin pointing at `http://<LAN_IP>:3001`
@@ -313,6 +331,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 ### Bug Fixes
 
 **Content Security Policy fix (PR #198)**
+
 - fix(#197): extract inline scripts to external modules to satisfy CSP (`admin-init.js`, `login-init.js`)
 - fix(#197): add `cdn.jsdelivr.net` to CSP `script-src` (Leaflet maps dependency)
 - fix(#197): update `API_BASE` handling and add CSP policy headers
@@ -372,12 +391,14 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 ### Features & Improvements
 
 **Infrastructure Quick Wins (PR #177)**
+
 - feat(#163): `/api/health` endpoint returns status + DB connectivity + uptime + version
 - security: MIME sniffing prevention, clickjacking protection, Referrer-Policy, Permissions-Policy headers
 - docs(#167): `docs/INFRASTRUCTURE.md` — server layout, service architecture, operational procedures, troubleshooting, Dropbear remote decryption workflow
 - docs(#168): `docs/ARCHITECTURE.md` — system diagram, request flows, file structure, data flow examples
 
 **Docker Compose Production Migration (PR #179)**
+
 - feat(#165): `docker-compose.prod.yml` — production-grade containerization with postgres, backend (prod target), nginx, named volumes, SSL cert mounting
 - feat(#165): Production architecture now entirely containerized: postgres 16, Node.js backend, nginx reverse proxy
 - feat(#171): `scripts/deploy/server-setup.sh` — one-shot Ubuntu Server LTS initialization script
@@ -397,6 +418,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 ### Breaking Changes / Deployment Notes
 
 **⚠️ MAJOR: Docker Compose production deployment**
+
 - Production now runs entirely via Docker Compose instead of PM2 on host
 - No more system-level PostgreSQL, Nginx, or Node.js services
 - Requires fresh server setup via `scripts/deploy/server-setup.sh` on Ubuntu Server LTS 22.04+
@@ -422,10 +444,12 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 **PR:** #144
 
 ### Bug Fixes
+
 - fix(#144): remove duplicate `initDeploySection()` declaration in `admin.js` — caused a fatal `SyntaxError` in ES module strict mode, breaking every admin panel section on page load
 - Root cause: bad merge conflict resolution in `release/2026-05-05-2` kept both the old and new versions of the function
 
 ### Breaking Changes / Deployment Notes
+
 - None — frontend-only fix; no backend restart or DB changes required
 
 ---
@@ -437,9 +461,11 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 **PR:** #140
 
 ### Bug Fixes
+
 - fix(#140): restore missing deployment section HTML in `admin.html` — the deployment panel tab content was absent after the `release/2026-05-05-2` merge, making the deploy console inaccessible
 
 ### Breaking Changes / Deployment Notes
+
 - None — frontend-only fix; no backend restart or DB changes required
 
 ---
@@ -451,6 +477,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 **PR:** #126
 
 ### Features
+
 - feat(#129): git fetch button in deployment panel — retrieves latest commits from remote before deploying
 - feat(#129): `POST /api/deploy/fetch` endpoint with SSE streaming output
 - feat(#100): contact form dev stub — returns `{ success: true }` in local dev when SMTP not configured; returns 503 in production
@@ -460,6 +487,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 - chore(#130): all root-level docs consolidated under `docs/`
 
 ### Bug Fixes
+
 - fix(#123): deploy script uses `git reset --hard` instead of `git pull` to prevent local change conflicts
 - fix(#94): blog and travel admin clear buttons now show confirmation prompt before resetting
 - fix(#93, #95): date slicing — travel and blog edit forms now correctly populate date fields
@@ -467,6 +495,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 - fix: `$Host` reserved variable error in `prod-deploy.ps1` — renamed to `$Hostname`
 
 ### Breaking Changes / Deployment Notes
+
 - None — `npm install` runs automatically in the deploy script if `package.json` changed
 
 ---
@@ -478,6 +507,7 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 **PR:** #113
 
 ### Features
+
 - feat(#98, #117): admin deployment panel with live status, deploy history, and rollback capability
 - feat(#98): `POST /api/deploy/` — SSE-streaming deploy endpoint
 - feat(#98): `POST /api/deploy/rollback` — rollback to a previous commit
@@ -486,10 +516,12 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 - chore: `backend/utils/shell.js` — shared spawn utilities for streaming child processes
 
 ### Bug Fixes
+
 - fix(#118): unhandled `spawn` error (`ENOENT`) when git not available in dev — backend no longer crashes
 - fix(#118): deploy endpoints gracefully degrade when git unavailable rather than returning 500
 
 ### Breaking Changes / Deployment Notes
+
 - None — deploy script handles `npm install` automatically
 
 ---
@@ -501,25 +533,30 @@ On 2026-05-11, `ak-home-server` was migrated from snap Docker to Docker CE:
 **PR:** #114
 
 ### Features
+
 - feat(#97): automated testing — Vitest + Supertest integration suite wired into the backend container (`npm test`)
 - feat(#101): CV management — `GET /api/cv/exists`, `GET /api/cv`, `POST /api/cv`, `DELETE /api/cv`; multer PDF-only upload (5 MB cap); pdf-parse private-content scan with warnings modal in admin UI
 - feat(#110): CV download button on `index.html` — hidden when no CV present, fetched via blob URL, updates reactively on `visibilitychange` without a page reload
 
 ### Bug Fixes
+
 - fix(#93): travel edit form — `visit_date` sliced to `YYYY-MM-DD` before populating the date input
 - fix(#95): blog edit form — `loadPostForEdit` converted to `async/await` so `post_date` and `body_markdown` always populate before user interaction; new post defaults date to today
 
 ### Process / Docs
+
 - docs(AI.md): documentation hygiene rule — stale paths and added/removed files must be updated in the same commit
 - docs(STYLE_GUIDE.md): section-header comment convention (`// ── Label`); stale test script paths corrected
 - docs(README.md): AI onboarding prompt section added
 - test(Test-PR107.ps1): idempotent CV cleanup step before empty-CV 404 assertion to prevent false failures on repeat runs
 
 ### Breaking Changes / Deployment Notes
+
 - `pdf-parse` npm dependency added — run `npm install` inside the backend container after deploy
 - CV uploads are stored at `uploads/cv.pdf` on the server — ensure the `uploads/` directory exists and is writable by the Node process
 
 ### Known Issues
+
 - #100: contact form returns 500 in dev — SMTP credentials not configured; fails open, no data lost
 - #111: CV private-content scanner does not detect phone numbers or home addresses — manual redaction required until resolved
 

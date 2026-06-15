@@ -9,37 +9,76 @@ import {
 } from '@simplewebauthn/server';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
-import { createRateLimiter } from '../middleware/rateLimit.js';
-import { exemptIfServiceAccount } from '../utils/serviceKey.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
-import { logger } from '../utils/logger.js';
+import { logger }   from '../utils/logger.js';
+import { logAudit } from '../utils/audit.js';
 import {
   validate,
   EmailSendSchema,
   PasskeyRegisterFinishSchema,
   PasskeyLoginFinishSchema,
 } from '../middleware/validate.js';
+import {
+  EMAIL_RATE_WINDOW_MS,   EMAIL_RATE_LIMIT,
+  PASSKEY_RATE_WINDOW_MS, PASSKEY_RATE_LIMIT,
+  ACCOUNT_RATE_WINDOW_MS, ACCOUNT_RATE_LIMIT,
+  WEBAUTHN_CHALLENGE_TTL, MAGIC_LINK_TTL,
+} from '../utils/constants.js';
 
 const router = Router();
 
-const RP_NAME   = process.env.WEBAUTHN_RP_NAME   || 'AK Portfolio';
-const RP_ID     = process.env.WEBAUTHN_RP_ID     || 'localhost';
-const ORIGIN    = process.env.WEBAUTHN_ORIGIN    || 'http://localhost:5500';
-const JWT_EXPIRY = '24h';
+// validateEnv.js requires WEBAUTHN_RP_ID, WEBAUTHN_ORIGIN, and WEBAUTHN_RP_NAME
+// at startup — no fallback defaults here (#433).
+const RP_NAME    = process.env.WEBAUTHN_RP_NAME;
+const RP_ID      = process.env.WEBAUTHN_RP_ID;
+const ORIGIN     = process.env.WEBAUTHN_ORIGIN;
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 // Rate limiters for sensitive auth endpoints (per IP)
-const emailRateLimit = createRateLimiter({
-  limit: 5,
-  windowMs: 60 * 60 * 1000, // 5 per hour
-  message: 'Too many login attempts. Please try again later.',
-  skip: exemptIfServiceAccount,
+const emailRateLimit = rateLimit({
+  windowMs:        EMAIL_RATE_WINDOW_MS,
+  limit:           EMAIL_RATE_LIMIT,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfServiceAccount,
+  message:         { error: 'Too many login attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: EMAIL_RATE_WINDOW_MS, keyType: 'email' }),
 });
 
-const passkeyRateLimit = createRateLimiter({
-  limit: 10,
-  windowMs: 60 * 60 * 1000, // 10 per hour
-  message: 'Too many authentication attempts. Please try again later.',
-  skip: exemptIfServiceAccount,
+const passkeyRateLimit = rateLimit({
+  windowMs:        PASSKEY_RATE_WINDOW_MS,
+  limit:           PASSKEY_RATE_LIMIT,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfServiceAccount,
+  message:         { error: 'Too many authentication attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: PASSKEY_RATE_WINDOW_MS, keyType: 'passkey' }),
+});
+
+// Account-management surface (/setup/status, /me, /passkeys, /passkeys/:id).
+// Owner is exempt via exemptIfTrusted (which verifies the JWT inline); cap
+// stops anonymous scrapers polling /setup/status and blocks JWT-fuzz on
+// protected endpoints. Separate keyType from passkey/email (#445).
+// The limiter precedes resolveUser in each route so CodeQL's
+// js/missing-rate-limiting detector sees it before any authorization step.
+const accountRateLimit = rateLimit({
+  windowMs:        ACCOUNT_RATE_WINDOW_MS,
+  limit:           ACCOUNT_RATE_LIMIT,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: ACCOUNT_RATE_WINDOW_MS, keyType: 'account' }),
 });
 
 function signJWT(user) {
@@ -52,13 +91,13 @@ function signJWT(user) {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
-router.get('/setup/status', async (req, res) => {
+router.get('/setup/status', accountRateLimit, resolveUser, async (req, res, next) => {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM users');
-    res.json({ hasUsers: parseInt(result.rows[0].count) > 0 });
+    res.json({ has_users: parseInt(result.rows[0].count) > 0 });
   } catch (err) {
     logger.error({ err }, '[auth] setup/status DB error');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
@@ -74,7 +113,7 @@ router.post('/setup', (req, res) => {
 
 // ── Current user ──────────────────────────────────────────────────────────────
 
-router.get('/me', authenticate, async (req, res) => {
+router.get('/me', accountRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT id, email, username, created_at FROM users WHERE id = $1',
@@ -84,14 +123,13 @@ router.get('/me', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[auth] /me DB error');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // ── Passkey registration ───────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
-router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (req, res) => {
+router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -125,21 +163,20 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, user_id, expires_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '5 minutes')`,
+       VALUES ($1, $2, $3, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
       [sessionKey, options.challenge, userId]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey register start failed');
-    res.status(500).json({ error: 'Failed to start registration' });
+    next(err);
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
-router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res) => {
+router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate(PasskeyRegisterFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey, passkeyName } = req.body;
+    const { response, session_key: sessionKey, passkey_name: passkeyName } = req.body;
 
     const challengeRow = await pool.query(
       `SELECT * FROM webauthn_challenges
@@ -183,14 +220,13 @@ router.post('/passkey/register/finish', passkeyRateLimit, authenticate, validate
     res.json({ verified: true });
   } catch (err) {
     logger.error({ err }, '[auth] passkey register finish failed');
-    res.status(500).json({ error: 'Failed to finish registration' });
+    next(err);
   }
 });
 
 // ── Passkey authentication ────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
-router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
+router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => {
   try {
     const { email } = req.body;
     let allowCredentials = [];
@@ -221,27 +257,27 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res) => {
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, expires_at)
-       VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
+       VALUES ($1, $2, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
       [sessionKey, options.challenge]
     );
 
-    res.json({ options, sessionKey });
+    res.json({ options, session_key: sessionKey });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login start failed');
-    res.status(500).json({ error: 'Failed to start authentication' });
+    next(err);
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- passkeyRateLimit middleware applied
-router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res) => {
+router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFinishSchema), async (req, res, next) => {
   try {
-    const { response, sessionKey } = req.body;
+    const { response, session_key: sessionKey } = req.body;
 
     const challengeRow = await pool.query(
       'SELECT * FROM webauthn_challenges WHERE session_key = $1 AND expires_at > NOW()',
       [sessionKey]
     );
     if (!challengeRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'invalid_challenge' });
       return res.status(400).json({ error: 'Invalid or expired challenge' });
     }
     await pool.query('DELETE FROM webauthn_challenges WHERE session_key = $1', [sessionKey]);
@@ -255,6 +291,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
       [credentialId]
     );
     if (!passkeyRow.rows.length) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'unknown_credential' });
       return res.status(400).json({ error: 'Unknown credential' });
     }
 
@@ -274,6 +311,7 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     });
 
     if (!verification.verified) {
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'passkey', reason: 'verification_failed' });
       return res.status(401).json({ error: 'Authentication failed' });
     }
 
@@ -283,17 +321,17 @@ router.post('/passkey/login/finish', passkeyRateLimit, validate(PasskeyLoginFini
     ]);
 
     const token = signJWT({ id: passkey.user_id, email: passkey.email, username: passkey.username });
+    await logAudit(req, 'auth.login', 'user', passkey.user_id, { method: 'passkey' }, { userId: passkey.user_id });
     res.json({ token, user: { id: passkey.user_id, email: passkey.email, username: passkey.username } });
   } catch (err) {
     logger.error({ err }, '[auth] passkey login finish failed');
-    res.status(500).json({ error: 'Failed to finish authentication' });
+    next(err);
   }
 });
 
 // ── Email magic link ──────────────────────────────────────────────────────────
 
-// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
-router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req, res) => {
+router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req, res, next) => {
   try {
     const { email } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
@@ -337,7 +375,7 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     const token = uuidv4();
     await pool.query(
       `INSERT INTO email_tokens (user_id, token, expires_at)
-       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '15 minutes')`,
+       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '${MAGIC_LINK_TTL}')`,
       [userId, token]
     );
     logger.info('[auth/email/send] Token inserted — attempting email send');
@@ -352,12 +390,11 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     res.json({ sent: true });
   } catch (err) {
     logger.error({ err }, '[auth/email/send] Unexpected error');
-    res.status(500).json({ error: 'Failed to send email' });
+    next(err);
   }
 });
 
-// lgtm[js/missing-rate-limiting] -- emailRateLimit middleware applied
-router.get('/email/verify', emailRateLimit, async (req, res) => {
+router.get('/email/verify', emailRateLimit, async (req, res, next) => {
   try {
     const { token } = req.query;
     // Never log the raw token — it is a bearer credential.
@@ -419,6 +456,7 @@ router.get('/email/verify', emailRateLimit, async (req, res) => {
           '[auth/email/verify] Legacy non-bcrypt row(s) present — boot cleanup may not have run (#134)'
         );
       }
+      await logAudit(req, 'auth.login_failed', null, null, { method: 'email_magic_link', reason: 'invalid_token' });
       return res.status(400).json({ error: 'Invalid or expired link' });
     }
 
@@ -427,17 +465,18 @@ router.get('/email/verify', emailRateLimit, async (req, res) => {
     logger.info({ userId: row.user_id }, '[auth/email/verify] Match — token consumed; issuing JWT');
 
     const jwtToken = signJWT({ id: row.user_id, email: row.email, username: row.username });
+    await logAudit(req, 'auth.login', 'user', row.user_id, { method: 'email_magic_link' }, { userId: row.user_id });
     res.json({ token: jwtToken, user: { id: row.user_id, email: row.email, username: row.username } });
   } catch (err) {
     // Log the failure reason (not the token) so crypt/DB errors are diagnosable.
     logger.error({ err }, '[auth/email/verify] Verification failed');
-    res.status(500).json({ error: 'Verification failed' });
+    next(err);
   }
 });
 
 // ── Passkey management ────────────────────────────────────────────────────────
 
-router.get('/passkeys', authenticate, async (req, res) => {
+router.get('/passkeys', accountRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, name, device_type, backed_up, created_at
@@ -447,11 +486,11 @@ router.get('/passkeys', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[auth] list passkeys DB error');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
-router.delete('/passkeys/:id', authenticate, async (req, res) => {
+router.delete('/passkeys/:id', accountRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       'DELETE FROM passkeys WHERE id = $1 AND user_id = $2 RETURNING id',
@@ -461,7 +500,7 @@ router.delete('/passkeys/:id', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[auth] delete passkey DB error');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 

@@ -1,16 +1,5 @@
 import { API_BASE } from './config.js';
-
-function sanitizeHtml(html) {
-    var temp = document.createElement('div');
-    temp.innerHTML = html;
-    var remove = temp.querySelectorAll('script, iframe, object, embed, [onclick], [onload], [onerror]');
-    remove.forEach(function (el) { el.remove(); });
-    temp.querySelectorAll('[href*="javascript:"], [src*="javascript:"]').forEach(function (el) {
-        el.removeAttribute('href');
-        el.removeAttribute('src');
-    });
-    return temp.innerHTML;
-}
+import DOMPurify from 'https://cdn.jsdelivr.net/npm/dompurify@3.4.7/dist/purify.es.mjs';
 
 function getSlug() {
     var params = new URLSearchParams(window.location.search);
@@ -46,7 +35,7 @@ function loadPost() {
             var md = post.body_markdown || '';
             var result = marked.parse(md);
             Promise.resolve(result).then(function (html) {
-                document.getElementById('post-markdown').innerHTML = sanitizeHtml(html);
+                document.getElementById('post-markdown').innerHTML = DOMPurify.sanitize(html);
             });
 
             document.getElementById('post-loading').classList.add('hidden');

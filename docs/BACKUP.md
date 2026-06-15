@@ -1,131 +1,138 @@
 # Backup and Recovery
 
-This document captures a **manual** backup and restore process for andykeys.me. Automation can be added later; for now, this is the minimum set of steps to avoid data loss if `ak-home-server` fails.
+Daily PostgreSQL + uploads backups run automatically on `ak-home-server` via cron. Offsite cloud sync is scaffolded (rclone → Backblaze B2) but **not currently configured** — local-only retention is the deliberate choice for now (see [Offsite sync](#offsite-sync-deferred)).
 
-> Always test these steps on the dev stack before relying on them for prod.
-
----
-
-## What Needs Backing Up
-
-At minimum:
-
-- **PostgreSQL data** — the `portfolio_dev` and `portfolio_prod` databases
-- **Uploads** — files in the `uploads/` directory on the server (CVs, images)
-- **Critical config** — `.env` files for dev and prod, Nginx config templates, any non-checked-in secrets notes (see **docs/UNTRACKED_FILES.md**)
-
-Most application code lives in GitHub and is not backed up here.
+This document describes the automated flow, how to verify it, how to take ad-hoc backups, and how to restore.
 
 ---
 
-## Taking a Manual Backup
+## Automated daily backup
 
-All commands run on `ak-home-server`.
+`scripts/backup/db-backup.sh` runs daily at 02:00 via user cron on `ak-home-server`:
 
-### 1. Create a backup directory
-
-```bash
-mkdir -p ~/backups/$(date +"%Y-%m-%d")
-cd ~/backups/$(date +"%Y-%m-%d")
+```text
+0 2 * * * /home/modnar3/MyPortfolioSite/scripts/backup/db-backup.sh >> /home/modnar3/backup.log 2>&1
 ```
 
-### 2. Dump PostgreSQL databases
+What it does:
+
+- Dumps `portfolio_prod` via `docker compose exec postgres pg_dump` (plain SQL, gzipped)
+- Archives `~/MyPortfolioSite/uploads/` (tar + gzip) if non-empty
+- Writes to `~/backups/prod/portfolio-YYYYMMDD-HHMMSS.sql.gz` and `uploads-YYYYMMDD-HHMMSS.tar.gz`
+- Rotates: deletes files older than 7 days
+- If rclone is configured, fires `offsite-sync.sh` in the background (currently a no-op — see [Offsite sync](#offsite-sync-deferred))
+
+Log: `~/backup.log` — check here if a daily run appears to be missing.
+
+### Verify the cron is installed
 
 ```bash
-# Adjust DB names as needed
-pg_dump -Fc -d portfolio_prod -f portfolio_prod.dump
-pg_dump -Fc -d portfolio_dev  -f portfolio_dev.dump
+crontab -l | grep db-backup
 ```
 
-`-Fc` creates a compressed, pg_restore-compatible dump.
-
-### 3. Archive uploads
+If empty, install:
 
 ```bash
-cd ~
-tar czf "backups/$(date +"%Y-%m-%d")/uploads.tgz" uploads/
+(crontab -l 2>/dev/null; \
+  echo "0 2 * * * /home/modnar3/MyPortfolioSite/scripts/backup/db-backup.sh >> /home/modnar3/backup.log 2>&1") \
+  | crontab -
 ```
 
-### 4. Copy critical config
+### Run an ad-hoc backup
+
+Useful before a risky deploy, schema change, or content migration:
 
 ```bash
-cp ~/MyPortfolioSite/.env "backups/$(date +"%Y-%m-%d")/prod.env"
-cp ~/MyPortfolioSite-dev/.env  "backups/$(date +"%Y-%m-%d")/dev.env"
+/home/modnar3/MyPortfolioSite/scripts/backup/db-backup.sh
 ```
-
-Consider copying any other non-git configuration files referenced in **docs/UNTRACKED_FILES.md**.
-
-### 5. Offload backups
-
-For real resilience, copy the `~/backups/YYYY-MM-DD` folder off the server (e.g. to your NAS or cloud storage) using `scp` or another tool.
 
 ---
 
-## Restoring After a Host Failure
+## What's backed up
 
-This is a high-level outline for rebuilding on a new Ubuntu host if `ak-home-server` dies.
+| Asset | How | Where | Retention |
+|---|---|---|---|
+| `portfolio_prod` DB | `pg_dump` + gzip (daily cron) | `~/backups/prod/portfolio-*.sql.gz` | 7 days local |
+| `~/MyPortfolioSite/uploads/` (CVs, images) | tar + gzip (daily cron) | `~/backups/prod/uploads-*.tar.gz` | 7 days local |
 
-1. **Rebuild base environment**
-   - Install Docker, Docker Compose, and Git.
-   - Clone the repositories into `~/MyPortfolioSite` and `~/MyPortfolioSite-dev`.
+**Not backed up automatically:**
 
-2. **Restore uploads and config**
+- `portfolio_dev` database — take ad-hoc snapshots if needed
+- `.env` files — see [docs/UNTRACKED_FILES.md](./UNTRACKED_FILES.md); take a manual copy when secrets change
+- Nginx config templates — checked into git (`scripts/config/`)
+- Application code — lives in GitHub
+
+---
+
+## Offsite sync (deferred)
+
+`scripts/backup/offsite-sync.sh` is ready to sync to Backblaze B2 via rclone (DB dumps + uploads, 30-day retention offsite), but rclone is **not currently configured** on `ak-home-server`. Local backups are the current intended protection — they cover database corruption and accidental deletions, but not a host loss.
+
+If/when offsite is wanted later, the setup is:
+
+1. Create a Backblaze B2 account, bucket, and application key (free up to 10 GB).
+2. `sudo apt install rclone && rclone config` — add a remote named `b2`.
+3. Optionally override `RCLONE_REMOTE` / `RCLONE_BUCKET` in `~/MyPortfolioSite/.env`.
+4. The next daily backup will fire `offsite-sync.sh` automatically.
+
+---
+
+## Restoring after a host failure
+
+Recovery path if `ak-home-server` is lost or `portfolio_prod` is corrupted.
+
+### 1. Rebuild base environment (new host only)
+
+Install Docker, Docker Compose, Git, and rclone (if restoring from offsite). Clone the prod and dev repos:
 
 ```bash
-# On the new host
-mkdir -p ~/MyPortfolioSite/uploads
-# Copy uploads.tgz from your backup location
+git clone https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite
+git clone -b dev https://github.com/AndyRKeys/MyPortfolioSite.git ~/MyPortfolioSite-dev
+```
+
+### 2. Restore `.env` files
+
+```bash
+cp /path/to/saved/prod.env ~/MyPortfolioSite/.env
+cp /path/to/saved/dev.env  ~/MyPortfolioSite-dev/.env
+```
+
+### 3. Bring the stack up so the DB container exists
+
+```bash
 cd ~/MyPortfolioSite
-tar xzf ~/uploads.tgz -C .
-
-# Restore .env files
-cp ~/backups/YYYY-MM-DD/prod.env ~/MyPortfolioSite/.env
-cp ~/backups/YYYY-MM-DD/dev.env  ~/MyPortfolioSite-dev/.env
+docker compose -f docker-compose.yml up -d
 ```
 
-3. **Restore PostgreSQL data**
+### 4. Restore the database
 
-After bringing up the stacks once to create the DB containers:
+Backups are plain-SQL dumps (`.sql.gz`). Use the helper:
 
 ```bash
-# Prod
-docker compose -f ~/MyPortfolioSite/docker-compose.prod.yml exec -T postgres pg_restore \
-  -d portfolio_prod --clean --if-exists < ~/backups/YYYY-MM-DD/portfolio_prod.dump
-
-# Dev
-docker compose -f ~/MyPortfolioSite-dev/docker-compose.yml exec -T postgres pg_restore \
-  -d portfolio_dev --clean --if-exists < ~/backups/YYYY-MM-DD/portfolio_dev.dump
+bash ~/MyPortfolioSite/scripts/backup/db-restore.sh ~/backups/prod/portfolio-YYYYMMDD-HHMMSS.sql.gz
 ```
 
-Adjust service names if they differ (see **docs/DEV_ENVIRONMENT.md** and **docs/PROD_ENVIRONMENT.md**).
+This stops the backend, drops + recreates `portfolio_prod`, restores via `gunzip | psql`, then restarts the backend. It prompts for confirmation before dropping.
 
-4. **Bring services up**
+### 5. Restore uploads
 
 ```bash
-# Prod
 cd ~/MyPortfolioSite
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Dev
-cd ~/MyPortfolioSite-dev
-docker compose -f docker-compose.dev-server.yml up -d --build
+tar xzf ~/backups/prod/uploads-YYYYMMDD-HHMMSS.tar.gz
 ```
 
-5. **Smoke test**
+### 6. Smoke test
 
 Use the runbook and testing docs to verify:
+
 - Homepage and key pages load
 - Basic API calls work
 - Admin login and deployment flows succeed
 
 ---
 
-## Future Improvements
+## Related
 
-When backup automation is added (cron job, offsite sync, etc.), document it here and link to any scripts or systemd units that manage it.
-
-For now, aim to run the manual backup steps before major changes and periodically (e.g. monthly).
-
-See also:
-- **[docs/INFRASTRUCTURE.md](./INFRASTRUCTURE.md)** for host-level details
-- **[docs/UNTRACKED_FILES.md](./UNTRACKED_FILES.md)** for other files not in git but required
+- **[docs/INFRASTRUCTURE.md](./INFRASTRUCTURE.md)** — host-level details
+- **[docs/UNTRACKED_FILES.md](./UNTRACKED_FILES.md)** — non-git files (`.env`, etc.) you will need at restore time
+- Issue **#185** — offsite sync deferred; revisit if cloud redundancy becomes required

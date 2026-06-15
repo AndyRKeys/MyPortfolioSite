@@ -1,7 +1,9 @@
 import { API_BASE } from './config.js';
-import { escapeHtml } from './utils/html.js';
+import { escapeHtml, highlight } from './utils/html.js';
 import { formatVisitDate } from './utils/date.js';
 import { buildTimelineItem, buildPublicTravelCard } from './utils/dom.js';
+import { initLightbox } from './utils/lightbox.js';
+import { recordVisit } from './utils/stats.js';
 
 // ── Travel map (Leaflet) ──────────────────────────────────────────────────────
 
@@ -109,75 +111,6 @@ function initViewToggle() {
     });
 }
 
-// ── Gallery lightbox ──────────────────────────────────────────────────────────
-
-var lightboxItems = [];
-var lightboxIndex = 0;
-
-function openLightbox(items, startIndex, title) {
-    lightboxItems = items;
-    lightboxIndex = startIndex || 0;
-    var titleEl = document.querySelector('#travel-lightbox .lightbox-title');
-    if (titleEl) titleEl.textContent = title || '';
-    renderLightboxItem();
-    document.getElementById('travel-lightbox').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeLightbox() {
-    document.getElementById('travel-lightbox').classList.add('hidden');
-    document.body.style.overflow = '';
-    document.querySelectorAll('#travel-lightbox video').forEach(function (v) { v.pause(); });
-}
-
-function renderLightboxItem() {
-    var item = lightboxItems[lightboxIndex];
-    var mediaContainer = document.querySelector('#travel-lightbox .lightbox-media');
-    var mediaEl;
-    if (item.type && item.type.indexOf('video') === 0) {
-        mediaEl = document.createElement('video');
-        mediaEl.controls = true;
-        mediaEl.playsInline = true;
-        mediaEl.src = item.url;
-    } else {
-        mediaEl = document.createElement('img');
-        mediaEl.alt = 'Gallery image';
-        mediaEl.src = item.url;
-    }
-    mediaContainer.innerHTML = '';
-    mediaContainer.appendChild(mediaEl);
-
-    var counter = document.querySelector('#travel-lightbox .lightbox-counter');
-    if (counter) counter.textContent = (lightboxIndex + 1) + ' / ' + lightboxItems.length;
-
-    var prevBtn = document.querySelector('#travel-lightbox .lightbox-prev');
-    var nextBtn = document.querySelector('#travel-lightbox .lightbox-next');
-    if (prevBtn) prevBtn.classList.toggle('hidden', lightboxIndex === 0);
-    if (nextBtn) nextBtn.classList.toggle('hidden', lightboxIndex === lightboxItems.length - 1);
-}
-
-function initLightbox() {
-    var lightbox = document.getElementById('travel-lightbox');
-    if (!lightbox) return;
-
-    var closeBtn = lightbox.querySelector('.lightbox-close');
-    var prevBtn = lightbox.querySelector('.lightbox-prev');
-    var nextBtn = lightbox.querySelector('.lightbox-next');
-
-    if (closeBtn) closeBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); closeLightbox(); });
-    if (prevBtn) prevBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); if (lightboxIndex > 0) { lightboxIndex--; renderLightboxItem(); } });
-    if (nextBtn) nextBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; renderLightboxItem(); } });
-
-    lightbox.addEventListener('click', function (e) { if (e.target === lightbox) closeLightbox(); });
-
-    document.addEventListener('keydown', function (e) {
-        if (lightbox.classList.contains('hidden')) return;
-        if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
-        else if (e.key === 'ArrowLeft' && lightboxIndex > 0) { e.preventDefault(); lightboxIndex--; renderLightboxItem(); }
-        else if (e.key === 'ArrowRight' && lightboxIndex < lightboxItems.length - 1) { e.preventDefault(); lightboxIndex++; renderLightboxItem(); }
-    });
-}
-
 // ── Travel cards ──────────────────────────────────────────────────────────────
 
 function loadPublicTravelPosts() {
@@ -249,6 +182,87 @@ function loadPublicTravelPosts() {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-fetch(API_BASE + '/stats/visit?page=travel', { method: 'POST' }).catch(function () {});
+recordVisit('travel');
 loadPublicTravelPosts();
 initLightbox();
+
+// ── Embedded listing search (#469) ────────────────────────────────────────────
+
+(function initListingSearch() {
+    var form    = document.getElementById('listing-search-form');
+    var input   = document.getElementById('listing-search-input');
+    var results = document.getElementById('listing-search-results');
+    var mapEl   = document.getElementById('travel-map');
+    var grid    = document.getElementById('travel-grid');
+    var timeline = document.getElementById('travel-timeline');
+    var toggle  = document.querySelector('.travel-view-toggle');
+
+    if (!form || !input || !results) return;
+
+    function setListingHidden(hidden) {
+        if (mapEl)    mapEl.classList.toggle('hidden', hidden);
+        if (grid)     grid.classList.toggle('hidden', hidden);
+        if (timeline) timeline.classList.toggle('hidden', hidden);
+        if (toggle)   toggle.classList.toggle('hidden', hidden);
+    }
+
+    function restoreListing() {
+        // Re-apply the active view so the right containers are shown.
+        if (toggle) toggle.classList.remove('hidden');
+        var activeBtn = document.querySelector('.travel-view-toggle .view-toggle-btn.active');
+        var activeView = (activeBtn && activeBtn.dataset.view) || 'map-timeline';
+        applyTravelView(activeView);
+    }
+
+    var urlQ = new URLSearchParams(window.location.search).get('q') || '';
+    if (urlQ) { input.value = urlQ; runSearch(urlQ); }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q   = input.value.trim();
+        var url = new URL(window.location.href);
+        if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+        history.replaceState(null, '', url);
+        runSearch(q);
+    });
+
+    input.addEventListener('input', function () {
+        if (!input.value.trim()) runSearch('');
+    });
+
+    async function runSearch(q) {
+        if (!q) {
+            results.hidden = true;
+            results.innerHTML = '';
+            restoreListing();
+            return;
+        }
+        setListingHidden(true);
+        results.hidden = false;
+        results.innerHTML = '<p class="hint">Searching…</p>';
+        try {
+            var res  = await fetch(API_BASE + '/search?q=' + encodeURIComponent(q) + '&type=travel&limit=20');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var data = await res.json();
+            if (!data.results || !data.results.length) {
+                results.innerHTML = '<p class="search-empty">No travel memories found.</p>';
+                return;
+            }
+            results.innerHTML = '<ul class="search-result-list">' + data.results.map(function (r) {
+                var href    = '/travel/post/?id=' + encodeURIComponent(r.id);
+                var dateStr = r.post_date || r.published_at || '';
+                return '<li class="search-result-item">' +
+                    '<a href="' + escapeHtml(href) + '" class="search-result-link">' +
+                        '<span class="search-result-title">' + highlight(r.title, q) + '</span>' +
+                        (r.location ? '<span class="search-result-meta">' + escapeHtml(r.location) + '</span>' : '') +
+                        (r.excerpt ? '<p class="search-result-excerpt">' + highlight(r.excerpt, q) + '</p>' : '') +
+                        '<span class="search-result-meta">' + escapeHtml(formatVisitDate(dateStr) || '') + '</span>' +
+                    '</a>' +
+                '</li>';
+            }).join('') + '</ul>';
+        } catch (err) {
+            console.error('[travel-search] failed:', err && (err.message || String(err)));
+            results.innerHTML = '<p class="search-empty">Search failed — please try again.</p>';
+        }
+    }
+})();

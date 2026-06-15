@@ -61,6 +61,14 @@
                             <button type="button" class="btn-secondary file-input-btn" aria-label="Choose photos or videos">Add files…</button>
                             <span class="file-input-label">No files chosen</span>
                             <input id="travel-file" type="file" accept="image/*,video/*" class="file-input-hidden" multiple />
+                            <button
+                                type="button"
+                                id="travel-upload-btn"
+                                class="btn-small"
+                                disabled
+                                aria-label="Extract GPS location from selected photos"
+                            >Upload photos</button>
+                            <span id="travel-upload-status" class="upload-status-msg" aria-live="polite"></span>
                         </div>
                     </label>
                     <div id="travel-media-list" class="media-list hidden"></div>

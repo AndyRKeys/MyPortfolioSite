@@ -1,6 +1,6 @@
 # Nginx server block for andykeys.me portfolio.
 # Rendered by `envsubst` with an explicit allow-list (DOMAIN, REPO_DIR,
-# APP_PORT, BACKEND_HOST) so Nginx-native $vars (e.g. $host, $uri) are preserved.
+# APP_PORT, BACKEND_HOST, DEPLOY_VERSION) so Nginx-native $vars (e.g. $host, $uri) are preserved.
 # BACKEND_HOST defaults to 127.0.0.1 for production, override to 'backend' for Docker.
 # Used by both scripts/pi-setup.sh (initial setup) and scripts/prod-deploy.sh
 # (continuous deployment).
@@ -49,7 +49,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass_header X-Request-Id;
     }
@@ -67,8 +67,19 @@ server {
         try_files $uri =404;
     }
 
-    # Static files
+    # CSS, fonts, and images — long-lived; cache bust via deploy version param on
+    # any URL that embeds a ?v=... query string (#158).
+    location ~* \.(css|woff2|woff|ttf|png|jpg|jpeg|webp|svg|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Static files — rewrite .js src attrs with version hash to bust ES module cache after deploy
     location / {
+        sub_filter '.js"' '.js?v=${DEPLOY_VERSION}"';
+        sub_filter_once off;
+        add_header Cache-Control "no-store";
         try_files $uri $uri/ $uri.html =404;
     }
 }

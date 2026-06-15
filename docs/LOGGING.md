@@ -47,6 +47,7 @@ dlog()       # Raw log lines — auto-redacted
 ```
 
 **Example:**
+
 ```bash
 # Input
 dinfo "Backend running at https://192.168.68.81:3001 on host $(hostname)"
@@ -153,6 +154,7 @@ dlog "JWT_SECRET: ******* ($(echo -n "$JWT_SECRET" | wc -c) chars)"
 The log file (`/home/[USER]/dev-deploy.log` or similar) is **local to the server**. Sensitive information is redacted before writing.
 
 **Before sharing logs:**
+
 1. Run through `_redact_sensitive()` again to verify
 2. Check for missed IP addresses, usernames, paths
 3. Use `grep -v` to filter if needed

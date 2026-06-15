@@ -7,12 +7,11 @@
  */
 import express  from 'express';
 import cors     from 'cors';
-import path     from 'path';
 import crypto   from 'crypto';
-import { fileURLToPath } from 'url';
 import pinoHttp from 'pino-http';
 
-import { logger } from './utils/logger.js';
+import { logger }     from './utils/logger.js';
+import { UPLOADS_DIR } from './utils/paths.js';
 
 import authRoutes    from './routes/auth.js';
 import travelRoutes  from './routes/travel.js';
@@ -23,10 +22,10 @@ import statsRoutes   from './routes/stats.js';
 import cvRoutes      from './routes/cv.js';
 import deployRoutes  from './routes/deploy.js';
 import debugRoutes   from './routes/debug.js';
+import auditRoutes   from './routes/audit.js';
+import searchRoutes  from './routes/search.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
@@ -77,7 +76,6 @@ export function createApp() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
   app.use('/uploads', express.static(UPLOADS_DIR));
 
   app.use('/auth',    authRoutes);
@@ -89,6 +87,8 @@ export function createApp() {
   app.use('/cv',      cvRoutes);
   app.use('/deploy',  deployRoutes);
   app.use('/debug',   debugRoutes);
+  app.use('/audit',   auditRoutes);
+  app.use('/search',  searchRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);

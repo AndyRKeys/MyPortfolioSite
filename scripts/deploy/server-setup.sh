@@ -3,7 +3,7 @@
 # Run once as a non-root user with sudo access after a fresh Ubuntu Server LTS install.
 # Usage: bash server-setup.sh <domain>
 # Example: bash server-setup.sh andykeys.me
-set -e
+set -euo pipefail
 
 REPO_DIR="$HOME/MyPortfolioSite"
 DOMAIN="${1:-}"

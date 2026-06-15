@@ -39,7 +39,7 @@ Convert all frontend JavaScript from `var` globals / plain `<script>` tags to na
 
 **Key cross-file dependencies to resolve:**
 
-```
+```text
 script.js  ──exports──▶  window.buildTimelineItem  ◀──consumes──  blog.js
 script.js  ──exports──▶  window.buildPostCard      ◀──consumes──  blog.js
 script.js  ──exports──▶  window.isAdminSession     ◀──consumes──  script.js (self)
@@ -52,7 +52,7 @@ config.js  ──exports──▶  API, isAdminSession       ◀──consumes�
 
 After migration, the module graph will be:
 
-```
+```text
 resources/java/
 ├── config.js            (already module)  export: API_BASE, isAdminSession
 ├── utils/
@@ -70,7 +70,7 @@ resources/java/
 ```
 
 > **Note on jQuery:** jQuery (loaded from a local file via `<script>`) is not an ES module. It sets `window.$`. All converted modules that use jQuery will access it as the global `$` — this is normal and correct when jQuery is loaded before the module entry point. No change to jQuery loading is needed.
-
+>
 > **Note on Leaflet:** Same pattern. `L` stays as a CDN global.
 
 ---
@@ -84,6 +84,7 @@ Migration is done **page by page**, from simplest to most complex, so each step 
 Create three new files. Nothing breaks because no HTML loads them yet.
 
 **`resources/java/utils/html.js`**
+
 ```js
 export function escapeHtml(str) {
     return String(str || '')
@@ -99,6 +100,7 @@ Extract `formatVisitDate`, `formatRelativeDate`, `formatPostDate` from `script.j
 Extract `buildTimelineItem`, `buildPostCard`, `buildPublicTravelCard`, `buildRepoCard` from `script.js`.
 
 Also update `config.js` to export `API_BASE` (it currently exports `API` — rename for consistency):
+
 ```js
 export const API_BASE = '/api';
 export function isAdminSession() { ... }
@@ -109,6 +111,7 @@ export function isAdminSession() { ... }
 Simplest page: one JS file, no cross-file dependencies, no jQuery.
 
 Changes:
+
 - `blog-post.js`: add `import { API_BASE } from './config.js';`, remove `var API_BASE` shim, convert to module
 - `blog-post.html`: change `<script src="...">` to `<script type="module" src="...">`
 - Remove `<script src="jquery-3.5.1.min.js">` if not used (verify first)
@@ -118,6 +121,7 @@ Changes:
 One JS file, uses jQuery and `API_BASE`.
 
 Changes:
+
 - `travel-post.js`: `import { API_BASE } from './config.js';`, `import { escapeHtml } from './utils/html.js';`, convert to module
 - `travel-post.html`: `<script type="module">`
 - jQuery `<script>` tag stays as plain script (loaded before the module)
@@ -127,6 +131,7 @@ Changes:
 `blog.html` loads both `script.js` and `blog.js`. `blog.js` currently calls `window.buildTimelineItem` and `window.buildPostCard` (set by `script.js`).
 
 Changes:
+
 - `blog.js`: `import { buildTimelineItem, buildPostCard } from './utils/dom.js';`, `import { API_BASE } from './config.js';`, remove `window.*` references, convert to module
 - `script.js`: convert to module, remove `window.buildTimelineItem = ...` and `window.buildPostCard = ...` exports, `import` from `utils/*`
 - `blog.html`: both script tags get `type="module"`
@@ -166,11 +171,13 @@ Verify these pages load no custom JS that needs converting (currently they appea
 ## 6. Files Changed Summary
 
 ### New files
+
 - `resources/java/utils/html.js`
 - `resources/java/utils/date.js`
 - `resources/java/utils/dom.js`
 
 ### Modified JS files
+
 - `resources/java/config.js` — rename `API` → `API_BASE`
 - `resources/java/script.js` — convert to module, remove `window.*` exports, import from utils
 - `resources/java/blog.js` — convert to module, import from utils, remove `window.*` calls
@@ -181,6 +188,7 @@ Verify these pages load no custom JS that needs converting (currently they appea
 - `resources/java/nav.js` — add `export {}` or keep as plain script (TBD)
 
 ### Modified HTML files (script tag changes only)
+
 - `blog-post.html`
 - `travel-post.html`
 - `blog.html`
@@ -338,7 +346,7 @@ Run through every manual test below and note the current pass/fail state. Any pr
 
 Each phase = one commit, named:
 
-```
+```text
 refactor(modules): phase 1 — create utils/html, utils/date, utils/dom
 refactor(modules): phase 2 — convert blog-post.js and blog-post.html
 refactor(modules): phase 3 — convert travel-post.js and travel-post.html

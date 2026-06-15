@@ -35,6 +35,7 @@ This branch completes the remaining items from issue #79 after PRs #85 and #86:
 - [ ] `backend/routes/upload.js`
 
 **Search command:**
+
 ```bash
 grep -rn '{ message:' backend/routes/
 ```
@@ -46,11 +47,13 @@ grep -rn '{ message:' backend/routes/
 **Goal:** Replace per-route `if (!field) return res.status(400)...` manual checks with a shared Zod middleware.
 
 ### Step 1 — Install Zod
+
 ```bash
 cd backend && npm install zod
 ```
 
 ### Step 2 — Implement `backend/middleware/validate.js`
+
 ```js
 const { z } = require('zod');
 
@@ -87,6 +90,7 @@ Define schemas at the top of each route file, or in a new `backend/schemas/` dir
 ### Step 4 — Wire middleware into routes
 
 Replace manual field checks with `validate(Schema)` in the route definition:
+
 ```js
 // Before
 router.post('/', authenticate, async (req, res) => {
@@ -109,6 +113,7 @@ router.post('/', authenticate, validate(CreatePostSchema), async (req, res) => {
 **Goal:** Unhandled errors thrown in async route handlers return `{ error }` rather than crashing or returning HTML stack traces.
 
 ### Step 1 — Implement `backend/middleware/errorHandler.js`
+
 ```js
 function errorHandler(err, req, res, next) {
     if (res.headersSent) return next(err);
@@ -122,6 +127,7 @@ module.exports = { errorHandler };
 ```
 
 ### Step 2 — Register in `backend/server.js`
+
 ```js
 const { errorHandler } = require('./middleware/errorHandler');
 // ... all route registrations ...
@@ -129,10 +135,13 @@ app.use(errorHandler); // must be last
 ```
 
 ### Step 3 — Wrap async routes (optional but recommended)
+
 Async route handlers that throw will not be caught by Express 4 unless wrapped:
+
 ```js
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 ```
+
 Apply to all `async (req, res)` route handlers, or upgrade to Express 5 which handles this natively.
 
 ---
@@ -147,7 +156,7 @@ Apply to all `async (req, res)` route handlers, or upgrade to Express 5 which ha
 
 ## Commit Strategy
 
-```
+```text
 refactor(errors): standardise all route error responses to { error } shape
 feat(validation): implement Zod validate() middleware
 refactor(routes): replace manual field checks with validate() middleware

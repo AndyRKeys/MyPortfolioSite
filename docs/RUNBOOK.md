@@ -30,6 +30,7 @@ curl.exe -s https://andykeys.me/api/health
 ```
 
 Expected:
+
 - HTML for the homepage in the first call
 - A small JSON health payload or 200 OK for `/api/health`
 
@@ -106,6 +107,7 @@ From Windows:
 ```
 
 This will:
+
 - SSH into `ak-home-server`
 - Pull the latest `main`
 - Rebuild images
@@ -148,6 +150,7 @@ For a specific PR, run its PowerShell smoke test from Windows against dev (see *
 ### 6. Renew the Outlook OAuth2 refresh token
 
 **When:** Magic link emails stop arriving. Backend logs show `invalid_grant` or `AADSTS70000`. This happens because:
+
 - Microsoft invalidates refresh tokens after **90 days of inactivity**
 - Refresh tokens are also invalidated immediately if the **client secret is rotated** in Azure
 
@@ -168,7 +171,7 @@ node scripts/generate-outlook-refresh-token.js
 
 You'll be prompted for your Azure app's CLIENT_ID, CLIENT_SECRET (the _value_, not the ID), and your Outlook email. The script opens a browser, you authorise, and it prints the new values:
 
-```
+```text
 OUTLOOK_CLIENT_ID=...
 OUTLOOK_CLIENT_SECRET=...
 OUTLOOK_REFRESH_TOKEN=...
@@ -202,6 +205,7 @@ docker compose logs -f backend | grep -i "auth/email"
 ### 1. Narrow it down
 
 Ask three questions:
+
 - Is it **frontend only** (layout/JS), **API only** (HTTP errors), or **everything** (site down)?
 - Does it reproduce on both **dev** and **prod**, or just one?
 - Did a deploy just happen?
@@ -225,6 +229,7 @@ docker compose logs --tail=100 backend
 ```
 
 Common fixes:
+
 - Fix any config error reported in logs (env var, port conflict, bad nginx config)
 - Re-run `docker compose up -d --build`
 
@@ -240,6 +245,7 @@ docker compose logs -f backend
 ```
 
 Look for:
+
 - Stack traces or structured error logs around the failing endpoint
 - Database connection errors
 - Auth errors (JWT / WebAuthn)

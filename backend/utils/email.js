@@ -78,15 +78,23 @@ export async function sendContactEmail({ name, email, message }) {
   const from = isOAuth2Configured()
     ? process.env.OUTLOOK_EMAIL
     : (process.env.SMTP_FROM || process.env.SMTP_USER);
+  const to = process.env.ADMIN_EMAIL || from;
+
+  logger.info(
+    { provider: isOAuth2Configured() ? 'graph' : 'smtp', to: redactEmail(to) },
+    `[contact] Sending contact email from ${redactEmail(email)}`
+  );
 
   const html = `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p><hr><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`;
   const text = `Name: ${name}\nEmail: ${email}\n\n${message}`;
 
   if (isOAuth2Configured()) {
-    await sendViaGraph({ from, to: from, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
+    await sendViaGraph({ from, to, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
   } else {
-    await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to: from, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
+    await getSmtpTransporter().sendMail({ from: `"AK Portfolio" <${from}>`, to, replyTo: email, subject: `Portfolio contact from ${name}`, text, html });
   }
+
+  logger.info({ to: redactEmail(to) }, '[contact] Contact email sent successfully');
 }
 
 export async function sendErrorAlertEmail({ count, windowMinutes, topErrors, adminEmail }) {

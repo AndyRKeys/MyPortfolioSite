@@ -37,6 +37,7 @@
             <li><a href="/#contact">✉ Contact</a></li>
             <li><a href="/blog/">✏ Blog</a></li>
             <li><a href="/travel/">✈ Travel</a></li>
+            <li><a href="/search/">🔍 Search</a></li>
             <li><a href="/login/">🔒 Admin</a></li>
             <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
         </ul>
@@ -45,6 +46,14 @@
     <main>
         <section class="sec-cont" id="travel">
             <h2>Travel Memories</h2>
+
+            <form id="listing-search-form" class="search-form listing-search-form" role="search">
+                <div class="search-input-wrap">
+                    <input id="listing-search-input" type="search" name="q" placeholder="Search travel memories…" class="search-input" aria-label="Search travel memories" autocomplete="off" />
+                    <button type="submit" class="btn-primary search-submit">Search</button>
+                </div>
+            </form>
+            <div id="listing-search-results" class="listing-search-results" aria-live="polite" hidden></div>
 
             <div class="travel-view-toggle" role="tablist">
                 <button type="button" class="view-toggle-btn active" data-view="map-timeline" role="tab" aria-selected="true">Map + timeline</button>

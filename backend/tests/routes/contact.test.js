@@ -4,7 +4,10 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { createApp } from '../../app.js';
+
+process.env.JWT_SECRET = 'test-secret-test-secret-test-secret-32';
 
 // Mock pool directly — contact route uses it for rate-limit checks
 vi.mock('../../db/pool.js', () => ({
@@ -59,9 +62,10 @@ describe('POST /contact', () => {
 describe('POST /contact — SERVICE_KEY service account exemption', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Simulate rate limit exceeded so exemption behaviour is observable
+    // Simulate rate limit exceeded so exemption behaviour is observable.
+    // PostgresStore expects { count, window_start } from the INSERT...RETURNING.
     const { pool } = vi.mocked(await import('../../db/pool.js'));
-    pool.query.mockResolvedValue({ rows: [{ count: 4 }] });
+    pool.query.mockResolvedValue({ rows: [{ count: 4, window_start: new Date() }] });
   });
 
   afterEach(() => {
@@ -101,6 +105,42 @@ describe('POST /contact — SERVICE_KEY service account exemption', () => {
     const res = await request(app)
       .post('/contact')
       .set('X-Service-Key', 'any-value')
+      .send({ name: 'Alice', email: 'alice@example.com', message: 'Hi' });
+    expect(res.status).toBe(429);
+  });
+});
+
+describe('POST /contact — JWT authenticated session exemption', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Simulate rate limit exceeded so exemption behaviour is observable.
+    // PostgresStore expects { count, window_start } from the INSERT...RETURNING.
+    const { pool } = vi.mocked(await import('../../db/pool.js'));
+    pool.query.mockResolvedValue({ rows: [{ count: 4, window_start: new Date() }] });
+  });
+
+  it('returns 429 when rate limit exceeded and no JWT sent', async () => {
+    const res = await request(app)
+      .post('/contact')
+      .send({ name: 'Alice', email: 'alice@example.com', message: 'Hi' });
+    expect(res.status).toBe(429);
+  });
+
+  it('exempts authenticated session and reaches validation when valid JWT sent', async () => {
+    const token = jwt.sign({ userId: 1 }, process.env.JWT_SECRET);
+    const res = await request(app)
+      .post('/contact')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Alice', email: 'not-an-email', message: 'Hi' });
+    // Exempted — validation fires and rejects the bad email with 400, not 429
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/email/i);
+  });
+
+  it('still rate limits when JWT is invalid', async () => {
+    const res = await request(app)
+      .post('/contact')
+      .set('Authorization', 'Bearer not.a.valid.jwt')
       .send({ name: 'Alice', email: 'alice@example.com', message: 'Hi' });
     expect(res.status).toBe(429);
   });

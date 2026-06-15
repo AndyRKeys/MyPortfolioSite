@@ -24,7 +24,7 @@ A full-stack personal portfolio site built with plain HTML/CSS/JS on the fronten
 
 ## Architecture
 
-```
+```text
 Browser → andykeys.me
        → Nginx :80/:443
            ├── /auth/*  → proxy → Node.js backend (Docker)
@@ -41,6 +41,7 @@ For a high-level view of where the project is heading and current priorities, se
 ## Local Development
 
 ### Prerequisites
+
 - Docker Desktop (recommended)
 - A passkey-capable browser (Chrome, Safari, Edge)
 - Node.js 20+ only needed if running without Docker
@@ -50,6 +51,7 @@ For a high-level view of where the project is heading and current priorities, se
 The canonical environment for development and testing is the shared dev server on `ak-home-server`. Local Docker dev via `dev-local.ps1` is kept as a fallback and may lag behind.
 
 When working on a feature or fix:
+
 - Use the usual git branching model (`feature/issue-N-*` / `fix/issue-N-*` from `dev`)
 - Push your branch and open a PR to `dev` as soon as there is something to test
 - Use the dev-server deployment scripts (see `docs/INFRASTRUCTURE.md` and `docs/DEV_ENVIRONMENT.md`) to run the latest `dev` branch on the server for manual testing
@@ -90,6 +92,7 @@ Visit `http://localhost/setup/` to create the admin account and register your fi
 ```
 
 **Troubleshooting:**
+
 - **Port already in use**: Change `PORT`, `DB_PORT`, or Nginx port in `.env` or `docker-compose.yml`
 - **Backend can't connect to DB**: Wait for PostgreSQL to be healthy — `docker compose logs postgres`
 - **Schema not initialized**: `docker compose exec postgres psql -U postgres -d portfolio_dev -f /docker-entrypoint-initdb.d/01-schema.sql`
@@ -117,7 +120,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Serve the frontend with VS Code Live Server and open **http://localhost:3000** (not 127.0.0.1 — WebAuthn requires `localhost` or HTTPS).
+Serve the frontend with VS Code Live Server and open **<http://localhost:3000>** (not 127.0.0.1 — WebAuthn requires `localhost` or HTTPS).
 
 ---
 
@@ -141,7 +144,7 @@ No `-Token` flag needed — the script auto-generates a JWT from the container. 
 
 ## Branching Strategy
 
-```
+```text
 main  ←── release/YYYY-MM-DD ←── dev ←── feature/issue-N-description
                                      ←── fix/issue-N-description
 main  ←── hotfix/issue-N-description (emergency fixes only)
@@ -178,7 +181,7 @@ gh pr create --base main --head dev --title "Release: ..."
 
 ### Commit style
 
-```
+```text
 Short imperative summary (50 chars max)
 
 Optional explanation if the why isn't obvious.
@@ -197,6 +200,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
 This SSHs into the server (`ak-home-server`), runs `switch-branch.sh main` to update the working tree, then runs `deploy.sh --env prod`, which:
+
 1. Validates `.env` and checks prerequisites
 2. Builds and restarts containers via `docker compose up -d --build` (unified `docker-compose.yml`, project `portfolio_prod`)
 3. Runs health checks and rolls back automatically on failure
@@ -240,7 +244,7 @@ ssh <hostname> "sudo certbot renew"
 
 ## Scripts
 
-```
+```text
 scripts/
 ├── dev/
 │   ├── dev-local.ps1       Windows wrapper for all local dev commands
@@ -315,7 +319,7 @@ Feature backlog is tracked in [GitHub Issues](https://github.com/AndyRKeys/MyPor
 
 Copy and paste the prompt below at the start of any new AI pair programming session. It instructs the agent to read all project documentation and familiarise itself with the codebase before doing any work.
 
-```
+```text
 You are pair programming with me on my personal portfolio site. Before we start
 any work, please familiarise yourself with the project by reading the following
 documents in order — do not skip any:

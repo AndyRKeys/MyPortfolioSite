@@ -1,6 +1,7 @@
 // Login page authentication handler — extracted from inline script to satisfy CSP script-src.
 // Handles: passkey registration, email magic links, auto-verification from URL token.
 
+// Version pin: keep in sync with admin/passkeys.js (#434).
 import { startAuthentication } from 'https://esm.sh/@simplewebauthn/browser@7';
 import { API_BASE } from './config.js';
 import { isAdminSession } from './auth-utils.js';
@@ -8,7 +9,7 @@ import { isAdminSession } from './auth-utils.js';
 function setMessage(msg, isError = false) {
     const el = document.getElementById('login-message');
     el.textContent = msg;
-    el.style.color = isError ? '#c0392b' : '#27ae60';
+    el.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
 }
 
 if (isAdminSession()) {
@@ -32,7 +33,7 @@ if (emailToken) {
         })
         .catch(err => {
             statusEl.textContent = err.message;
-            statusEl.style.color = '#c0392b';
+            statusEl.style.color = 'var(--color-error)';
         });
 }
 
@@ -49,14 +50,14 @@ document.getElementById('passkey-btn').addEventListener('click', async () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
         });
-        const { options, sessionKey } = await startRes.json();
+        const { options, session_key } = await startRes.json();
 
         const response = await startAuthentication(options);
 
         const finishRes = await fetch(`${API_BASE}/auth/passkey/login/finish`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ response, sessionKey }),
+            body: JSON.stringify({ response, session_key }),
         });
         const data = await finishRes.json();
         if (!finishRes.ok) throw new Error(data.error || 'Authentication failed');

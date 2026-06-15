@@ -1,6 +1,6 @@
 # Nginx config for LOCAL Docker development only.
 # Plain HTTP — no SSL. SSL lives in nginx-portfolio.conf.template (Pi/prod only).
-# Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST
+# Rendered by envsubst with: DOMAIN, REPO_DIR, APP_PORT, BACKEND_HOST, DEPLOY_VERSION
 
 server {
     listen 80;
@@ -47,8 +47,19 @@ server {
         try_files $uri =404;
     }
 
-    # Static files
+    # CSS, fonts, and images — long-lived; cache bust via deploy version param on
+    # any URL that embeds a ?v=... query string (#158).
+    location ~* \.(css|woff2|woff|ttf|png|jpg|jpeg|webp|svg|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Static files — rewrite .js src attrs with version hash to bust ES module cache after deploy
     location / {
+        sub_filter '.js"' '.js?v=${DEPLOY_VERSION}"';
+        sub_filter_once off;
+        add_header Cache-Control "no-store";
         try_files $uri $uri/ $uri.html =404;
     }
 }

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Global error logger (load first to catch all errors) -->
+    <script type="module" src="/resources/js/error-logger.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Search | AK Portfolio</title>
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header id="home">
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>Search</h2>
+    </header>
+    <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
+        <ul class="nav">
+            <li><a href="/">🏠 Home</a></li>
+            <li><a href="/#about">👤 About</a></li>
+            <li><a href="/blog/">✏ Blog</a></li>
+            <li><a href="/travel/">✈ Travel</a></li>
+            <li><a href="/login/">🔒 Admin</a></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section class="sec-cont" id="search">
+            <h2>Search</h2>
+
+            <form id="search-form" class="search-form" role="search">
+                <div class="search-input-wrap">
+                    <input
+                        id="search-input"
+                        type="search"
+                        placeholder="Search posts and travel memories…"
+                        aria-label="Search"
+                        autocomplete="off"
+                        class="search-input"
+                    />
+                    <button type="submit" class="btn-primary search-submit">Search</button>
+                </div>
+
+                <div class="search-filters" role="group" aria-label="Filter by type">
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="all" checked /> All
+                    </label>
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="blog" /> Blog
+                    </label>
+                    <label class="search-filter-label">
+                        <input type="radio" name="type" value="travel" /> Travel
+                    </label>
+                </div>
+            </form>
+
+            <div id="search-results" aria-live="polite"></div>
+        </section>
+    </main>
+
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
+    <script type="module" src="/resources/js/search.js"></script>
+</body>
+</html>

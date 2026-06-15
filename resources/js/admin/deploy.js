@@ -1,5 +1,12 @@
 import { authFetch } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
+import { createMessenger } from '../utils/messenger.js';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+// Together these encode a ~60 s recovery window after a backend restart.
+const MAX_POLL_ATTEMPTS  = 30;
+const POLL_INTERVAL_MS   = 2000;
 
 export function initDeploy() {
     let deployEnv = 'prod'; // fallback until status loads
@@ -16,10 +23,7 @@ export function initDeploy() {
     const statusRow       = document.getElementById('deploy-status-row');
     const logList         = document.getElementById('deploy-log-list');
 
-    function setMessage(msg, isError = false) {
-        message.textContent = msg;
-        message.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
-    }
+    const setMessage = createMessenger('deploy-message');
 
     function setBusy(busy) {
         fetchBtn.disabled        = busy;
@@ -30,12 +34,12 @@ export function initDeploy() {
 
     function renderStatus(s) {
         if (s.env) deployEnv = s.env;
-        const badge = s.upToDate
+        const badge = s.up_to_date
             ? '<span style="color:var(--color-success)">✓ Up to date</span>'
             : `<span style="color:var(--color-error)">↓ ${s.behind} commit${s.behind !== 1 ? 's' : ''} behind</span>`;
         statusRow.innerHTML =
             `<strong>${escapeHtml(s.head.sha)}</strong> — ${escapeHtml(s.head.message)}&nbsp;&nbsp;${badge}`;
-        if (s.canDeploy) {
+        if (s.can_deploy) {
             fetchBtn.disabled    = false;
             deployBtn.disabled   = false;
             rollbackBtn.disabled = false;
@@ -45,13 +49,13 @@ export function initDeploy() {
     }
 
     function renderLog(data) {
-        const rows = data.deployLog.map(e =>
+        const rows = data.deploy_log.map(e =>
             `<p style="font-size:0.85rem;font-family:monospace">${escapeHtml(e.ts ? '[' + e.ts + '] ' : '')}${escapeHtml(e.detail)}</p>`
         ).join('');
         logList.innerHTML = rows || '<p class="hint">No deploy log entries yet.</p>';
 
         rollbackSelect.innerHTML = data.commits.map(c =>
-            `<option value="${escapeHtml(c.sha)}">${escapeHtml(c.shortSha)} — ${escapeHtml(c.message)}</option>`
+            `<option value="${escapeHtml(c.sha)}">${escapeHtml(c.short_sha)} — ${escapeHtml(c.message)}</option>`
         ).join('');
     }
 
@@ -108,13 +112,13 @@ export function initDeploy() {
 
     // Poll /deploy/status until the backend responds (up to 60s)
     async function pollUntilBack(attempts = 0) {
-        if (attempts > 30) throw new Error('Backend did not recover within 60s');
+        if (attempts > MAX_POLL_ATTEMPTS) throw new Error('Backend did not recover within 60s');
         try {
             const r = await authFetch('/deploy/status');
             if (!r.ok) throw new Error();
             renderStatus(await r.json());
         } catch {
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
             return pollUntilBack(attempts + 1);
         }
     }

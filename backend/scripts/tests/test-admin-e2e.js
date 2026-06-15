@@ -193,17 +193,65 @@ try {
   smoke('No unhandled JS exceptions on page load', pageErrors.length === 0, pageErrors.join('; '));
   const pageErrorsAtLoad = pageErrors.length; // snapshot — S-final only reports new errors from interactions
 
-  // S3: admin sub-nav present and Dashboard is the active item (#378)
+  // S3: admin sub-nav present, correct item count, and Dashboard is active (#378, +Activity #155)
   const subnavExists = await page.$('.admin-subnav') !== null;
   smoke('Admin sub-nav present', subnavExists, '.admin-subnav not found');
   if (subnavExists) {
+    const subnavCount = await page.$$eval('.admin-subnav-item', els => els.length);
+    smoke('Admin sub-nav has 8 items', subnavCount === 8, `found ${subnavCount}`);
+    const subnavLabels = await page.$$eval('.admin-subnav-item .admin-subnav-label', els => els.map(e => e.textContent.trim()));
+    smoke('Admin sub-nav includes Activity', subnavLabels.includes('Activity'), `labels: ${subnavLabels.join(', ')}`);
     const activeLabel = await page.$eval('.admin-subnav-item.active', el => el.textContent.trim()).catch(() => '');
     smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
 
-  // S4: all 6 dashboard navigation cards present (#378)
+  // S4: all 7 dashboard navigation cards present (#378, +Activity card from #155)
   const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
-  smoke('Dashboard has 6 navigation cards', cardCount === 6, `found ${cardCount}`);
+  smoke('Dashboard has 7 navigation cards', cardCount === 7, `found ${cardCount}`);
+
+  // S5: Search link present in public nav on blog and travel pages (#157)
+  const blogNav = await page.evaluate(async (url) => {
+    const r = await fetch(url); const html = await r.text();
+    return html.includes('href="/search/"');
+  }, `${baseUrl}/blog/`);
+  smoke('Blog page — Search link in nav', blogNav, 'href="/search/" not found in /blog/');
+  const travelNav = await page.evaluate(async (url) => {
+    const r = await fetch(url); const html = await r.text();
+    return html.includes('href="/search/"');
+  }, `${baseUrl}/travel/`);
+  smoke('Travel page — Search link in nav', travelNav, 'href="/search/" not found in /travel/');
+
+  // S7: public search page loads without errors (#157)
+  consoleErrors.length = 0;
+  await page.goto(`${baseUrl}/search/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const searchFormExists = await page.$('#search-form') !== null;
+  smoke('Search page — form present', searchFormExists, '#search-form not found');
+  const searchPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
+  smoke('Search page — no JS console errors', searchPageErrors.length === 0, searchPageErrors.join('; '));
+
+  // S7b: embedded search input present on /blog/ and /travel/ listing pages (#469)
+  await page.goto(`${baseUrl}/blog/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const blogSearchInputExists = await page.$('#listing-search-input') !== null;
+  smoke('Blog page — embedded search input present', blogSearchInputExists, '#listing-search-input not found on /blog/');
+  await page.goto(`${baseUrl}/travel/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const travelSearchInputExists = await page.$('#listing-search-input') !== null;
+  smoke('Travel page — embedded search input present', travelSearchInputExists, '#listing-search-input not found on /travel/');
+
+  // S8: admin activity dashboard loads and shows table (#155)
+  consoleErrors.length = 0;
+  await page.goto(`${baseUrl}/admin/activity.html`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const activityTableExists = await page.$('#activity-tbody') !== null;
+  smoke('Activity dashboard — table present', activityTableExists, '#activity-tbody not found');
+  const activityPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
+  smoke('Activity dashboard — no JS console errors', activityPageErrors.length === 0, activityPageErrors.join('; '));
+
+  // S9: CV history section present on media page (#109)
+  consoleErrors.length = 0;
+  await page.goto(`${baseUrl}/admin/media.html`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const cvHistoryExists = await page.$('#cv-history') !== null;
+  smoke('CV history — section present on media page', cvHistoryExists, '#cv-history not found');
+  const mediaPageErrors = consoleErrors.filter(e => !e.includes('zlib'));
+  smoke('CV history — no JS console errors on media page', mediaPageErrors.length === 0, mediaPageErrors.join('; '));
 
   // ── Interaction tests ────────────────────────────────────────────────────
 
@@ -326,6 +374,45 @@ try {
     interact('Deploy fetch — output appeared', true);
   } catch (e) {
     interact('Deploy fetch — output appeared', false, e.message);
+  }
+
+  // ── I6: full-text search returns results (#157) ──────────────────────────
+  console.log('\n🔍 I6 — full-text search');
+  await page.goto(`${baseUrl}/search/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  try {
+    await page.waitForSelector('#search-input', { timeout: 5000 });
+    await page.$eval('#search-input', el => { el.value = ''; });
+    await page.type('#search-input', 'portfolio');
+    await page.click('button[type="submit"]');
+    // Wait for results container to be populated (results or "no results" message)
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('search-results');
+        return el && el.textContent.trim().length > 0;
+      },
+      { timeout: 10000 },
+    );
+    interact('Search — results container populated', true);
+  } catch (e) {
+    interact('Search — results container populated', false, e.message);
+  }
+
+  // ── I7: activity log shows entries written by I1–I4 (#154/#155) ──────────
+  console.log('\n📋 I7 — activity log has entries');
+  await page.goto(`${baseUrl}/admin/activity.html`, { waitUntil: 'networkidle0', timeout: 20000 });
+  try {
+    await page.waitForFunction(
+      () => {
+        const tbody = document.getElementById('activity-tbody');
+        if (!tbody) return false;
+        const rows = tbody.querySelectorAll('tr');
+        return rows.length > 0 && !tbody.textContent.includes('Failed to load');
+      },
+      { timeout: 10000 },
+    );
+    interact('Activity log — shows audit entries from test interactions', true);
+  } catch (e) {
+    interact('Activity log — shows audit entries from test interactions', false, e.message);
   }
 
   // S-final: no unhandled JS exceptions fired during interactions (#397)

@@ -1,11 +1,35 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
-import { slugify } from '../utils/slugify.js';
+import { resolveUser } from '../middleware/resolveUser.js';
+import { rateLimit } from 'express-rate-limit';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
+import { publicCache, noStore } from '../middleware/cacheHeaders.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = Router();
+
+// Separate keyType from posts (#445 — shared counters caused cross-route lockout).
+// Owner is exempt via exemptIfTrusted (which verifies the JWT inline); cap
+// targets anonymous scraping and fuzz attempts against the protected CRUD
+// surface. The limiter precedes resolveUser in the chain so CodeQL's
+// js/missing-rate-limiting detector sees it before any authorization step.
+const travelRateLimit = rateLimit({
+  windowMs:        TRAVEL_RATE_WINDOW_MS,
+  limit:           TRAVEL_RATE_LIMIT,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: TRAVEL_RATE_WINDOW_MS, keyType: 'travel' }),
+});
 
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
@@ -62,7 +86,7 @@ async function replaceMedia(client, postId, mediaItems) {
 }
 
 // Public: published travel posts
-router.get('/', async (req, res) => {
+router.get('/', travelRateLimit, resolveUser, publicCache(60), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC}
@@ -73,12 +97,12 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: all travel posts including drafts
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', travelRateLimit, resolveUser, authenticate, noStore, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS}
@@ -89,12 +113,12 @@ router.get('/all', authenticate, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: single travel post by id (includes drafts)
-router.get('/admin/:id', authenticate, async (req, res) => {
+router.get('/admin/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1 AND p.post_type = 'travel'`,
@@ -104,12 +128,12 @@ router.get('/admin/:id', authenticate, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Public: single published travel post by id
-router.get('/:id', async (req, res) => {
+router.get('/:id', travelRateLimit, resolveUser, publicCache(300), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS_PUBLIC} FROM posts p
@@ -120,12 +144,12 @@ router.get('/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: create travel post
-router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) => {
+router.post('/', travelRateLimit, resolveUser, authenticate, validate(CreateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -137,34 +161,21 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
     const postDateVal = post_date || null;
     const publishedAt = publish ? new Date() : null;
 
-    const baseSlug = slugify(title, 'travel');
-    let slug   = baseSlug;
-    let i      = 1;
-    let postId = null;
+    const slug = await findUniqueSlug(client, slugify(title, 'travel'));
 
-    while (!postId && i <= 100) {
-      const firstMedia = media_items && media_items.length ? media_items[0] : null;
-      const insert = await client.query(
-        `INSERT INTO posts
-           (post_type, title, slug, body_markdown, post_date, published_at,
-            location, media_url, media_type, lat, lng)
-         VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (slug) DO NOTHING
-         RETURNING id`,
-        [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
-         location?.trim() || null,
-         firstMedia?.url || null, firstMedia?.type || null,
-         latVal, lngVal]
-      );
-
-      if (insert.rows.length > 0) {
-        postId = insert.rows[0].id;
-      } else {
-        slug = `${baseSlug}-${i++}`;
-      }
-    }
-
-    if (!postId) throw new Error('Could not generate unique slug after 100 attempts');
+    const firstMedia = media_items && media_items.length ? media_items[0] : null;
+    const insert = await client.query(
+      `INSERT INTO posts
+         (post_type, title, slug, body_markdown, post_date, published_at,
+          location, media_url, media_type, lat, lng)
+       VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [title.trim(), slug, notes?.trim() || '', postDateVal, publishedAt,
+       location?.trim() || null,
+       firstMedia?.url || null, firstMedia?.type || null,
+       latVal, lngVal]
+    );
+    const postId = insert.rows[0].id;
 
     if (media_items && media_items.length) {
       await replaceMedia(client, postId, media_items);
@@ -175,18 +186,19 @@ router.post('/', authenticate, validate(CreateTravelSchema), async (req, res) =>
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1`, [postId]
     );
+    await logAudit(req, 'travel.create', 'travel', postId, { title: title.trim(), published: !!publishedAt });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: update travel post
-router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) => {
+router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTravelSchema), async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -229,33 +241,41 @@ router.put('/:id', authenticate, validate(UpdateTravelSchema), async (req, res) 
     const result = await pool.query(
       `SELECT ${TRAVEL_COLS} FROM posts p WHERE p.id = $1`, [req.params.id]
     );
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    const wasPublished = !!existing.rows[0].published_at;
+    const nowPublished = !!updated?.published_at;
+    const auditAction  = !wasPublished && nowPublished ? 'travel.publish'
+                       : wasPublished && !nowPublished ? 'travel.unpublish'
+                       : 'travel.update';
+    await logAudit(req, auditAction, 'travel', req.params.id, { title: title?.trim() });
+    res.json(updated);
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   } finally {
     client.release();
   }
 });
 
 // Admin: delete travel post (CASCADE removes post_media rows)
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
-      `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id`,
+      `DELETE FROM posts WHERE id = $1 AND post_type = 'travel' RETURNING id, title`,
       [req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Memory not found' });
+    await logAudit(req, 'travel.delete', 'travel', result.rows[0].id, { title: result.rows[0].title });
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 
 // Admin: delete a single media item from post_media
-router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
+router.delete('/:id/media/:mediaId', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,
@@ -274,7 +294,7 @@ router.delete('/:id/media/:mediaId', authenticate, async (req, res) => {
     res.json({ deleted: true });
   } catch (err) {
     logger.error({ err }, '[travel] Request failed');
-    res.status(500).json({ error: 'Database error' });
+    next(err);
   }
 });
 

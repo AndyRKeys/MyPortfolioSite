@@ -1,6 +1,17 @@
 import exifr from 'https://esm.sh/exifr@7.1.3';
 import { authFetch, authFetchMultipart, todayIso } from './auth.js';
 import { escapeHtml } from '../utils/html.js';
+import { createMessenger } from '../utils/messenger.js';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+// Nominatim base URL — shared by reverse-geocode (reverseGeocodeToLocation)
+// and forward-geocode (geocodeLocation) to avoid drift between the two calls.
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
+
+// Duration (ms) to flash a success outline on the location input after
+// Geocode normalises the field value.
+const LOCATION_FLASH_MS = 1500;
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -12,12 +23,7 @@ let geoconfirmMarker = null;
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 
-function setMessage(msg, isError = false, isHint = false) {
-    const el = document.getElementById('travel-message');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? 'var(--color-error)' : isHint ? 'var(--color-text-muted)' : 'var(--color-success)';
-}
+const setMessage = createMessenger('travel-message');
 
 // ── Media list ────────────────────────────────────────────────────────────────
 
@@ -63,6 +69,7 @@ function renderMediaList() {
                 if (!pendingFiles.length && !existingMedia.length) {
                     document.querySelector('.file-input-label').textContent = 'No files chosen';
                 }
+                syncUploadBtn();
             });
         }
 
@@ -88,6 +95,8 @@ function clearForm() {
     renderMediaList();
     setMessage('');
     hideGeoconfirmMap();
+    syncUploadBtn();
+    if (uploadStatus) uploadStatus.textContent = '';
 }
 
 // ── Saved memories list ───────────────────────────────────────────────────────
@@ -178,6 +187,8 @@ async function loadForEdit(memory) {
             : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
         document.querySelector('.file-input-label').textContent = 'No files chosen';
         renderMediaList();
+        syncUploadBtn();
+        if (uploadStatus) uploadStatus.textContent = '';
 
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
@@ -272,20 +283,32 @@ function hasValidGps(lat, lng) {
     return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 }
 
+// Build canonical "City, Country" from a Nominatim address object.
+// Falls back to the first two comma-separated parts of display_name when the
+// address object lacks a city-level field (e.g. Tokyo returns addresstype
+// "province", not "city", so address.province must be checked explicitly).
+function normaliseLocation(address, displayName) {
+    if (address) {
+        const city    = address.city || address.town || address.village || address.hamlet ||
+                        address.municipality || address.province ||
+                        address.county || address.state_district || address.state || '';
+        const country = address.country || '';
+        if (city && country) return `${city}, ${country}`;
+    }
+    const parts = displayName ? displayName.split(',').map(p => p.trim()).filter(Boolean) : [];
+    return parts.slice(0, 2).join(', ') || null;
+}
+
 // Reverse geocode lat/lng to a human-readable location string using Nominatim.
 // Only populates the Location field if it is currently empty.
 async function reverseGeocodeToLocation(lat, lng) {
     if (document.getElementById('travel-location').value.trim()) return;
     try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+        const url = `${NOMINATIM_URL}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         if (!res.ok) return;
         const data = await res.json();
-        if (!data.address) return;
-        const a = data.address;
-        const city    = a.city || a.town || a.village || a.hamlet || a.county || a.state_district || a.state || '';
-        const country = a.country || '';
-        const locationStr = [city, country].filter(Boolean).join(', ');
+        const locationStr = normaliseLocation(data.address, data.display_name);
         if (locationStr) document.getElementById('travel-location').value = locationStr;
     } catch {
         // Reverse geocode failure is non-fatal — silently ignore
@@ -314,6 +337,9 @@ async function extractGpsFromFile(file) {
 }
 
 // Loop through sorted files to find the first one with valid GPS coords.
+// Returns true if GPS was found and applied, false otherwise — callers
+// (e.g. the manual Upload photos button on mobile) use this to surface
+// clear success/failure feedback to the user.
 async function tryAutofillGpsFromFileList(files) {
     const sortedImages = files
         .filter(f => f.type && f.type.startsWith('image/'))
@@ -327,10 +353,11 @@ async function tryAutofillGpsFromFileList(files) {
             setMessage(`GPS auto-filled from ${file.name}.`);
             updateGeoconfirmMap(gps.latitude, gps.longitude);
             await reverseGeocodeToLocation(gps.latitude, gps.longitude);
-            return;
+            return true;
         }
     }
     setMessage('No GPS data in any photo — enter coordinates manually or use Geocode.', false, true);
+    return false;
 }
 
 // Try to read DateTimeOriginal from image EXIF and populate the date input.
@@ -360,15 +387,25 @@ async function geocodeLocation() {
     btn.textContent = 'Looking up…';
     setMessage('');
     try {
-        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+        const url = `${NOMINATIM_URL}/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
         const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         const results = await res.json();
         if (!results.length) { setMessage('Location not found — try a more specific name.', true); return; }
-        const { lat, lon, display_name } = results[0];
+        const { lat, lon, display_name, address } = results[0];
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lon);
         document.getElementById('travel-lat').value = parsedLat.toFixed(6);
         document.getElementById('travel-lng').value = parsedLng.toFixed(6);
+
+        // Normalise location field to canonical City, Country format
+        const normalised = normaliseLocation(address, display_name);
+        if (normalised) {
+            const locationInput = document.getElementById('travel-location');
+            locationInput.value = normalised;
+            locationInput.style.outline = '2px solid var(--color-success)';
+            setTimeout(() => { locationInput.style.outline = ''; }, LOCATION_FLASH_MS);
+        }
+
         setMessage(`Coordinates set — confirm pin location on the map below (matched: ${display_name.split(',').slice(0, 3).join(',')}).`, false, true);
         updateGeoconfirmMap(parsedLat, parsedLng);
     } catch {
@@ -379,10 +416,44 @@ async function geocodeLocation() {
     }
 }
 
+// ── Upload-button helpers (#466) ──────────────────────────────────────────────
+
+// Module-scoped so non-init callers (renderMediaList remove handlers,
+// clearForm, loadForEdit) can keep the button's disabled state in sync
+// with pendingFiles.length.
+let uploadBtn    = null;
+let uploadStatus = null;
+
+function syncUploadBtn() {
+    if (!uploadBtn) return;
+    uploadBtn.disabled = pendingFiles.length === 0;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initTravel() {
     loadAll();
+
+    uploadBtn    = document.getElementById('travel-upload-btn');
+    uploadStatus = document.getElementById('travel-upload-status');
+    syncUploadBtn();
+
+    uploadBtn?.addEventListener('click', async () => {
+        if (!pendingFiles.length) return;
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Extracting GPS…';
+        if (uploadStatus) uploadStatus.textContent = '';
+
+        const found = await tryAutofillGpsFromFileList(pendingFiles);
+
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Upload photos';
+        if (uploadStatus) {
+            uploadStatus.textContent = found
+                ? 'GPS location auto-filled from photo.'
+                : 'No GPS data found — enter location manually.';
+        }
+    });
 
     document.getElementById('geocode-btn').addEventListener('click', () => geocodeLocation());
 
@@ -418,6 +489,8 @@ export function initTravel() {
             pendingFiles.length + ' file' + (pendingFiles.length !== 1 ? 's' : '') + ' selected';
         event.target.value = ''; // reset so same file can be re-added if removed
         renderMediaList();
+        syncUploadBtn();
+        if (uploadStatus) uploadStatus.textContent = '';
     });
 
     document.getElementById('travel-form').addEventListener('submit', async (event) => {
