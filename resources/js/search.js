@@ -11,7 +11,7 @@ import { escapeHtml, highlight } from './utils/html.js';
 
 function showLoadingSkeleton(container) {
   container.innerHTML = [1, 2, 3].map(() => `
-    <div class="search-result-item skeleton-item" aria-hidden="true" style="pointer-events:none">
+    <div class="search-result-item skeleton-item" aria-hidden="true">
       <div class="skeleton-line skeleton-line--title"></div>
       <div class="skeleton-line skeleton-line--body"></div>
     </div>
