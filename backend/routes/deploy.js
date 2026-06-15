@@ -2,7 +2,7 @@ import { Router }        from 'express';
 import path              from 'path';
 import { fileURLToPath } from 'url';
 import fs                from 'fs/promises';
-import { authenticate }  from '../middleware/authenticate.js';
+import { authenticateDeploy } from '../middleware/authenticateDeploy.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
 import { logger }        from '../utils/logger.js';
 import { logAudit }     from '../utils/audit.js';
@@ -51,7 +51,7 @@ async function streamToSSE(res, iter) {
 
 // ── GET /api/deploy/status ────────────────────────────────────────────────────────────
 
-router.get('/status', authenticate, async (req, res) => {
+router.get('/status', authenticateDeploy, async (req, res) => {
   try {
     // Fetch silently — ignore errors (offline / no remote access in dev)
     await spawnPromise('git', ['fetch', 'origin', 'main'], { cwd: REPO_DIR }).catch(() => {});
@@ -88,7 +88,7 @@ router.get('/status', authenticate, async (req, res) => {
 
 // ── GET /api/deploy/history ───────────────────────────────────────────────────────────
 
-router.get('/history', authenticate, async (req, res) => {
+router.get('/history', authenticateDeploy, async (req, res) => {
   try {
     const gitOut = await spawnPromise(
       'git', ['log', '--format=%H|%h|%s|%ci', '-10', 'origin/main'],
@@ -125,14 +125,14 @@ router.get('/history', authenticate, async (req, res) => {
 
 // ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
 
-router.post('/fetch', authenticate, async (req, res) => {
+router.post('/fetch', authenticateDeploy, async (req, res) => {
   await logAudit(req, 'deploy.fetch', 'deploy', null, { env: DEPLOY_ENV });
   await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
 });
 
 // ── POST /api/deploy ─────────────────────────────────────────────────────────────────────
 
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticateDeploy, async (req, res) => {
   if (!await scriptExists()) {
     return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
@@ -142,7 +142,7 @@ router.post('/', authenticate, async (req, res) => {
 
 // ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
 
-router.post('/rollback', authenticate, async (req, res) => {
+router.post('/rollback', authenticateDeploy, async (req, res) => {
   const { sha } = req.body || {};
 
   if (!sha || !SHA_RE.test(sha)) {
