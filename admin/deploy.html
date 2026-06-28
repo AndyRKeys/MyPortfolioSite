@@ -42,16 +42,16 @@
                 <div class="form-actions" style="margin-top:1rem">
                     <button type="button" id="fetch-btn" class="btn-secondary" disabled>Fetch</button>
                     <button type="button" id="deploy-btn" class="btn-primary" disabled>Deploy latest</button>
-                    <button type="button" id="rollback-btn" class="btn-secondary" disabled>Rollback…</button>
                 </div>
-                <div id="rollback-picker" class="hidden" style="margin-top:0.75rem">
-                    <label>Roll back to
-                        <select id="rollback-sha-select"></select>
-                    </label>
-                    <div class="form-actions" style="margin-top:0.5rem">
-                        <button type="button" id="rollback-confirm-btn" class="btn-small btn-danger">Confirm rollback</button>
-                        <button type="button" id="rollback-cancel-btn" class="btn-secondary">Cancel</button>
-                    </div>
+                <div id="commit-browser" class="commit-browser">
+                    <h3>Recent commits</h3>
+                    <ul id="commit-list" class="commit-list">
+                        <li class="commit-row"><span class="hint">Loading…</span></li>
+                    </ul>
+                </div>
+                <div id="deploy-output-controls" class="deploy-output-controls hidden">
+                    <label><input type="checkbox" id="autoscroll-toggle" checked> Auto-scroll</label>
+                    <button type="button" id="copy-output-btn" class="btn-small" disabled>Copy output</button>
                 </div>
                 <pre id="deploy-output" class="deploy-output hidden"></pre>
                 <p id="deploy-message" class="admin-message"></p>

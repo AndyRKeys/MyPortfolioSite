@@ -88,6 +88,7 @@ services:
       # but represents a significant privilege escalation surface — any RCE in the backend
       # container could escape to the host. Revisit with a dedicated deploy agent: #450.
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/logs:/app/logs:ro   # deploy logs readable by history endpoint
     depends_on:
       postgres:
         condition: service_healthy
