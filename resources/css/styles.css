@@ -1074,6 +1074,101 @@ footer {
     color: #c9d1d9;
 }
 
+/* ── Deploy commit browser (#377) ──────────────────────────────────────────── */
+.commit-browser {
+    margin-top: 1rem;
+}
+
+.commit-browser h3 {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.commit-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.commit-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.commit-row:last-child {
+    border-bottom: none;
+}
+
+.commit-row:nth-child(even) {
+    background: var(--color-bg-alt);
+}
+
+.commit-sha {
+    font-family: monospace;
+    color: var(--color-text-muted);
+    min-width: 5rem;
+    flex-shrink: 0;
+}
+
+.commit-message {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.commit-date {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.commit-current {
+    font-size: 0.75rem;
+    color: var(--color-success);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+/* ── Deploy output controls (#377) ──────────────────────────────────────────── */
+.deploy-output-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.deploy-output-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ── Deploy history runs (#377) ──────────────────────────────────────────────── */
+.deploy-run-summary {
+    font-size: 0.85rem;
+    font-family: monospace;
+    cursor: pointer;
+    padding: 0.4rem 0;
+}
+
+details.deploy-run + details.deploy-run {
+    margin-top: 0.5rem;
+}
+
 /* Travel empty state */
 .travel-empty {
     text-align: center;
