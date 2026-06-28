@@ -2,12 +2,44 @@ import { Router }        from 'express';
 import path              from 'path';
 import { fileURLToPath } from 'url';
 import fs                from 'fs/promises';
-import { authenticate }  from '../middleware/authenticate.js';
+import { rateLimit }     from 'express-rate-limit';
+import { authenticateDeploy } from '../middleware/authenticateDeploy.js';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
 import { logger }        from '../utils/logger.js';
 import { logAudit }     from '../utils/audit.js';
 
 const router   = Router();
+
+// Limiter precedes authenticateDeploy on every route so CodeQL's
+// js/missing-rate-limiting detector sees it before the authorization step.
+// exemptIfTrusted skips admin JWT holders (UI polling); service JWTs are
+// rate-limited to limit blast radius of a compromised token.
+const deployReadLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           60,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-read' }),
+});
+
+const deployWriteLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           10,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-write' }),
+});
+
 // /repo is the repo root mounted via docker-compose — the backend image only
 // contains /app (backend code), so relative path resolution gives / not the repo root.
 const REPO_DIR = process.env.REPO_DIR || '/repo';
@@ -51,7 +83,7 @@ async function streamToSSE(res, iter) {
 
 // ── GET /api/deploy/status ────────────────────────────────────────────────────────────
 
-router.get('/status', authenticate, async (req, res) => {
+router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
     // Fetch silently — ignore errors (offline / no remote access in dev)
     await spawnPromise('git', ['fetch', 'origin', 'main'], { cwd: REPO_DIR }).catch(() => {});
@@ -88,7 +120,7 @@ router.get('/status', authenticate, async (req, res) => {
 
 // ── GET /api/deploy/history ───────────────────────────────────────────────────────────
 
-router.get('/history', authenticate, async (req, res) => {
+router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
     const gitOut = await spawnPromise(
       'git', ['log', '--format=%H|%h|%s|%ci', '-10', 'origin/main'],
@@ -125,14 +157,14 @@ router.get('/history', authenticate, async (req, res) => {
 
 // ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
 
-router.post('/fetch', authenticate, async (req, res) => {
+router.post('/fetch', deployWriteLimit, authenticateDeploy, async (req, res) => {
   await logAudit(req, 'deploy.fetch', 'deploy', null, { env: DEPLOY_ENV });
   await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
 });
 
 // ── POST /api/deploy ─────────────────────────────────────────────────────────────────────
 
-router.post('/', authenticate, async (req, res) => {
+router.post('/', deployWriteLimit, authenticateDeploy, async (req, res) => {
   if (!await scriptExists()) {
     return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
   }
@@ -142,7 +174,7 @@ router.post('/', authenticate, async (req, res) => {
 
 // ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
 
-router.post('/rollback', authenticate, async (req, res) => {
+router.post('/rollback', deployWriteLimit, authenticateDeploy, async (req, res) => {
   const { sha } = req.body || {};
 
   if (!sha || !SHA_RE.test(sha)) {

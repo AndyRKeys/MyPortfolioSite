@@ -24,12 +24,19 @@ export async function logAudit(req, action, entityType = null, entityId = null, 
               ?? req.socket?.remoteAddress
               ?? null;
 
+  // Service tokens carry no numeric user_id; record their identity via sub so
+  // deploy actions are traceable even when user_id is null.
+  const actor = req.user?.sub ?? null;
+  const enrichedDetail = actor
+    ? JSON.stringify({ actor, ...(detail ?? {}) })
+    : (detail ? JSON.stringify(detail) : null);
+
   try {
     await pool.query(
       `INSERT INTO audit_log (user_id, action, entity_type, entity_id, detail, ip)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [userId, action, entityType, entityId ? String(entityId) : null,
-       detail ? JSON.stringify(detail) : null, ip]
+       enrichedDetail, ip]
     );
   } catch (err) {
     // Audit failures are non-fatal — log and continue
