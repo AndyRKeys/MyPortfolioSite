@@ -7,6 +7,7 @@ import { authenticateDeploy } from '../middleware/authenticateDeploy.js';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
+import { parseDeployRuns } from '../utils/deployLogParser.js';
 import { logger }        from '../utils/logger.js';
 import { logAudit }     from '../utils/audit.js';
 
@@ -46,8 +47,8 @@ const REPO_DIR = process.env.REPO_DIR || '/repo';
 const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
 // DEPLOY_ENV ('dev'|'prod') is required — validated at startup by validateEnv.js
 const DEPLOY_ENV = process.env.DEPLOY_ENV;
-// deploy.sh writes to $HOME/<env>-deploy.log
-const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, `${DEPLOY_ENV}-deploy.log`);
+// Deploy log is written to ~/logs/ on the host and mounted read-only at /app/logs
+const DEPLOY_LOG = `/app/logs/${DEPLOY_ENV}-deploy.log`;
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -123,7 +124,7 @@ router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
 router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
     const gitOut = await spawnPromise(
-      'git', ['log', '--format=%H|%h|%s|%ci', '-10', 'origin/main'],
+      'git', ['log', '--format=%H|%h|%s|%ci', '-20', 'origin/main'],
       { cwd: REPO_DIR }
     ).catch(() => '');
 
@@ -132,26 +133,15 @@ router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => 
       return { sha, short_sha, message, date };
     });
 
-    let deployLog = [];
+    let deploy_runs = [];
     try {
       const raw = await fs.readFile(DEPLOY_LOG, 'utf8');
-      // Strip ANSI escape codes, then parse [YYYY-MM-DD HH:MM:SS] <message>
-      // eslint-disable-next-line no-control-regex
-      const stripAnsi = s => s.replace(/\x1b\[[0-9;]*m/g, '');
-      deployLog = raw.trim().split('\n').filter(Boolean)
-        .slice(-20).reverse()
-        .map(l => {
-          const clean = stripAnsi(l).trim();
-          const m = clean.match(/^\[([^\]]+)\]\s*(.*)$/);
-          return m ? { ts: m[1], detail: m[2] } : { ts: '', detail: clean };
-        })
-        .filter(e => e.detail); // skip blank separator lines
+      deploy_runs = parseDeployRuns(raw);
     } catch { /* log file may not exist yet */ }
 
-    res.json({ commits, deploy_log: deployLog });
-  } catch (err) {
-    // Git not available in dev — return empty history gracefully
-    res.json({ commits: [], deploy_log: [] });
+    res.json({ commits, deploy_runs });
+  } catch {
+    res.json({ commits: [], deploy_runs: [] });
   }
 });
 
