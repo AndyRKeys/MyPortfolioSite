@@ -34,7 +34,7 @@ export function initDeploy() {
         if (s.head?.full_sha) currentSha = s.head.full_sha;
         const badge = s.up_to_date
             ? '<span style="color:var(--color-success)">✓ Up to date</span>'
-            : `<span style="color:var(--color-error)">↓ ${s.behind} commit${s.behind !== 1 ? 's' : ''} behind</span>`;
+            : `<span style="color:var(--color-error)">↓ ${escapeHtml(String(s.behind))} commit${s.behind !== 1 ? 's' : ''} behind</span>`;
         statusRow.innerHTML =
             `<strong>${escapeHtml(s.head.sha)}</strong> — ${escapeHtml(s.head.message)}&nbsp;&nbsp;${badge}`;
         if (s.can_deploy) {
@@ -76,12 +76,12 @@ export function initDeploy() {
                 try {
                     await runStream('POST', '/deploy/rollback', { sha });
                     setMessage('Rollback complete.');
+                    setBusy(false);
                     await loadStatus();
                     await loadHistory();
                 } catch (e) {
-                    setMessage(e.message, true);
-                } finally {
                     setBusy(false);
+                    setMessage(e.message, true);
                 }
             });
         });
@@ -100,7 +100,7 @@ export function initDeploy() {
                 ? ` (${Math.floor(secs / 60)}m ${secs % 60}s)`
                 : ` (${secs}s)`;
         }
-        return `${icon} ${escapeHtml(run.started_at)} → ${escapeHtml(run.ended_at || '?')}${escapeHtml(duration)}`;
+        return `${icon} ${escapeHtml(run.started_at)} → ${escapeHtml(run.ended_at || '?')}${duration}`;
     }
 
     function renderLog(data) {
@@ -207,6 +207,7 @@ export function initDeploy() {
             renderLog(await r.json());
         } catch {
             logList.innerHTML = '<p class="hint">Could not load history.</p>';
+            commitList.innerHTML = '<li class="commit-row"><span class="hint">Could not load commits.</span></li>';
         }
     }
 
@@ -217,11 +218,11 @@ export function initDeploy() {
         try {
             await runStream('POST', '/deploy/fetch');
             setMessage('Fetch complete.');
+            setBusy(false);
             await loadStatus();
         } catch (e) {
-            setMessage(e.message, true);
-        } finally {
             setBusy(false);
+            setMessage(e.message, true);
         }
     });
 
@@ -231,12 +232,12 @@ export function initDeploy() {
         try {
             await runStream('POST', '/deploy/');
             setMessage('Deploy complete.');
+            setBusy(false);
             await loadStatus();
             await loadHistory();
         } catch (e) {
-            setMessage(e.message, true);
-        } finally {
             setBusy(false);
+            setMessage(e.message, true);
         }
     });
 
@@ -251,6 +252,5 @@ export function initDeploy() {
         }
     });
 
-    loadStatus();
-    loadHistory();
+    loadStatus().then(() => loadHistory());
 }
