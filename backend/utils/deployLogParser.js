@@ -7,6 +7,7 @@ const END_OK_RE   = /║\s+✅\s+DEPLOY COMPLETE\s+—\s+\w+\s+—\s+(\d{4}-\d{2
 const END_FAIL_RE = /║\s+❌\s+DEPLOY FAILED\s+—\s+\w+\s+—\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/;
 
 export function parseDeployRuns(logText, limit = 2) {
+  if (!limit) return [];
   const lines = logText.split('\n');
   const runs  = [];
   let current = null;

@@ -67,4 +67,9 @@ describe('parseDeployRuns', () => {
     expect(parseDeployRuns(log, 1)).toHaveLength(1);
     expect(parseDeployRuns(log, 3)).toHaveLength(3);
   });
+
+  it('returns empty array when limit is 0', () => {
+    const log = [makeRun(1), makeRun(2)].join('\n');
+    expect(parseDeployRuns(log, 0)).toEqual([]);
+  });
 });
