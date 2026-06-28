@@ -2160,3 +2160,20 @@ check_backup_health() {
     dwarn "Backup health: one or more checks failed — see RUNBOOK.md §Backups to set up automated backups"
   fi
 }
+
+# ── Sub-libraries ─────────────────────────────────────────────────────────────
+# Sourced in dependency order. All callers source deploy-lib.sh; these files
+# are never sourced directly.
+_DEPLOY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=deploy-lib-env.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-env.sh"
+# shellcheck source=deploy-lib-checks.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-checks.sh"
+# shellcheck source=deploy-lib-health.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-health.sh"
+# shellcheck source=deploy-lib-docker.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-docker.sh"
+# shellcheck source=deploy-lib-tests.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-tests.sh"
+# shellcheck source=deploy-lib-report.sh
+. "${_DEPLOY_LIB_DIR}/deploy-lib-report.sh"
