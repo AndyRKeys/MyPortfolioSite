@@ -49,6 +49,8 @@ const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
 const DEPLOY_ENV = process.env.DEPLOY_ENV;
 // Deploy log is written to ~/logs/ on the host and mounted read-only at /app/logs
 const DEPLOY_LOG = `/app/logs/${DEPLOY_ENV}-deploy.log`;
+// prod tracks main; dev tracks dev
+const DEPLOY_BRANCH = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -58,7 +60,7 @@ async function scriptExists() {
 }
 
 async function recentSHAs() {
-  const out = await spawnPromise('git', ['log', '--format=%H', '-20', 'origin/main'], { cwd: REPO_DIR });
+  const out = await spawnPromise('git', ['log', '--format=%H', '-20', `origin/${DEPLOY_BRANCH}`], { cwd: REPO_DIR });
   return out.trim().split('\n').filter(Boolean);
 }
 
@@ -87,14 +89,14 @@ async function streamToSSE(res, iter) {
 router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
     // Fetch silently — ignore errors (offline / no remote access in dev)
-    await spawnPromise('git', ['fetch', 'origin', 'main'], { cwd: REPO_DIR }).catch(() => {});
+    await spawnPromise('git', ['fetch', 'origin', DEPLOY_BRANCH], { cwd: REPO_DIR }).catch(() => {});
 
     const [branch, fullSha, message, date, behindRaw] = await Promise.all([
       spawnPromise('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: REPO_DIR }),
       spawnPromise('git', ['rev-parse', 'HEAD'],                 { cwd: REPO_DIR }),
       spawnPromise('git', ['log', '-1', '--format=%s', 'HEAD'],  { cwd: REPO_DIR }),
       spawnPromise('git', ['log', '-1', '--format=%ci', 'HEAD'], { cwd: REPO_DIR }),
-      spawnPromise('git', ['rev-list', '--count', 'HEAD..origin/main'], { cwd: REPO_DIR }).catch(() => '0'),
+      spawnPromise('git', ['rev-list', '--count', `HEAD..origin/${DEPLOY_BRANCH}`], { cwd: REPO_DIR }).catch(() => '0'),
     ]);
 
     const behind = parseInt(behindRaw.trim(), 10) || 0;
@@ -124,7 +126,7 @@ router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
 router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
     const gitOut = await spawnPromise(
-      'git', ['log', '--format=%H|%h|%s|%ci', '-20', 'origin/main'],
+      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${DEPLOY_BRANCH}`],
       { cwd: REPO_DIR }
     ).catch(() => '');
 
