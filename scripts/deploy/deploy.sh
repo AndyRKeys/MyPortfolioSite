@@ -349,7 +349,7 @@ if [ -n "$ROLLBACK_SHA" ]; then
     dok "Rollback to $POST_SHA complete — backend is restarting..."
     # Print complete before triggering the restart so output reaches the client.
     # The daemon replaces the backend container; this container will be killed.
-    dc up -d --no-deps backend 2>&1 | tee -a "$LOG_FILE" || true
+    dc up -d --no-deps --remove-orphans backend 2>&1 | tee -a "$LOG_FILE" || true
   else
     compose_up_with_rollback "$BACKEND_SERVICE"
     POST_SHA=$(git rev-parse HEAD)
