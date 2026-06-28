@@ -114,7 +114,7 @@ case "$DEPLOY_ENV" in
     BRANCH="${BRANCH:-dev}"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
-    LOG_FILE="${HOME}/dev-deploy.log"
+    LOG_FILE="${HOME}/logs/dev-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-dev"
     REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" LAN_IP)
     PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
@@ -134,7 +134,7 @@ case "$DEPLOY_ENV" in
     BRANCH="${BRANCH:-main}"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.example"
-    LOG_FILE="${HOME}/prod-deploy.log"
+    LOG_FILE="${HOME}/logs/prod-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-prod"
     REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" DOMAIN)
     PLACEHOLDER_PATTERNS=("change-me" "your-" "example.com" "xxx" "replace_")
@@ -154,6 +154,9 @@ case "$DEPLOY_ENV" in
     exit 1
     ;;
 esac
+
+# Ensure log directory exists before any tee-a writes
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # ── Container execution path override ────────────────────────────────────────
 # When invoked from the backend container (DEPLOY_FROM_CONTAINER=1), the repo
