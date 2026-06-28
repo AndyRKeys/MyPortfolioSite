@@ -333,11 +333,30 @@ if [ -n "$ROLLBACK_SHA" ]; then
   dinfo "Current commit: $PRE_SHA"
   dinfo "Rolling back to $ROLLBACK_SHA"
   git reset --hard "$ROLLBACK_SHA" 2>&1 | tee -a "$LOG_FILE" || ddie "git reset to rollback SHA failed"
-  compose_up_with_rollback "$BACKEND_SERVICE"
-  POST_SHA=$(git rev-parse HEAD)
-  dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
-  dsection "Rollback complete"
-  dok "Rollback to $POST_SHA complete."
+
+  if [ "${DEPLOY_FROM_CONTAINER:-0}" = "1" ]; then
+    # Running from inside the backend container: docker compose down would send
+    # SIGTERM to this container and kill bash before dc up --build can run.
+    # Fix: build the new image first (old container still running, no SIGTERM),
+    # then replace backend only. The daemon completes the restart even if the
+    # client is killed when the old container stops.
+    dsection "Phase 5: building backend image"
+    dinfo "Building backend image from rolled-back source..."
+    dc build backend 2>&1 | tee -a "$LOG_FILE" || ddie "docker build failed"
+    POST_SHA=$(git rev-parse HEAD)
+    dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
+    dsection "Rollback complete"
+    dok "Rollback to $POST_SHA complete — backend is restarting..."
+    # Print complete before triggering the restart so output reaches the client.
+    # The daemon replaces the backend container; this container will be killed.
+    dc up -d --no-deps backend 2>&1 | tee -a "$LOG_FILE" || true
+  else
+    compose_up_with_rollback "$BACKEND_SERVICE"
+    POST_SHA=$(git rev-parse HEAD)
+    dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
+    dsection "Rollback complete"
+    dok "Rollback to $POST_SHA complete."
+  fi
   exit 0
 fi
 

@@ -1063,7 +1063,7 @@ footer {
     font-size: 0.8rem;
     line-height: 1.5;
     border-radius: var(--radius-md);
-    max-height: 320px;
+    max-height: 60vh;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
