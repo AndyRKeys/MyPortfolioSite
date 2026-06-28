@@ -13,6 +13,7 @@ RUN apk add --no-cache \
   ttf-freefont \
   libstdc++ \
   git \
+  bash \
   docker-cli \
   docker-compose
 
