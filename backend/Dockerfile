@@ -14,6 +14,9 @@ RUN apk add --no-cache \
   libstdc++ \
   git \
   bash \
+  curl \
+  openssl \
+  bind-tools \
   docker-cli \
   docker-compose
 
