@@ -34,8 +34,11 @@ export async function* tailLogFile(logPath, fromByte, signal) {
     if (size > offset) {
       const buf = Buffer.alloc(size - offset);
       const fh = await fsPromises.open(logPath, 'r');
-      await fh.read(buf, 0, buf.length, offset);
-      await fh.close();
+      try {
+        await fh.read(buf, 0, buf.length, offset);
+      } finally {
+        await fh.close();
+      }
       offset = size;
 
       const chunk = buf.toString('utf8');
