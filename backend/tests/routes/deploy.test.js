@@ -1,8 +1,7 @@
 /**
- * Deploy route auth tests (#275) — verifies scope enforcement for
- * authenticateDeploy: admin JWT, valid service JWT, wrong role, wrong
- * service name, no token, and that service tokens are rejected by
- * admin-only routes (different secret, so they fail authenticate).
+ * Deploy route tests — auth scope enforcement (#275) and queue-based
+ * trigger behaviour (#487). POST /deploy and POST /rollback now write
+ * a trigger file and tail the log; POST /fetch still uses spawnStream.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
@@ -17,22 +16,37 @@ vi.mock('../../db/pool.js', () => ({
   pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
 }));
 
-// spawnPromise returns fake git output so /status resolves without a real repo.
-// spawnStream returns an empty async iterable so SSE routes close cleanly.
 vi.mock('../../utils/shell.js', () => ({
   spawnPromise: vi.fn().mockImplementation((_cmd, args) => {
-    if (args.includes('--abbrev-ref')) return Promise.resolve('main\n');
-    if (args.includes('rev-parse'))   return Promise.resolve('abc1234def5678901234567890123456789012345\n');
-    if (args.includes('--format=%s')) return Promise.resolve('chore: test commit\n');
-    if (args.includes('--format=%ci')) return Promise.resolve('2026-01-01 00:00:00 +0000\n');
-    if (args.includes('--count'))     return Promise.resolve('0\n');
-    if (args.includes('fetch'))       return Promise.resolve('');
+    if (args.includes('--abbrev-ref'))  return Promise.resolve('main\n');
+    if (args.includes('rev-parse'))     return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--format=%s'))   return Promise.resolve('chore: test commit\n');
+    if (args.includes('--format=%ci'))  return Promise.resolve('2026-01-01 00:00:00 +0000\n');
+    if (args.includes('--count'))       return Promise.resolve('0\n');
+    if (args.includes('fetch'))         return Promise.resolve('');
+    if (args.includes('--format=%H'))   return Promise.resolve('abc1234def5678901234567890123456789012345\n');
     return Promise.resolve('');
   }),
-  spawnStream: vi.fn().mockImplementation(() => {
-    return (async function* () {})();
+  spawnStream: vi.fn().mockImplementation(() => (async function* () {})()),
+}));
+
+vi.mock('../../utils/deployQueue.js', () => ({
+  writeQueueTrigger: vi.fn().mockResolvedValue(undefined),
+  tailLogFile: vi.fn().mockImplementation(async function* () {
+    yield '[deploy:start] step=1 status=ok';
+    yield '✅  DEPLOY COMPLETE — dev — 2026-07-02 18:00:00';
   }),
 }));
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const orig = await importOriginal();
+  return {
+    ...orig,
+    access:   vi.fn().mockResolvedValue(undefined),
+    stat:     vi.fn().mockResolvedValue({ size: 0 }),
+    readFile: vi.fn().mockResolvedValue(''),
+  };
+});
 
 import { createApp } from '../../app.js';
 
@@ -55,6 +69,7 @@ function serviceToken(overrides = {}) {
 beforeEach(() => {
   process.env.JWT_SECRET         = ADMIN_SECRET;
   process.env.SERVICE_JWT_SECRET = SERVICE_SECRET;
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -72,14 +87,14 @@ describe('GET /deploy/status — authenticateDeploy', () => {
     expect(res.status).toBe(200);
   });
 
-  it('returns 200 with a valid service JWT (role:service, service:deploy-webhook)', async () => {
+  it('returns 200 with a valid service JWT', async () => {
     const res = await request(app)
       .get('/deploy/status')
       .set('Authorization', `Bearer ${serviceToken()}`);
     expect(res.status).toBe(200);
   });
 
-  it('returns 403 when service JWT has role:admin instead of role:service', async () => {
+  it('returns 403 when service JWT has wrong role', async () => {
     const token = jwt.sign({ role: 'admin', service: 'deploy-webhook' }, SERVICE_SECRET, { expiresIn: '1d' });
     const res = await request(app)
       .get('/deploy/status')
@@ -103,8 +118,6 @@ describe('GET /deploy/status — authenticateDeploy', () => {
   });
 
   it('returns 403 when a service-claim token is signed with the admin secret', async () => {
-    // A service-shaped payload signed with JWT_SECRET (not SERVICE_JWT_SECRET)
-    // must be rejected — the admin path must not accept service-scoped tokens.
     const token = jwt.sign(
       { role: 'service', service: 'deploy-webhook' },
       ADMIN_SECRET,
@@ -117,7 +130,6 @@ describe('GET /deploy/status — authenticateDeploy', () => {
   });
 
   it('returns 403 when service JWT has no expiry claim', async () => {
-    // Tokens without exp must be rejected to prevent indefinite-lifetime service tokens.
     const token = jwt.sign(
       { role: 'service', service: 'deploy-webhook' },
       SERVICE_SECRET,
@@ -131,8 +143,6 @@ describe('GET /deploy/status — authenticateDeploy', () => {
 });
 
 // ── Service token rejected by admin-only route ────────────────────────────────
-// Posts route uses authenticate (JWT_SECRET only) — a service token signed with
-// SERVICE_JWT_SECRET cannot verify against JWT_SECRET, so it gets 401.
 
 describe('POST /posts — service token does not grant admin access', () => {
   it('returns 401 when a service JWT is used on an admin-only route', async () => {
@@ -140,6 +150,73 @@ describe('POST /posts — service token does not grant admin access', () => {
       .post('/posts')
       .set('Authorization', `Bearer ${serviceToken()}`)
       .send({ title: 'Injected post', body_markdown: '# Hack' });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /deploy — queue-based trigger ───────────────────────────────────────
+
+describe('POST /deploy — queue-based trigger', () => {
+  it('returns SSE response and calls writeQueueTrigger with valid admin JWT', async () => {
+    const { writeQueueTrigger } = await import('../../utils/deployQueue.js');
+    const res = await request(app)
+      .post('/deploy')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+    expect(writeQueueTrigger).toHaveBeenCalledWith(expect.any(String), null);
+  });
+
+  it('returns 400 when queue directory is not mounted', async () => {
+    const fsp = await import('fs/promises');
+    fsp.access.mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const res = await request(app)
+      .post('/deploy')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/queue/i);
+  });
+
+  it('returns 401 without auth', async () => {
+    const res = await request(app).post('/deploy');
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /deploy/rollback ─────────────────────────────────────────────────────
+
+describe('POST /deploy/rollback — queue-based trigger', () => {
+  it('returns 400 for invalid SHA format', async () => {
+    const res = await request(app)
+      .post('/deploy/rollback')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ sha: 'not-a-sha!' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/SHA/i);
+  });
+
+  it('returns 400 for SHA not in recent history', async () => {
+    const res = await request(app)
+      .post('/deploy/rollback')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ sha: 'deadbeef123' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it('returns SSE stream and calls writeQueueTrigger with sha for a known SHA', async () => {
+    const { writeQueueTrigger } = await import('../../utils/deployQueue.js');
+    // spawnPromise for --format=%H returns abc1234...; slice matches
+    const res = await request(app)
+      .post('/deploy/rollback')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ sha: 'abc1234' });
+    expect(res.status).toBe(200);
+    expect(writeQueueTrigger).toHaveBeenCalledWith(expect.any(String), 'abc1234');
+  });
+
+  it('returns 401 without auth', async () => {
+    const res = await request(app).post('/deploy/rollback').send({ sha: 'abc1234' });
     expect(res.status).toBe(401);
   });
 });
