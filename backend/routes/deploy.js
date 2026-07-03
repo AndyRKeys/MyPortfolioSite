@@ -46,6 +46,10 @@ const DEPLOY_BRANCH   = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 
+// Byte offset at which the current (or most recent) deploy started in DEPLOY_LOG.
+// Used by GET /stream so the frontend can resume after a container restart.
+let currentDeployFromByte = 0;
+
 async function queueDirExists() {
   // Read env var at call time so tests can override it without module reload
   const dir = process.env.DEPLOY_QUEUE_DIR || '/deploy-queue';
@@ -92,6 +96,7 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
   try {
     fromByte = (await fs.stat(DEPLOY_LOG)).size;
   } catch { /* log may not exist yet — tail from 0 */ }
+  currentDeployFromByte = fromByte;
 
   await writeQueueTrigger(env, rollbackSha);
   send({ type: 'line', text: '[admin] Deploy queued — daemon will pick it up within ~2s…' });
@@ -151,6 +156,35 @@ router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
       git_error: err.message,
     });
   }
+});
+
+// ── GET /api/deploy/stream ────────────────────────────────────────────────────
+// Resume streaming the in-progress deploy log after a container restart.
+// Tails from currentDeployFromByte — set when the deploy was triggered —
+// so the frontend reconnects to exactly this run without passing a byte offset.
+
+router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const ac   = new AbortController();
+  res.on('close', () => ac.abort());
+
+  const heartbeat = setInterval(() => res.write(': hb\n\n'), 15_000);
+  try {
+    for await (const line of tailLogFile(DEPLOY_LOG, currentDeployFromByte, ac.signal)) {
+      send({ type: 'line', text: line });
+    }
+    send({ type: 'done' });
+  } catch (err) {
+    send({ type: 'error', text: err.message });
+  } finally {
+    clearInterval(heartbeat);
+  }
+  res.end();
 });
 
 // ── GET /api/deploy/history ───────────────────────────────────────────────────

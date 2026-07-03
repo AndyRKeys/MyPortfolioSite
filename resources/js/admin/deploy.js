@@ -170,9 +170,35 @@ export function initDeploy() {
             output.textContent += '\n[Backend restarting…]\n';
             await pollUntilBack();
             output.textContent += '[Backend recovered ✓]\n';
+            await streamDeployResume();
         }
 
         if (output.textContent.trim()) copyOutputBtn.disabled = false;
+    }
+
+    async function streamDeployResume() {
+        const res = await authFetch('/deploy/stream').catch(() => null);
+        if (!res?.ok) return;
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buf     = '';
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                const lines = buf.split('\n');
+                buf = lines.pop();
+                for (const line of lines) {
+                    const data = parseLine(line);
+                    if (!data) continue;
+                    if (data.type === 'line') {
+                        output.textContent += data.text + '\n';
+                        if (autoscrollToggle.checked) output.scrollTop = output.scrollHeight;
+                    }
+                }
+            }
+        } catch { /* stream ended or backend restarted again — leave output as-is */ }
     }
 
     async function pollUntilBack(attempts = 0) {
