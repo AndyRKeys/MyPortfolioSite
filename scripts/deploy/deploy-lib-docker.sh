@@ -362,28 +362,19 @@ check_nginx_config() {
   dstatus nginx status=ok
   dok "Nginx config test passed"
 
-  # Compare what the template renders NOW against what is live in the running
-  # container. Only remove the container if they differ — or if no container is
-  # running. This avoids unnecessary recreation on deploys where nginx config
-  # hasn't changed, while still guaranteeing a fresh start when it has.
-  local new_config current_config
-  new_config=$(dc run --rm --no-deps "$nginx_service" \
-    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
-  current_config=$(dc exec -T "$nginx_service" \
-    sh -c 'cat /etc/nginx/conf.d/default.conf' 2>/dev/null || echo "")
-
-  if [ -n "$new_config" ] && [ "$new_config" = "$current_config" ]; then
-    dok "Nginx config unchanged — container will be reused"
-  else
-    if [ -z "$current_config" ]; then
-      dinfo "No running nginx container — will be created fresh by compose up"
-    else
-      dinfo "Nginx config changed — removing container for clean start"
-    fi
-    dinfo "Rendered nginx config:"
-    echo "$new_config" | _log_cmd
-    dc rm -fs "$nginx_service" 2>/dev/null | _log_cmd || true
-  fi
+  # Deliberately do NOT touch the running nginx container here. A config-diff
+  # check used to `dc rm -fs` nginx at this point, but it was doubly broken:
+  #   1. The "newly rendered" config was captured with `dc run ... sh -c cat`,
+  #      and the nginx image entrypoint only runs its /docker-entrypoint.d/
+  #      templating (envsubst) when the command is nginx itself — so the
+  #      comparison saw the stock default.conf, ALWAYS differed, and nginx was
+  #      force-removed ~3s into every deploy (70/70 recent runs). That kill
+  #      dropped the admin deploy terminal's SSE connection before a single
+  #      log line reached the browser (#487).
+  #   2. It was redundant: compose_up_with_rollback runs `dc down` + `up -d
+  #      --build`, so nginx is always recreated with fresh config at Phase 5.
+  # Keeping nginx alive through pre-flight lets steps 1-12 stream to the admin
+  # terminal; the frontend's restart/recover handling covers the Phase 5 drop.
 }
 
 # ── Schema apply ─────────────────────────────────────────────────────────────
