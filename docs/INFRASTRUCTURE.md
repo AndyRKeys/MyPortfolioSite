@@ -1,6 +1,6 @@
 # Infrastructure Overview
 
-_Last updated: 2026-05-25 — verified against live server post-migration and basic health monitoring setup_
+_Last updated: 2026-07-03 — GPU confirmed, Ollama running_
 
 This document describes the host-level infrastructure for MyPortfolioSite on Ubuntu Server and points to environment-specific guides.
 
@@ -23,7 +23,59 @@ A separate Raspberry Pi running Home Assistant OS (HAOS) provides host-level **h
 - **User:** `<username>` (non-root user with sudo access)
 - **Storage:** Internal SSD
 - **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
-- **GPU:** Available for future local LLM inference (#173)
+- **GPU:** NVIDIA GeForce GTX 970, 4 GB VRAM, driver 535.309.01, CUDA 12.2
+
+---
+
+## Local LLM inference (Ollama)
+
+Ollama runs as a standalone Docker container (not part of the portfolio Compose stacks) and is accessible on the server at `http://localhost:11434`.
+
+### Container
+
+```bash
+docker ps --filter name=ollama
+# ollama   ollama/ollama:latest   Up X days   0.0.0.0:11434->11434/tcp
+```
+
+GPU access is granted via Docker device requests (`--gpus all` or equivalent). Confirmed working: VRAM usage rises from ~1 MB idle to ~1 GB when tinyllama is loaded.
+
+### Installed models
+
+| Model | Size | Notes |
+|-------|------|-------|
+| `tinyllama:latest` | 637 MB | Fits fully in 4 GB VRAM |
+| `llama3.1:8b` | 4.9 GB | Exceeds VRAM; runs on CPU (slow) |
+
+The GTX 970 has 4 GB VRAM. Models ≤ ~3.5 GB quantised run on the GPU; larger models fall back to CPU.
+
+### API
+
+```bash
+# List models
+curl http://localhost:11434/api/tags
+
+# Run inference
+curl http://localhost:11434/api/generate -d '{"model":"tinyllama","prompt":"Hello","stream":false}'
+```
+
+### Adding models
+
+```bash
+docker exec ollama ollama pull <model>   # e.g. ollama pull phi3:mini
+docker exec ollama ollama list
+```
+
+### Useful GPU-sizing guide (Q4_K_M quantisation)
+
+| Model size | Quantised (~4-bit) | Fits in 4 GB VRAM? |
+|------------|--------------------|--------------------|
+| 1B–3B | < 2 GB | ✅ yes |
+| 7B | ~4.1 GB | ⚠️ marginal (may offload) |
+| 8B | ~4.9 GB | ❌ CPU only |
+| 13B+ | 7 GB+ | ❌ CPU only |
+
+Good GPU-native choices for the 970: `tinyllama`, `phi3:mini` (3.8B), `qwen2:1.5b`, `gemma2:2b`.
 
 ---
 
