@@ -121,6 +121,15 @@ export function initDeploy() {
 
     // ── Stream runner ──────────────────────────────────────────────────────────
 
+    // Shared by runStream and streamDeployResume — must live at this scope.
+    // (It used to be local to runStream; streamDeployResume's reference threw a
+    // ReferenceError that was swallowed by its bare catch, so resume after a
+    // container restart silently rendered nothing.)
+    function parseLine(line) {
+        if (!line.startsWith('data: ')) return null;
+        try { return JSON.parse(line.slice(6)); } catch { return null; }
+    }
+
     async function runStream(method, path, body) {
         output.textContent       = '';
         autoscrollToggle.checked = true;
@@ -144,12 +153,11 @@ export function initDeploy() {
         const decoder = new TextDecoder();
         let   buf     = '';
         let   deployFromByte = 0;
+        let   sawStarted = false; // only deploy/rollback streams send 'started'
+        let   linesSeen  = 0;   // 'line' events rendered — resume skips this many
+        let   finished   = false; // saw a {type:'done'} event → deploy really ended
 
-        const parseLine = (line) => {
-            if (!line.startsWith('data: ')) return null;
-            try { return JSON.parse(line.slice(6)); } catch { return null; }
-        };
-
+        let disconnected = false;
         try {
             while (true) {
                 const { done, value } = await reader.read();
@@ -160,8 +168,10 @@ export function initDeploy() {
                 for (const line of lines) {
                     const data = parseLine(line);
                     if (!data) continue;
-                    if (data.type === 'started') { deployFromByte = data.fromByte; continue; }
-                    if (data.type === 'line') {
+                    if (data.type === 'started') { sawStarted = true; deployFromByte = data.fromByte; continue; }
+                    if (data.type === 'done')    { finished = true; continue; }
+                    if (data.type === 'line' || data.type === 'info') {
+                        if (data.type === 'line') linesSeen++; // 'info' is synthetic — not in the log
                         output.textContent += data.text + '\n';
                         if (autoscrollToggle.checked) output.scrollTop = output.scrollHeight;
                     }
@@ -169,21 +179,33 @@ export function initDeploy() {
                 }
             }
         } catch {
+            disconnected = true;
+        }
+
+        // A container restart can surface either as a read error (caught above)
+        // or as a clean stream end without a 'done' event — resume in both cases.
+        // Only deploy/rollback streams (which send 'started') can be resumed;
+        // a dropped /fetch stream must not tail the deploy log from byte 0.
+        if (sawStarted && (disconnected || !finished)) {
             output.textContent += '\n[Backend restarting…]\n';
             await pollUntilBack();
             output.textContent += '[Backend recovered ✓]\n';
-            await streamDeployResume(deployFromByte);
+            await streamDeployResume(deployFromByte, linesSeen);
         }
 
         if (output.textContent.trim()) copyOutputBtn.disabled = false;
     }
 
-    async function streamDeployResume(fromByte = 0) {
+    // Resume tails the log from the deploy's starting byte offset, which replays
+    // everything already shown — skipLines drops the lines rendered pre-restart
+    // so output continues seamlessly instead of duplicating.
+    async function streamDeployResume(fromByte = 0, skipLines = 0) {
         const res = await authFetch(`/deploy/stream?fromByte=${fromByte}`).catch(() => null);
         if (!res?.ok) return;
         const reader  = res.body.getReader();
         const decoder = new TextDecoder();
         let   buf     = '';
+        let   skipped = 0;
         try {
             while (true) {
                 const { done, value } = await reader.read();
@@ -195,6 +217,7 @@ export function initDeploy() {
                     const data = parseLine(line);
                     if (!data) continue;
                     if (data.type === 'line') {
+                        if (skipped < skipLines) { skipped++; continue; }
                         output.textContent += data.text + '\n';
                         if (autoscrollToggle.checked) output.scrollTop = output.scrollHeight;
                     }

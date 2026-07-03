@@ -100,7 +100,10 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
 
   await writeQueueTrigger(env, rollbackSha);
   send({ type: 'started', fromByte });
-  send({ type: 'line', text: '[admin] Deploy queued — daemon will pick it up within ~2s…' });
+  // 'info' (not 'line'): this message is synthetic — not in the log file — so
+  // the frontend must not count it when computing how many lines to skip on
+  // resume after a container restart.
+  send({ type: 'info', text: '[admin] Deploy queued — daemon will pick it up within ~2s…' });
 
   const ac = new AbortController();
   res.on('close', () => ac.abort());
