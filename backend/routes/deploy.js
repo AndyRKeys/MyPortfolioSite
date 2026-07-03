@@ -42,13 +42,14 @@ const REPO_DIR        = process.env.REPO_DIR || '/repo';
 const DEPLOY_ENV      = process.env.DEPLOY_ENV;
 const DEPLOY_LOG      = `/app/logs/${DEPLOY_ENV}-deploy.log`;
 const DEPLOY_BRANCH   = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
-const DEPLOY_QUEUE_DIR = process.env.DEPLOY_QUEUE_DIR || '/deploy-queue';
 
 // 7–40 hex chars — covers both short and full SHAs
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 
 async function queueDirExists() {
-  return fs.access(DEPLOY_QUEUE_DIR).then(() => true).catch(() => false);
+  // Read env var at call time so tests can override it without module reload
+  const dir = process.env.DEPLOY_QUEUE_DIR || '/deploy-queue';
+  return fs.access(dir).then(() => true).catch(() => false);
 }
 
 async function recentSHAs() {
