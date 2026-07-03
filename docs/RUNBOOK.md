@@ -19,6 +19,54 @@ See **[docs/DEV_ENVIRONMENT.md](./DEV_ENVIRONMENT.md)** and **[docs/PROD_ENVIRON
 
 ## Common Tasks
 
+### 0. Deploy daemon (first-time setup and management)
+
+The deploy daemon runs on the host as a systemd service. It polls `~/deploy-queue/`
+for trigger files written by the admin panel and calls `deploy.sh` natively.
+
+> **Note:** `jq` is required by the daemon to parse trigger files. Install it once with:
+> `sudo apt install jq`
+
+**Install (one-time, after first deploy of a branch containing the daemon):**
+
+```bash
+sudo cp ~/MyPortfolioSite-dev/scripts/config/deploy-daemon.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deploy-daemon
+```
+
+**Check status:**
+
+```bash
+sudo systemctl status deploy-daemon
+```
+
+**View daemon logs:**
+
+```bash
+journalctl -u deploy-daemon -f
+```
+
+**Restart after updating the daemon script:**
+
+```bash
+sudo systemctl restart deploy-daemon
+sudo systemctl status deploy-daemon
+```
+
+**Manual trigger (bypass the admin panel):**
+
+```bash
+echo '{"env":"dev","requested_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' \
+  > ~/deploy-queue/$(date +%s)-dev.json
+```
+
+> **Troubleshooting — stale lock:** If the daemon appears stuck and won't pick up new triggers,
+> a previous run may have left behind a lock file. Clear it with:
+> `rm -f ~/.deploy-daemon.lock`
+
+---
+
 ### 1. Check "is prod healthy?"
 
 From your Windows machine:
