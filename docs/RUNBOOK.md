@@ -30,6 +30,11 @@ for trigger files written by the admin panel and calls `deploy.sh` natively.
 **Install (one-time, after first deploy of a branch containing the daemon):**
 
 ```bash
+# Create the queue dir BEFORE the first `docker compose up` — if Docker
+# auto-creates it for the bind mount it will be root-owned and the daemon
+# (running as your user) cannot delete trigger files.
+mkdir -p ~/deploy-queue
+
 sudo cp ~/MyPortfolioSite-dev/scripts/config/deploy-daemon.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now deploy-daemon
@@ -64,6 +69,15 @@ echo '{"env":"dev","requested_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' \
 > **Troubleshooting — stale lock:** If the daemon appears stuck and won't pick up new triggers,
 > a previous run may have left behind a lock file. Clear it with:
 > `rm -f ~/.deploy-daemon.lock`
+
+> **Troubleshooting — crash loop / "Permission denied" on rm:** If
+> `journalctl -u deploy-daemon` shows `rm: cannot remove ... Permission denied`
+> or `FATAL: queue dir ... is not writable`, the queue dir is root-owned
+> (Docker auto-created it for the bind mount). The daemon cannot unlink trigger
+> files, so no deploys run and the admin deploy terminal shows only the
+> "Deploy queued" line before the stream drops (#487). Fix:
+> `sudo chown $USER:$USER ~/deploy-queue && sudo systemctl restart deploy-daemon`
+> Remove any stale `~/deploy-queue/*.json` first unless you want them to fire.
 
 ---
 
