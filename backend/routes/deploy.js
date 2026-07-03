@@ -99,6 +99,12 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
   const ac = new AbortController();
   res.on('close', () => ac.abort());
 
+  // SSE comment heartbeat: keeps intermediaries (nginx proxy_read_timeout,
+  // default 60s) from dropping the connection during quiet log periods —
+  // e.g. while the daemon has not yet picked up the trigger. Comment lines
+  // (leading ':') are ignored by SSE clients and our frontend parser.
+  const heartbeat = setInterval(() => res.write(': hb\n\n'), 15_000);
+
   try {
     for await (const line of tailLogFile(DEPLOY_LOG, fromByte, ac.signal)) {
       send({ type: 'line', text: line });
@@ -106,6 +112,8 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
     send({ type: 'done' });
   } catch (err) {
     send({ type: 'error', text: err.message });
+  } finally {
+    clearInterval(heartbeat);
   }
   res.end();
 }

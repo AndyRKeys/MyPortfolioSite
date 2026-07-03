@@ -10,6 +10,16 @@ REPO_DIR_PROD="${HOME}/MyPortfolioSite"
 LOCK_FILE="${HOME}/.deploy-daemon.lock"
 
 mkdir -p "$QUEUE_DIR"
+
+# The queue dir must be writable by this user: trigger files may be created by
+# other users (e.g. root inside the backend container via the bind mount), and
+# unlinking them requires write permission on the directory itself. A root-owned
+# queue dir caused a silent crash loop where no deploy ever ran (#487).
+if [ ! -w "$QUEUE_DIR" ]; then
+  echo "[deploy-daemon] FATAL: queue dir $QUEUE_DIR is not writable by $(id -un) — fix with: sudo chown $(id -un):$(id -gn) $QUEUE_DIR" >&2
+  exit 1
+fi
+
 echo "[deploy-daemon] started pid=$$"
 
 cleanup() { rm -f "$LOCK_FILE"; }
@@ -27,7 +37,16 @@ while true; do
 
     env_val=$(jq -r '.env // empty' "$req")
     sha=$(jq -r '.rollback_sha // empty' "$req")
-    rm -f "$req"
+
+    # Remove the trigger BEFORE deploying so a crash can't re-run the deploy.
+    # If removal fails (permissions regressed), skip the deploy entirely —
+    # running it would repeat forever on every poll. Fail loud, stay alive.
+    if ! rm -f "$req"; then
+      echo "[deploy-daemon] ERROR: cannot remove trigger $req — check ownership of $QUEUE_DIR (sudo chown $(id -un):$(id -gn) $QUEUE_DIR). Deploy NOT run." >&2
+      rm -f "$LOCK_FILE"
+      sleep 30
+      break
+    fi
 
     if [ -z "$env_val" ]; then
       echo "[deploy-daemon] invalid trigger — missing env field, skipping"
