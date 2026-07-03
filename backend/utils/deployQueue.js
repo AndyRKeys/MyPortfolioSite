@@ -3,6 +3,7 @@ import path from 'path';
 
 // Sentinel patterns that signal deploy completion in the log
 const SENTINEL_RE = /DEPLOY (COMPLETE|FAILED|ROLLED BACK)/;
+const ANSI_RE     = /\x1b\[[0-9;]*m/g;
 const POLL_MS = 150;
 const MAX_WAIT_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -43,7 +44,7 @@ export async function* tailLogFile(logPath, fromByte, signal) {
 
       const chunk = buf.toString('utf8');
       for (const line of chunk.split('\n')) {
-        if (line.trim()) yield line;
+        if (line.trim()) yield line.replace(ANSI_RE, '');
       }
       if (SENTINEL_RE.test(chunk)) return;
     } else {
