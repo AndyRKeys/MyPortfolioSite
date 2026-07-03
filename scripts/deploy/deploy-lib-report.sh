@@ -77,13 +77,13 @@ print_deploy_report() {
   local border; border=$(printf '═%.0s' $(seq 1 $((width + 4))))
   local _title_pad=$(( width + 2 - ${#_title} ))
 
-  echo ""
-  echo "╔${border}╗"
-  printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
-  echo "╠${border}╣"
+  _out_emit ""
+  _out_emit "╔${border}╗"
+  _out_printf "║  %s%*s║\n" "$_title" "$_title_pad" ""
+  _out_emit "╠${border}╣"
   for line in "${lines[@]}"; do
-    printf "║  %-${width}s  ║\n" "$line"
+    _out_printf "║  %-${width}s  ║\n" "$line"
   done
-  echo "╚${border}╝"
-  echo ""
+  _out_emit "╚${border}╝"
+  _out_emit ""
 }

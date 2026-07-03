@@ -1,0 +1,16 @@
+[Unit]
+Description=Portfolio deploy daemon
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=modnar3
+ExecStart=/bin/bash /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-daemon.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

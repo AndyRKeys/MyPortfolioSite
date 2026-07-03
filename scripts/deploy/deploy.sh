@@ -23,11 +23,9 @@ set -euo pipefail
 # ── Sudo guard (#351) ─────────────────────────────────────────────────────────
 # Running as root via sudo sets $HOME=/root, so REPO_DIR resolves to
 # /root/MyPortfolioSite* — a fresh clone with a template .env — instead of
-# the real user's configured repo. Block it unconditionally, except when
-# invoked from the backend container (DEPLOY_FROM_CONTAINER=1): the container
-# intentionally runs as root, DEPLOY_REPO_DIR overrides the HOME-derived path,
-# and the Docker socket gives access to the host daemon without sudo escalation.
-if [ "${EUID:-$(id -u)}" -eq 0 ] && [ "${DEPLOY_FROM_CONTAINER:-0}" != "1" ]; then
+# the real user's configured repo. Block it unconditionally — deploy.sh is
+# only ever called from the host now (via deploy-daemon.sh).
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
   echo ""
   echo "ERROR: do not run deploy.sh with sudo." >&2
   echo "" >&2
@@ -157,27 +155,6 @@ esac
 
 # Ensure log directory exists before any tee-a writes
 mkdir -p "$(dirname "$LOG_FILE")"
-
-# ── Container execution path override ────────────────────────────────────────
-# When invoked from the backend container (DEPLOY_FROM_CONTAINER=1), the repo
-# is bind-mounted at /repo and .env lives there — not at $HOME/MyPortfolioSite*.
-# DEPLOY_REPO_DIR must be set to /repo in docker-compose.yml.
-# LOG_FILE stays HOME-derived: $HOME=/root inside the container, which matches
-# where the backend route reads it from, so both sides see the same file.
-if [ "${DEPLOY_FROM_CONTAINER:-0}" = "1" ]; then
-  if [ -z "${DEPLOY_REPO_DIR:-}" ]; then
-    echo "[ERROR] DEPLOY_FROM_CONTAINER=1 requires DEPLOY_REPO_DIR to be set" >&2
-    exit 1
-  fi
-  REPO_DIR="$DEPLOY_REPO_DIR"
-  ENV_FILE="${REPO_DIR}/.env"
-  if [ "$DEPLOY_ENV" = "prod" ]; then
-    ENV_TEMPLATE="${REPO_DIR}/.env.example"
-  else
-    ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
-  fi
-  LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-${DEPLOY_ENV}"
-fi
 
 # Single unified compose file — env-specific behaviour comes from .env, not
 # from selecting a different compose file.
@@ -334,29 +311,11 @@ if [ -n "$ROLLBACK_SHA" ]; then
   dinfo "Rolling back to $ROLLBACK_SHA"
   git reset --hard "$ROLLBACK_SHA" 2>&1 | tee -a "$LOG_FILE" || ddie "git reset to rollback SHA failed"
 
-  if [ "${DEPLOY_FROM_CONTAINER:-0}" = "1" ]; then
-    # Running from inside the backend container: docker compose down would send
-    # SIGTERM to this container and kill bash before dc up --build can run.
-    # Fix: build the new image first (old container still running, no SIGTERM),
-    # then replace backend only. The daemon completes the restart even if the
-    # client is killed when the old container stops.
-    dsection "Phase 5: building backend image"
-    dinfo "Building backend image from rolled-back source..."
-    dc build backend 2>&1 | tee -a "$LOG_FILE" || ddie "docker build failed"
-    POST_SHA=$(git rev-parse HEAD)
-    dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
-    dsection "Rollback complete"
-    dok "Rollback to $POST_SHA complete — backend is restarting..."
-    # Print complete before triggering the restart so output reaches the client.
-    # The daemon replaces the backend container; this container will be killed.
-    dc up -d --no-deps --remove-orphans backend 2>&1 | tee -a "$LOG_FILE" || true
-  else
-    compose_up_with_rollback "$BACKEND_SERVICE"
-    POST_SHA=$(git rev-parse HEAD)
-    dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
-    dsection "Rollback complete"
-    dok "Rollback to $POST_SHA complete."
-  fi
+  compose_up_with_rollback "$BACKEND_SERVICE"
+  POST_SHA=$(git rev-parse HEAD)
+  dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"
+  dsection "Rollback complete"
+  dok "Rollback to $POST_SHA complete."
   exit 0
 fi
 
