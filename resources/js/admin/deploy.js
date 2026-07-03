@@ -143,6 +143,7 @@ export function initDeploy() {
         const reader  = res.body.getReader();
         const decoder = new TextDecoder();
         let   buf     = '';
+        let   deployFromByte = 0;
 
         const parseLine = (line) => {
             if (!line.startsWith('data: ')) return null;
@@ -159,6 +160,7 @@ export function initDeploy() {
                 for (const line of lines) {
                     const data = parseLine(line);
                     if (!data) continue;
+                    if (data.type === 'started') { deployFromByte = data.fromByte; continue; }
                     if (data.type === 'line') {
                         output.textContent += data.text + '\n';
                         if (autoscrollToggle.checked) output.scrollTop = output.scrollHeight;
@@ -170,14 +172,14 @@ export function initDeploy() {
             output.textContent += '\n[Backend restarting…]\n';
             await pollUntilBack();
             output.textContent += '[Backend recovered ✓]\n';
-            await streamDeployResume();
+            await streamDeployResume(deployFromByte);
         }
 
         if (output.textContent.trim()) copyOutputBtn.disabled = false;
     }
 
-    async function streamDeployResume() {
-        const res = await authFetch('/deploy/stream').catch(() => null);
+    async function streamDeployResume(fromByte = 0) {
+        const res = await authFetch(`/deploy/stream?fromByte=${fromByte}`).catch(() => null);
         if (!res?.ok) return;
         const reader  = res.body.getReader();
         const decoder = new TextDecoder();

@@ -99,6 +99,7 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
   currentDeployFromByte = fromByte;
 
   await writeQueueTrigger(env, rollbackSha);
+  send({ type: 'started', fromByte });
   send({ type: 'line', text: '[admin] Deploy queued — daemon will pick it up within ~2s…' });
 
   const ac = new AbortController();
@@ -164,6 +165,8 @@ router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
 // so the frontend reconnects to exactly this run without passing a byte offset.
 
 router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
+  const fromByte = Math.max(0, parseInt(req.query.fromByte) || 0);
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
@@ -175,7 +178,7 @@ router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
 
   const heartbeat = setInterval(() => res.write(': hb\n\n'), 15_000);
   try {
-    for await (const line of tailLogFile(DEPLOY_LOG, currentDeployFromByte, ac.signal)) {
+    for await (const line of tailLogFile(DEPLOY_LOG, fromByte, ac.signal)) {
       send({ type: 'line', text: line });
     }
     send({ type: 'done' });
