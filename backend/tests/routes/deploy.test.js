@@ -40,9 +40,10 @@ vi.mock('../../utils/deployQueue.js', () => ({
 
 vi.mock('fs/promises', async (importOriginal) => {
   const orig = await importOriginal();
+  const access   = vi.fn().mockResolvedValue(undefined);
   const stat     = vi.fn().mockResolvedValue({ size: 0 });
   const readFile = vi.fn().mockResolvedValue('');
-  return { ...orig, default: { ...orig, stat, readFile }, stat, readFile };
+  return { ...orig, default: { ...orig, access, stat, readFile }, access, stat, readFile };
 });
 
 import { createApp } from '../../app.js';
@@ -165,17 +166,13 @@ describe('POST /deploy — queue-based trigger', () => {
   });
 
   it('returns 400 when queue directory is not mounted', async () => {
-    const saved = process.env.DEPLOY_QUEUE_DIR;
-    process.env.DEPLOY_QUEUE_DIR = '/nonexistent-deploy-queue-test-xyz';
-    try {
-      const res = await request(app)
-        .post('/deploy')
-        .set('Authorization', `Bearer ${adminToken()}`);
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/queue/i);
-    } finally {
-      process.env.DEPLOY_QUEUE_DIR = saved;
-    }
+    const fsp = await import('fs/promises');
+    fsp.access.mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const res = await request(app)
+      .post('/deploy')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/queue/i);
   });
 
   it('returns 401 without auth', async () => {
