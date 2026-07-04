@@ -109,6 +109,20 @@
                     </div>
                 </div>
             </div>
+            <div class="admin-card">
+                <h2 class="admin-card-title">Bulk import</h2>
+                <p class="hint">Import multiple travel memories from a CSV file. Required column: <code>title</code>. Optional: <code>location</code>, <code>notes</code>, <code>post_date</code> (YYYY-MM-DD), <code>lat</code>, <code>lng</code>, <code>publish</code> (true/false). Max 1 MB.</p>
+                <div class="file-input-wrap">
+                    <button type="button" class="btn-secondary file-input-btn" id="csv-file-btn" aria-label="Choose CSV file">Choose CSV…</button>
+                    <span class="file-input-label" id="csv-file-label">No file chosen</span>
+                    <input type="file" id="travel-csv-file" accept=".csv" class="file-input-hidden" />
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="travel-csv-import-btn" class="btn-primary" disabled>Import</button>
+                    <button type="button" id="travel-csv-template-btn" class="btn-secondary">Download template</button>
+                </div>
+                <p id="travel-csv-message" class="admin-message"></p>
+            </div>
         </section>
     </main>
 

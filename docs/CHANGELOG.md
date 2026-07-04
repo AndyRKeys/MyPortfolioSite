@@ -11,6 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 ### Added
 
 - Lightweight SQL migration runner (`backend/db/migrate.js`) — tracks applied migrations in `schema_migrations` table, applies numbered files from `backend/db/migrations/` on startup; no new npm packages (#169)
+- CSV bulk import for travel memories — `POST /travel/import` (auth-gated, 1 MB cap, per-row error tracking) with admin UI in the Travel page (#245)
 
 ---
 
