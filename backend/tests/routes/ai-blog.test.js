@@ -171,14 +171,18 @@ describe('POST /ai-blog/generate', () => {
   it('returns 503 when ANTHROPIC_API_KEY is not set', async () => {
     const original = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+    // Stub fetch so the Ollama probe returns a non-ok response rather than
+    // attempting a real network connection inside the test container.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, text: async () => '' }));
     try {
       const res = await request(app)
         .post('/ai-blog/generate')
         .set('Authorization', `Bearer ${makeToken()}`)
         .send({});
       expect(res.status).toBe(503);
-      expect(res.body.error).toMatch(/ANTHROPIC_API_KEY/);
+      expect(res.body.error).toMatch(/No AI provider available/);
     } finally {
+      vi.unstubAllGlobals();
       if (original !== undefined) process.env.ANTHROPIC_API_KEY = original;
     }
   });
@@ -205,11 +209,18 @@ describe('POST /ai-blog/generate', () => {
   it('returns title and body_markdown when Anthropic API succeeds', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     const generatedText = `TITLE: Day 5 — Metrics feature\n---\n_We added metrics tracking today._\n\n## What we worked on\n\nMetrics endpoint.\n`;
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok:   true,
-      json: () => Promise.resolve({ content: [{ text: generatedText }] }),
+    // Route tries Ollama first (port 11434), then falls back to Anthropic.
+    // Return a non-ok response for the Ollama probe so the endpoint falls through.
+    vi.stubGlobal('fetch', async (url, _opts) => {
+      if (String(url).includes('11434')) {
+        return { ok: false, status: 503, text: async () => '' };
+      }
+      // Anthropic call
+      return {
+        ok:   true,
+        json: async () => ({ content: [{ text: generatedText }] }),
+      };
     });
-    vi.stubGlobal('fetch', mockFetch);
     try {
       const res = await request(app)
         .post('/ai-blog/generate')
@@ -218,6 +229,31 @@ describe('POST /ai-blog/generate', () => {
       expect(res.status).toBe(200);
       expect(res.body.title).toBe('Day 5 — Metrics feature');
       expect(res.body.body_markdown).toContain('_We added metrics tracking today._');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns title and body_markdown when Ollama succeeds', async () => {
+    const generatedText = `TITLE: Day 5 — Ollama test\n---\n_We tested Ollama-first generation._\n\n## What we worked on\n\nOllama integration.\n`;
+    vi.stubGlobal('fetch', async (url, _opts) => {
+      if (String(url).includes('11434')) {
+        return {
+          ok:   true,
+          json: async () => ({ message: { content: generatedText } }),
+        };
+      }
+      // Should not reach Anthropic in this path
+      return { ok: false, status: 503, text: async () => '' };
+    });
+    try {
+      const res = await request(app)
+        .post('/ai-blog/generate')
+        .set('Authorization', `Bearer ${makeToken()}`)
+        .send({ context: 'tested ollama' });
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe('Day 5 — Ollama test');
+      expect(res.body.body_markdown).toContain('_We tested Ollama-first generation._');
     } finally {
       vi.unstubAllGlobals();
     }
