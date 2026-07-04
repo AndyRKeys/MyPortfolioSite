@@ -270,6 +270,11 @@ export function initDeploy() {
         }
     });
 
+    branchInput.addEventListener('change', () => {
+        const b = branchInput.value.trim();
+        if (b) loadHistory(b);
+    });
+
     // ── Data loaders ───────────────────────────────────────────────────────────
 
     async function loadStatus() {

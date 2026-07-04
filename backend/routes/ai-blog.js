@@ -226,8 +226,6 @@ TITLE: <suggested title here>
   // ── Priority 1: Ollama
   const ollamaHost = process.env.OLLAMA_HOST || 'http://host.docker.internal:11434';
   const ollamaModel = process.env.OLLAMA_MODEL || 'tinyllama';
-  let ollamaFailed = false;
-
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 150_000);
@@ -253,7 +251,6 @@ TITLE: <suggested title here>
     if (!ollamaRes.ok) {
       const errBody = await ollamaRes.text().catch(() => '');
       logger.warn({ status: ollamaRes.status, body: errBody }, '[ai-blog-generate] Ollama unavailable, trying Anthropic fallback');
-      ollamaFailed = true;
     } else {
       const data = await ollamaRes.json();
       const raw  = data?.message?.content || '';
@@ -263,7 +260,6 @@ TITLE: <suggested title here>
     }
   } catch (err) {
     logger.warn({ err: err.message }, '[ai-blog-generate] Ollama unavailable, trying Anthropic fallback');
-    ollamaFailed = true;
   }
 
   // ── Priority 2: Anthropic API fallback
