@@ -49,6 +49,8 @@
     }
 
     // ── Init
+    if (window.location.pathname.startsWith('/admin/')) return;
+
     var toggle = document.querySelector('.nav-toggle');
     var menu = document.querySelector('ul.nav');
     if (!toggle || !menu) return;

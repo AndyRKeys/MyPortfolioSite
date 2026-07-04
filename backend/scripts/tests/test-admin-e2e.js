@@ -209,17 +209,14 @@ try {
   const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
   smoke('Dashboard has 8 navigation cards', cardCount === 8, `found ${cardCount}`);
 
-  // S5: Search link present in public nav on blog and travel pages (#157)
-  const blogNav = await page.evaluate(async (url) => {
-    const r = await fetch(url); const html = await r.text();
-    return html.includes('href="/search/"');
-  }, `${baseUrl}/blog/`);
-  smoke('Blog page — Search link in nav', blogNav, 'href="/search/" not found in /blog/');
-  const travelNav = await page.evaluate(async (url) => {
-    const r = await fetch(url); const html = await r.text();
-    return html.includes('href="/search/"');
-  }, `${baseUrl}/travel/`);
-  smoke('Travel page — Search link in nav', travelNav, 'href="/search/" not found in /travel/');
+  // S5: Search link present in rendered nav on blog and travel pages (#157)
+  // Nav is JS-rendered so check DOM after navigation, not raw HTML
+  await page.goto(`${baseUrl}/blog/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const blogNav = await page.$('a[href="/search/"]') !== null;
+  smoke('Blog page — Search link in nav', blogNav, 'a[href="/search/"] not found in rendered /blog/');
+  await page.goto(`${baseUrl}/travel/`, { waitUntil: 'networkidle0', timeout: 20000 });
+  const travelNav = await page.$('a[href="/search/"]') !== null;
+  smoke('Travel page — Search link in nav', travelNav, 'a[href="/search/"] not found in rendered /travel/');
 
   // S7: public search page loads without errors (#157)
   consoleErrors.length = 0;
