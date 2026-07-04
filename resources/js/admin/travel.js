@@ -416,6 +416,98 @@ async function geocodeLocation() {
     }
 }
 
+// ── Processing queue panel ────────────────────────────────────────────────────
+
+let jobPollInterval = null;
+
+function formatDuration(createdAt) {
+    const ms = Date.now() - new Date(createdAt).getTime();
+    if (ms < 60000) return Math.round(ms / 1000) + 's';
+    return Math.round(ms / 60000) + 'm';
+}
+
+function renderJobRow(job) {
+    const filename = job.media_url ? job.media_url.split('/').pop() : '—';
+    const isImage  = job.media_type && job.media_type.startsWith('image');
+    const typeIcon = isImage ? '🖼' : '🎦';
+    const statusClass = job.media_status === 'ready'
+        ? 'queue-status-ready'
+        : job.media_status === 'error'
+            ? 'queue-status-error'
+            : 'queue-status-pending';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>${typeIcon} ${escapeHtml(filename)}</td>
+        <td>${escapeHtml(job.media_type || '—')}</td>
+        <td class="${escapeHtml(statusClass)}">${escapeHtml(job.media_status || '—')}</td>
+        <td>${formatDuration(job.created_at)}</td>
+        <td></td>
+    `;
+
+    if (job.media_status === 'error') {
+        const retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'btn-small';
+        retryBtn.textContent = 'Retry';
+        retryBtn.addEventListener('click', () => retryJob(filename, job.media_type));
+        tr.querySelector('td:last-child').appendChild(retryBtn);
+    }
+
+    return tr;
+}
+
+async function retryJob(file, mimeType) {
+    try {
+        await authFetch('/api/upload/retry', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ file, mimeType }),
+        });
+        refreshJobQueue();
+    } catch (err) {
+        setMessage('Retry failed: ' + (err.message || 'unknown error'), 'error');
+    }
+}
+
+async function refreshJobQueue() {
+    const panel = document.getElementById('travel-queue-panel');
+    if (!panel) return;
+
+    try {
+        const jobs = await authFetch('/api/upload/jobs').then(r => r.json());
+
+        if (!jobs.length) {
+            panel.classList.add('hidden');
+            stopJobPolling();
+            return;
+        }
+
+        panel.classList.remove('hidden');
+        const tbody = panel.querySelector('tbody');
+        tbody.innerHTML = '';
+        jobs.forEach(job => tbody.appendChild(renderJobRow(job)));
+
+        const hasActive = jobs.some(j => j.media_status === 'pending' || j.media_status === 'processing');
+        if (!hasActive) stopJobPolling();
+
+    } catch (_err) {
+        // Non-fatal — panel just won't update
+    }
+}
+
+function startJobPolling() {
+    if (jobPollInterval) return;
+    jobPollInterval = setInterval(refreshJobQueue, 5000);
+}
+
+function stopJobPolling() {
+    if (jobPollInterval) {
+        clearInterval(jobPollInterval);
+        jobPollInterval = null;
+    }
+}
+
 // ── Upload-button helpers (#466) ──────────────────────────────────────────────
 
 // Module-scoped so non-init callers (renderMediaList remove handlers,
@@ -543,6 +635,8 @@ export function initTravel() {
             const res    = await authFetch(path, { method, body: JSON.stringify(travel) });
             const data   = await res.json();
             if (!res.ok) throw new Error(data.error || 'Save failed');
+            startJobPolling();
+            refreshJobQueue();
             setMessage(publish ? 'Memory published.' : 'Draft saved.');
             clearForm();
             await loadAll();
@@ -565,4 +659,8 @@ export function initTravel() {
         }
         clearForm();
     });
+
+    // Start queue panel with initial poll; polling continues if active jobs exist.
+    refreshJobQueue();
+    startJobPolling();
 }
