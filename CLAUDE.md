@@ -201,9 +201,9 @@ Express app in `backend/server.js`. Routes are well-separated by concern.
 
 **Database:**
 
-- `schema.sql` is idempotent (IF NOT EXISTS throughout) — safe to re-run
-- Tables: users, passkeys, email_tokens, posts (blog and travel unified), uploads, audit_log (coming), stats
-- No migration tool yet — uses raw SQL applied at boot
+- `schema.sql` is the canonical schema reference (not applied at runtime; see `db/migrations/`)
+- Tables: users, passkeys, email_tokens, posts (blog and travel unified), uploads, audit_log, stats, schema_migrations
+- Migration runner: `db/migrate.js` applies numbered SQL files from `db/migrations/` on every boot; tracks applied files in `schema_migrations`; new DB changes go in a new numbered file
 
 ### Request Flow
 
@@ -389,7 +389,7 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 | `resources/js/admin/travel.js` | Largest admin module (495 lines); travel CRUD, geocoding, EXIF, map | Read the full module before editing; test travel CRUD + map flows |
 | `resources/js/admin/posts.js` | Blog post CRUD with draft/publish state | Test create, edit, publish, delete flows after changes |
 | `docker-compose.yml` | Volume mounts, env vars, networking — errors break the entire dev environment | Test `docker compose up/down/reset` after changes |
-| `backend/db/schema.sql` | Idempotent, no migration tool — altering existing columns requires careful planning | Always use IF NOT EXISTS / IF NOT; test schema changes on a clean DB |
+| `backend/db/migrate.js` + `backend/db/migrations/` | Migration runner runs at boot — a bad migration file kills startup | Write idempotent SQL (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); test on a clean DB; never edit applied migration files |
 | `scripts/config/nginx-security-headers.conf` (CSP) | One directive line governs a whole class of resources; a missing allowlist entry breaks a feature in prod only (enforced CSP) and is invisible to Vitest | When adding/moving any external resource (script, style, font, image, API origin) or inline script, update the allowlist in the same PR and verify it loads in a browser |
 
 ---
@@ -399,7 +399,7 @@ bash -c 'source /home/modnar3/MyPortfolioSite-dev/scripts/deploy/deploy-lib.sh &
 - **Local backups, no offsite:** `scripts/backup/db-backup.sh` runs daily at 02:00 via cron — `pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, written to `~/backups/prod/`. Offsite sync to B2 is scaffolded (`offsite-sync.sh`) but not configured — local-only is the deliberate current state. See [docs/BACKUP.md](docs/BACKUP.md) and #185.
 - **Structured logging (resolved):** backend uses `pino` + `pino-http` via `backend/utils/logger.js` — severity levels, per-request context, `LOG_LEVEL`, secret redaction. No bare `console.log` in runtime code; use the shared logger. (#153)
 - **Admin.js modularised (#175):** admin panel JS split into per-feature modules under `resources/js/admin/`. `admin.js` is now a thin entry point.
-- **No schema migration tool:** schema.sql is idempotent but has no version tracking. (#169)
+- **Schema migration runner (resolved #169):** `db/migrate.js` applies numbered SQL files from `db/migrations/` on every boot; tracks applied files in `schema_migrations`. Add new DB changes as a numbered file — never edit applied migrations.
 - **Manual, script-driven deploys:** prod and dev both run Docker Compose (PM2 retired, #165/#179), but deploys are still script-driven and have caused orphan-container/stale-code incidents. (#253; docs/ROADMAP.md §3.5)
 
 ---

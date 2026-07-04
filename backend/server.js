@@ -5,6 +5,7 @@ import { pool } from './db/pool.js';
 import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
 import { validateEnvOrExit } from './utils/validateEnv.js';
 import { pruneAuditLog } from './utils/auditLog.js';
+import { runMigrations } from './db/migrate.js';
 
 // Fail fast if any required env var is missing/empty — catches vars defined in
 // .env but not bridged into the container's compose `environment` block (#357).
@@ -13,7 +14,18 @@ validateEnvOrExit(logger);
 const app  = createApp();
 const PORT = process.env.PORT || 3001;
 
-const server = app.listen(PORT, () => {
+// Run migrations before accepting traffic (#169). A migration failure is a
+// hard boot failure — we log the error and exit(1) rather than starting with
+// an inconsistent schema.
+let server;
+try {
+  await runMigrations(pool);
+} catch (err) {
+  logger.fatal({ err: err.message }, '[startup] migration failed — aborting boot');
+  process.exit(1);
+}
+
+server = app.listen(PORT, () => {
   logger.info({ port: PORT }, `[startup] Backend listening on http://localhost:${PORT}`);
   runStartupPreflight();
 });
