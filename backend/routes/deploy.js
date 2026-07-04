@@ -48,7 +48,8 @@ const DEPLOY_LOG      = `/app/logs/${DEPLOY_ENV}-deploy.log`;
 const DEPLOY_BRANCH   = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
 
 // 7–40 hex chars — covers both short and full SHAs
-const SHA_RE = /^[0-9a-f]{7,40}$/i;
+const SHA_RE    = /^[0-9a-f]{7,40}$/i;
+const BRANCH_RE = /^[\w./-]+$/;
 
 // Byte offset at which the current (or most recent) deploy started in DEPLOY_LOG.
 // Used by GET /stream so the frontend can resume after a container restart.
@@ -229,8 +230,16 @@ router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
 
 router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
+    const { branch: branchParam } = req.query;
+
+    if (branchParam !== undefined && (!BRANCH_RE.test(branchParam) || branchParam.includes('..'))) {
+      return res.status(400).json({ error: 'Invalid branch name' });
+    }
+
+    const resolvedBranch = branchParam || DEPLOY_BRANCH;
+
     const gitOut = await spawnPromise(
-      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${DEPLOY_BRANCH}`],
+      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${resolvedBranch}`],
       { cwd: REPO_DIR }
     ).catch(() => '');
 
@@ -245,7 +254,7 @@ router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => 
       deploy_runs = parseDeployRuns(raw);
     } catch { /* log file may not exist yet */ }
 
-    res.json({ commits, deploy_runs });
+    res.json({ commits, deploy_runs, branch: resolvedBranch });
   } catch {
     res.json({ commits: [], deploy_runs: [] });
   }

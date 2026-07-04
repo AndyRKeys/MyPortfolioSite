@@ -207,6 +207,72 @@ describe('GET /deploy/branches', () => {
   });
 });
 
+// ── GET /deploy/history ───────────────────────────────────────────────────────
+
+describe('GET /deploy/history', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).get('/deploy/history');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with commits, deploy_runs, and branch when no ?branch= param', async () => {
+    const res = await request(app)
+      .get('/deploy/history')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('commits');
+    expect(res.body).toHaveProperty('deploy_runs');
+    expect(res.body).toHaveProperty('branch');
+    expect(Array.isArray(res.body.commits)).toBe(true);
+    expect(Array.isArray(res.body.deploy_runs)).toBe(true);
+  });
+
+  it('uses DEPLOY_BRANCH when ?branch= is omitted', async () => {
+    const { spawnPromise } = await import('../../utils/shell.js');
+    spawnPromise.mockClear();
+    await request(app)
+      .get('/deploy/history')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    const gitLogCall = spawnPromise.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('--format=%H|%h|%s|%ci')
+    );
+    expect(gitLogCall).toBeDefined();
+    // DEPLOY_ENV is not set in tests so DEPLOY_BRANCH defaults to 'dev'
+    expect(gitLogCall[1]).toContain('origin/dev');
+  });
+
+  it('returns 200 and uses supplied branch when ?branch= is a valid branch name', async () => {
+    const { spawnPromise } = await import('../../utils/shell.js');
+    spawnPromise.mockClear();
+    const res = await request(app)
+      .get('/deploy/history?branch=feature/issue-497-deploy-branch-selector')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.branch).toBe('feature/issue-497-deploy-branch-selector');
+    const gitLogCall = spawnPromise.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('--format=%H|%h|%s|%ci')
+    );
+    expect(gitLogCall).toBeDefined();
+    expect(gitLogCall[1]).toContain('origin/feature/issue-497-deploy-branch-selector');
+  });
+
+  it('returns 400 for an invalid branch name (path traversal)', async () => {
+    const res = await request(app)
+      .get('/deploy/history?branch=../../etc/passwd')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid branch/i);
+  });
+
+  it('returns 400 for a branch name with shell metacharacters', async () => {
+    const res = await request(app)
+      .get('/deploy/history?branch=main;rm+-rf+/')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid branch/i);
+  });
+});
+
 // ── POST /deploy/rollback ─────────────────────────────────────────────────────
 
 describe('POST /deploy/rollback — queue-based trigger', () => {
