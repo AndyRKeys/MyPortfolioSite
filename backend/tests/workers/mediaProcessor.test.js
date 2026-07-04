@@ -113,11 +113,11 @@ describe('processJob — error handling', () => {
       toFile: vi.fn().mockRejectedValue(new Error('sharp failed')),
     }));
 
-    await processJob({
+    await expect(processJob({
       data: { filePath: '/tmp/test-uploads/original/bad.jpg', mimeType: 'image/jpeg' },
-    });
+    })).rejects.toThrow('sharp failed');
 
-    const errorCalls = pool.query.mock.calls.filter(c => String(c[0]).includes("'error'") || (c[1] && c[1].includes('error')));
+    const errorCalls = pool.query.mock.calls.filter(c => c[1] && c[1][2] === 'error');
     expect(errorCalls.length).toBeGreaterThan(0);
   });
 });

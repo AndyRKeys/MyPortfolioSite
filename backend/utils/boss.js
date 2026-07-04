@@ -14,8 +14,6 @@ export async function initBoss() {
     database: process.env.DB_NAME     || 'portfolio_db',
     user:     process.env.DB_USER     || 'postgres',
     password: process.env.DB_PASSWORD,
-    // Keep pg-boss schema maintenance quiet in application logs.
-    noSupervisor: false,
   });
 
   boss.on('error', (err) =>

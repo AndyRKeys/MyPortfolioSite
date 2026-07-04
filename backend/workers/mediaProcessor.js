@@ -97,9 +97,7 @@ export async function processJob(job) {
       { file: path.basename(filePath), err: err.message },
       '[mediaProcessor] job failed',
     );
-    // Do not rethrow — error is recorded in the DB and logged above.
-    // pg-boss treats a non-throwing handler as a completed (not retried) job,
-    // which is correct here since we have no transient-vs-permanent distinction.
+    throw err;
   }
 }
 
