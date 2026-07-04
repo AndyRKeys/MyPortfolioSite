@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { getMetrics } from '../utils/metrics.js';
 
 const router = Router();
 
@@ -41,6 +42,11 @@ router.get('/visits', authenticate, async (_req, res, next) => {
   } catch (err) {
     next(Object.assign(new Error('Database error'), { status: 500, cause: err }));
   }
+});
+
+// Admin: return rolling per-minute metrics for the last hour
+router.get('/metrics', authenticate, (_req, res) => {
+  res.json(getMetrics());
 });
 
 export default router;
