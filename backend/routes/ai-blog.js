@@ -230,7 +230,7 @@ TITLE: <suggested title here>
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
+    const timeout = setTimeout(() => controller.abort(), 150_000);
     let ollamaRes;
     try {
       ollamaRes = await fetch(`${ollamaHost}/api/chat`, {
