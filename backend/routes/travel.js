@@ -299,6 +299,9 @@ const csvUpload = multer({
 
 // Parse a single CSV line, handling double-quoted fields and escaped quotes ("").
 function parseCSVLine(line) {
+  // Type guard (CodeQL js/loop-bound-injection): a non-string value with a
+  // crafted .length property would make the loop below effectively unbounded.
+  if (typeof line !== 'string') return [];
   const fields = [];
   let current  = '';
   let inQuotes = false;
