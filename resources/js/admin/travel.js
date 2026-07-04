@@ -459,14 +459,14 @@ function renderJobRow(job) {
 
 async function retryJob(file, mimeType) {
     try {
-        await authFetch('/api/upload/retry', {
+        await authFetch('/upload/retry', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ file, mimeType }),
         });
         refreshJobQueue();
     } catch (err) {
-        setMessage('Retry failed: ' + (err.message || 'unknown error'), 'error');
+        setMessage('Retry failed: ' + (err.message || 'unknown error'), true);
     }
 }
 
@@ -475,7 +475,7 @@ async function refreshJobQueue() {
     if (!panel) return;
 
     try {
-        const jobs = await authFetch('/api/upload/jobs').then(r => r.json());
+        const jobs = await authFetch('/upload/jobs').then(r => r.json());
 
         if (!jobs.length) {
             panel.classList.add('hidden');

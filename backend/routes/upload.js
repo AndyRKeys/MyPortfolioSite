@@ -75,7 +75,7 @@ router.post('/', uploadRateLimit, authenticate, wrapMulter(upload.single('file')
 
 // ── GET /status ───────────────────────────────────────────────────────────────
 
-router.get('/status', authenticate, async (req, res, next) => {
+router.get('/status', uploadRateLimit, authenticate, async (req, res, next) => {
   try {
     const { file } = req.query;
     if (!file) return res.status(400).json({ error: 'file query param required' });
@@ -94,7 +94,7 @@ router.get('/status', authenticate, async (req, res, next) => {
 
 // ── GET /jobs ─────────────────────────────────────────────────────────────────
 
-router.get('/jobs', authenticate, async (req, res, next) => {
+router.get('/jobs', uploadRateLimit, authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT media_url, media_type, media_status, full_url, thumb_url, created_at
@@ -109,7 +109,7 @@ router.get('/jobs', authenticate, async (req, res, next) => {
 
 // ── POST /retry ───────────────────────────────────────────────────────────────
 
-router.post('/retry', authenticate, async (req, res, next) => {
+router.post('/retry', uploadRateLimit, authenticate, async (req, res, next) => {
   try {
     const rawFile = req.body.file;
     if (!rawFile) return res.status(400).json({ error: 'file is required' });
