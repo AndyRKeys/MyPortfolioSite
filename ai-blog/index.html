@@ -5,7 +5,7 @@
     <script type="module" src="/resources/js/error-logger.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Blog | AK Portfolio</title>
+    <title>AI Dev Blog | AK Portfolio</title>
     <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
     <link rel="stylesheet" href="/resources/css/reset.css" />
     <link rel="stylesheet" href="/resources/css/styles.css" />
@@ -17,7 +17,7 @@
     <header id="home">
         <h1>A|K</h1>
         <h2>Andy | Keys</h2>
-        <h2>Writing</h2>
+        <h2>AI Dev Blog</h2>
     </header>
     <nav>
         <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
@@ -28,26 +28,13 @@
     </nav>
 
     <main>
-        <section class="sec-cont" id="blog">
-            <h2>Posts</h2>
+        <section class="sec-cont" id="ai-blog">
+            <h2>AI Dev Blog</h2>
+            <p class="hint">Daily summaries of the AI pair-programming build process — what we built, what broke, and what we learned.</p>
 
-            <form id="listing-search-form" class="search-form listing-search-form" role="search">
-                <div class="search-input-wrap">
-                    <input id="listing-search-input" type="search" name="q" placeholder="Search posts…" class="search-input" aria-label="Search blog posts" autocomplete="off" />
-                    <button type="submit" class="btn-primary search-submit">Search</button>
-                </div>
-            </form>
-            <div id="listing-search-results" class="listing-search-results" aria-live="polite" hidden></div>
-
-            <div class="blog-view-toggle" role="tablist">
-                <button type="button" class="view-toggle-btn active" data-view="timeline" role="tab" aria-selected="true">Timeline</button>
-                <button type="button" class="view-toggle-btn" data-view="cards" role="tab" aria-selected="false">Cards</button>
-            </div>
-
-            <div id="posts-list" class="posts-list hidden"></div>
-            <div id="blog-timeline" class="timeline"></div>
-            <div id="posts-empty" class="posts-empty hidden">
-                <p>No posts yet &mdash; check back soon.</p>
+            <div id="ai-blog-timeline" class="timeline"></div>
+            <div id="ai-blog-empty" class="posts-empty hidden">
+                <p>No entries yet &mdash; check back soon.</p>
             </div>
         </section>
     </main>
@@ -63,6 +50,6 @@
     <script src="/resources/js/dev-env.js"></script>
     <script src="/resources/js/darkmode.js"></script>
     <script src="/resources/js/nav.js"></script>
-    <script type="module" src="/resources/js/blog.js"></script>
+    <script type="module" src="/resources/js/ai-blog.js"></script>
 </body>
 </html>
