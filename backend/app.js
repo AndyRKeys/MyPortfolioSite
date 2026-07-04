@@ -25,7 +25,8 @@ import debugRoutes   from './routes/debug.js';
 import auditRoutes   from './routes/audit.js';
 import searchRoutes  from './routes/search.js';
 import { healthRouter } from './routes/health.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import { errorHandler }     from './middleware/errorHandler.js';
+import { metricsCollector } from './middleware/metricsCollector.js';
 
 export function createApp() {
   const app = express();
@@ -51,6 +52,8 @@ export function createApp() {
     res.setHeader('X-Request-Id', req.id);
     next();
   });
+
+  app.use(metricsCollector);
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
   // SITE_HOST covers requests where the browser omits the non-standard port
