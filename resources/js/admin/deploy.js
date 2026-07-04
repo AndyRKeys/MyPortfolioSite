@@ -20,6 +20,8 @@ export function initDeploy() {
     const statusRow        = document.getElementById('deploy-status-row');
     const commitList       = document.getElementById('commit-list');
     const logList          = document.getElementById('deploy-log-list');
+    const branchSelect     = document.getElementById('deploy-branch-select');
+    const branchInput      = document.getElementById('deploy-branch-input');
 
     const setMessage = createMessenger('deploy-message');
 
@@ -47,7 +49,9 @@ export function initDeploy() {
 
     // ── Commit browser ─────────────────────────────────────────────────────────
 
-    function renderCommitBrowser(commits) {
+    function renderCommitBrowser(commits, branch) {
+        const heading = document.querySelector('#commit-browser h3');
+        if (heading) heading.textContent = branch ? `Recent commits — ${branch}` : 'Recent commits';
         if (!commits.length) {
             commitList.innerHTML = '<li class="commit-row"><span class="hint">No commits found.</span></li>';
             return;
@@ -104,7 +108,7 @@ export function initDeploy() {
     }
 
     function renderLog(data) {
-        renderCommitBrowser(data.commits || []);
+        renderCommitBrowser(data.commits || [], data.branch);
 
         const runs = data.deploy_runs || [];
         if (!runs.length) {
@@ -238,6 +242,39 @@ export function initDeploy() {
         }
     }
 
+    // ── Branch selector ────────────────────────────────────────────────────────
+
+    async function loadBranches() {
+        try {
+            const r = await authFetch('/deploy/branches');
+            if (!r.ok) throw new Error(await r.text());
+            const { branches } = await r.json();
+
+            branchSelect.innerHTML = branches.map(b =>
+                `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`
+            ).join('') + '<option value="__other__">Other (type below)</option>';
+
+            branchSelect.value = '';
+        } catch {
+            branchSelect.innerHTML = '<option value="__other__">Other (type below)</option>';
+        }
+    }
+
+    branchSelect.addEventListener('change', () => {
+        if (branchSelect.value === '__other__') {
+            branchInput.value = '';
+            branchInput.focus();
+        } else {
+            branchInput.value = branchSelect.value;
+            loadHistory(branchSelect.value);
+        }
+    });
+
+    branchInput.addEventListener('change', () => {
+        const b = branchInput.value.trim();
+        if (b) loadHistory(b);
+    });
+
     // ── Data loaders ───────────────────────────────────────────────────────────
 
     async function loadStatus() {
@@ -251,9 +288,10 @@ export function initDeploy() {
         }
     }
 
-    async function loadHistory() {
+    async function loadHistory(branch) {
+        const url = branch ? `/deploy/history?branch=${encodeURIComponent(branch)}` : '/deploy/history';
         try {
-            const r = await authFetch('/deploy/history');
+            const r = await authFetch(url);
             if (!r.ok) throw new Error();
             renderLog(await r.json());
         } catch {
@@ -304,4 +342,5 @@ export function initDeploy() {
     });
 
     loadStatus().then(() => loadHistory());
+    loadBranches();
 }
