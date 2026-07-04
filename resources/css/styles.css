@@ -3048,3 +3048,224 @@ a.travel-card:visited {
     gap: 0.4rem;
     flex-wrap: wrap;
 }
+
+/* ── GitHub project history page (#105) ──────────────────────────────────── */
+
+.gh-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.gh-stat-card {
+    background: var(--color-card-bg, #fff);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 8px;
+    padding: 1.2rem 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.gh-stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-accent, #0ea5e9);
+    line-height: 1;
+}
+
+.gh-stat-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #718096);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Bar chart */
+
+.gh-activity-chart {
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
+.gh-chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 100px;
+    min-width: 600px;
+    padding-bottom: 1.4rem; /* room for day labels */
+    position: relative;
+}
+
+.gh-chart-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    cursor: default;
+}
+
+.gh-chart-bar {
+    width: 100%;
+    background: var(--color-accent, #0ea5e9);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    opacity: 0.75;
+    transition: opacity 0.15s;
+}
+
+.gh-chart-bar-wrap:hover .gh-chart-bar {
+    opacity: 1;
+}
+
+.gh-chart-bar[data-count]::after {
+    content: attr(data-count);
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.gh-chart-day-label {
+    position: absolute;
+    bottom: 0;
+    font-size: 0.6rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+    transform: rotate(-45deg);
+    transform-origin: top left;
+    margin-top: 2px;
+    /* Show every 5th label to avoid crowding */
+}
+
+/* Only show day labels for every 5th bar via :nth-child */
+.gh-chart-bar-wrap:not(:nth-child(5n)) .gh-chart-day-label {
+    visibility: hidden;
+}
+
+/* Commit timeline items — reuse site's .timeline classes */
+
+.gh-commit-message {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin: 0.1rem 0;
+    word-break: break-word;
+}
+
+.gh-commit-meta {
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #718096);
+    margin-top: 0.2rem;
+}
+
+.gh-commit-sha {
+    font-family: monospace;
+    background: var(--color-code-bg, #f1f5f9);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.85em;
+}
+
+/* PR list */
+
+.gh-pr-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gh-pr-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 6px;
+    background: var(--color-card-bg, #fff);
+    flex-wrap: wrap;
+}
+
+.gh-pr-state {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 0.15em 0.5em;
+    border-radius: 12px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.gh-pr-state--open {
+    background: color-mix(in srgb, #22c55e 15%, transparent);
+    color: #16a34a;
+}
+
+.gh-pr-state--merged {
+    background: color-mix(in srgb, #8b5cf6 15%, transparent);
+    color: #7c3aed;
+}
+
+.gh-pr-state--closed {
+    background: color-mix(in srgb, #ef4444 15%, transparent);
+    color: #dc2626;
+}
+
+.gh-pr-number {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #718096);
+    flex-shrink: 0;
+}
+
+.gh-pr-title {
+    flex: 1;
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.gh-pr-date {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+}
+
+/* Dark mode adjustments */
+
+@media (prefers-color-scheme: dark) {
+    .gh-stat-card {
+        background: var(--color-card-bg);
+        border-color: var(--color-border);
+    }
+
+    .gh-commit-sha {
+        background: var(--color-code-bg, #1e293b);
+    }
+
+    .gh-pr-item {
+        background: var(--color-card-bg);
+        border-color: var(--color-border);
+    }
+}
+
+[data-theme="dark"] .gh-stat-card,
+[data-theme="dark"] .gh-pr-item {
+    background: var(--color-card-bg);
+    border-color: var(--color-border);
+}
+
+[data-theme="dark"] .gh-commit-sha {
+    background: var(--color-code-bg, #1e293b);
+}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Global error logger (load first to catch all errors) -->
+    <script type="module" src="/resources/js/error-logger.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project History | AK Portfolio</title>
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header id="home">
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>Project History</h2>
+    </header>
+    <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
+        <ul class="nav">
+            <li><a href="/">🏠 Home</a></li>
+            <li><a href="/#about">👤 About</a></li>
+            <li><a href="/#portfolio">💼 Projects</a></li>
+            <li><a href="/#ai-dev">🤖 AI Dev</a></li>
+            <li><a href="/#timeline">📅 Timeline</a></li>
+            <li><a href="/#skills">🛠 Skills</a></li>
+            <li><a href="/#github-activity">🐙 GitHub</a></li>
+            <li><a href="/#contact">✉ Contact</a></li>
+            <li><a href="/blog/">✏ Blog</a></li>
+            <li><a href="/travel/">✈ Travel</a></li>
+            <li><a href="/search/">🔍 Search</a></li>
+            <li><a href="/login/">🔒 Admin</a></li>
+            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
+        </ul>
+    </nav>
+
+    <main>
+
+        <!-- ── Stats overview ──────────────────────────────────────────── -->
+        <section class="sec-cont" id="gh-stats">
+            <h2>Repository Overview</h2>
+            <p class="hint" id="gh-stats-loading">Loading stats…</p>
+            <div id="gh-stats-grid" class="gh-stats-grid" hidden>
+                <div class="gh-stat-card">
+                    <span class="gh-stat-value" id="gh-stat-commits">—</span>
+                    <span class="gh-stat-label">Recent commits</span>
+                </div>
+                <div class="gh-stat-card">
+                    <span class="gh-stat-value" id="gh-stat-prs-merged">—</span>
+                    <span class="gh-stat-label">PRs merged</span>
+                </div>
+                <div class="gh-stat-card">
+                    <span class="gh-stat-value" id="gh-stat-prs-open">—</span>
+                    <span class="gh-stat-label">PRs open</span>
+                </div>
+                <div class="gh-stat-card">
+                    <span class="gh-stat-value" id="gh-stat-issues-open">—</span>
+                    <span class="gh-stat-label">Issues open</span>
+                </div>
+                <div class="gh-stat-card">
+                    <span class="gh-stat-value" id="gh-stat-issues-closed">—</span>
+                    <span class="gh-stat-label">Issues closed</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Activity chart (last 30 days) ──────────────────────────── -->
+        <section class="sec-cont" id="gh-chart">
+            <h2>Commit Activity</h2>
+            <p class="hint">Commits per day over the last 30 days.</p>
+            <div id="gh-activity-chart" class="gh-activity-chart" aria-label="Commit activity bar chart" role="img">
+                <p class="hint" id="gh-chart-loading">Loading chart…</p>
+            </div>
+        </section>
+
+        <!-- ── Commit timeline ─────────────────────────────────────────── -->
+        <section class="sec-cont" id="gh-commits">
+            <h2>Recent Commits</h2>
+            <p class="hint" id="gh-commits-loading">Loading commits…</p>
+            <div class="timeline" id="gh-commit-timeline" hidden></div>
+        </section>
+
+        <!-- ── PR list ─────────────────────────────────────────────────── -->
+        <section class="sec-cont" id="gh-prs">
+            <h2>Pull Requests</h2>
+            <p class="hint" id="gh-prs-loading">Loading pull requests…</p>
+            <ul class="gh-pr-list" id="gh-pr-list" hidden></ul>
+        </section>
+
+        <div class="github-profile-link">
+            <a href="https://github.com/AndyRKeys/MyPortfolioSite" target="_blank" rel="noopener noreferrer">View repository on GitHub</a>
+        </div>
+
+    </main>
+
+    <footer>
+        <section class="sec-cont" id="contact">
+            <div class="footer-bottom">
+                <p>&copy; 2026 Andrew Keys. All Rights Reserved.</p>
+            </div>
+        </section>
+    </footer>
+
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
+    <script type="module" src="/resources/js/github.js"></script>
+</body>
+</html>
