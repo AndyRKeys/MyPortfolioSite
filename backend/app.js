@@ -24,6 +24,7 @@ import deployRoutes  from './routes/deploy.js';
 import debugRoutes   from './routes/debug.js';
 import auditRoutes   from './routes/audit.js';
 import searchRoutes  from './routes/search.js';
+import githubRoutes  from './routes/github.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler }     from './middleware/errorHandler.js';
 import { metricsCollector } from './middleware/metricsCollector.js';
@@ -92,6 +93,7 @@ export function createApp() {
   app.use('/debug',   debugRoutes);
   app.use('/audit',   auditRoutes);
   app.use('/search',  searchRoutes);
+  app.use('/github',  githubRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);
