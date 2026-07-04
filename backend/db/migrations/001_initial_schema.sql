@@ -1,5 +1,7 @@
--- This file is the canonical schema reference. Incremental changes go in db/migrations/.
--- For fresh installs, the migration runner in db/migrate.js applies db/migrations/ in order.
+-- 001_initial_schema.sql
+-- Baseline schema — everything that existed before migration versioning was introduced (#169).
+-- This file is identical to db/schema.sql at the time migrations were adopted.
+-- A fresh DB is brought up to date by running all migrations in order via db/migrate.js.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

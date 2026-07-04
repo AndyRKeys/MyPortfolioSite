@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Added
+
+- Lightweight SQL migration runner (`backend/db/migrate.js`) — tracks applied migrations in `schema_migrations` table, applies numbered files from `backend/db/migrations/` on startup; no new npm packages (#169)
+
 ---
 
 ## Release 2026-06-15

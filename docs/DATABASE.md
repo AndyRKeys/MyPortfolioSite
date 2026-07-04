@@ -4,12 +4,38 @@ PostgreSQL schema for andykeys.me. All migrations are idempotent — safe to re-
 
 ---
 
+## Migration System (#169)
+
+Schema changes are managed by a lightweight migration runner (`backend/db/migrate.js`) — no external packages required.
+
+**How it works:**
+
+- On every server boot, `runMigrations(pool)` runs before `app.listen()`.
+- It creates a `schema_migrations` table (if absent) to track applied migrations.
+- Numbered `*.sql` files in `backend/db/migrations/` are applied in order; already-recorded files are skipped.
+- Each migration runs inside a transaction — a failure rolls back and terminates the boot with a fatal log and `exit(1)`.
+
+**Adding a new migration:**
+
+1. Create `backend/db/migrations/<NNN>_short_description.sql` (e.g. `002_add_notes_table.sql`).
+2. Write idempotent SQL (`IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, etc.).
+3. Deploy — the runner picks it up automatically on the next boot.
+
+**Reference files:**
+
+- `backend/db/schema.sql` — canonical schema reference (full picture; not applied at runtime).
+- `backend/db/migrations/001_initial_schema.sql` — baseline migration (all tables as of #169).
+- `backend/db/migrate.js` — migration runner; call `runMigrations(pool)` on startup.
+- `backend/tests/utils/migrate.test.js` — Vitest suite for the runner.
+
+---
+
 ## Conventions
 
 - **Primary keys:** UUID, generated with `gen_random_uuid()` (requires `pgcrypto` extension)
 - **Timestamps:** `TIMESTAMPTZ` (timezone-aware), defaulting to `NOW()`
 - **Column naming:** `snake_case` throughout
-- **Migrations:** `ALTER TABLE … ADD COLUMN IF NOT EXISTS` pattern — never destructive
+- **Migrations:** numbered SQL files in `backend/db/migrations/`; tracked in `schema_migrations` table
 - **Slugs:** `VARCHAR(255) UNIQUE NOT NULL` — uniqueness enforced at DB level; application retries with `-N` suffix on conflict
 
 ---
