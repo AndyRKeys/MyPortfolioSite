@@ -25,6 +25,7 @@ import debugRoutes   from './routes/debug.js';
 import auditRoutes   from './routes/audit.js';
 import searchRoutes  from './routes/search.js';
 import githubRoutes  from './routes/github.js';
+import aiBlogRoutes  from './routes/ai-blog.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler }     from './middleware/errorHandler.js';
 import { metricsCollector } from './middleware/metricsCollector.js';
@@ -94,6 +95,7 @@ export function createApp() {
   app.use('/audit',   auditRoutes);
   app.use('/search',  searchRoutes);
   app.use('/github',  githubRoutes);
+  app.use('/ai-blog', aiBlogRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);
