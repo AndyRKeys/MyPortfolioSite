@@ -41,7 +41,18 @@ export const CV_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 // ── Media upload ──────────────────────────────────────────────────────────────
 
 // Maximum size (bytes) for generic media uploads (photos/videos).
-export const MEDIA_MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+// Raised to 1 GB to support DJI Osmo 4K footage (#174).
+export const MEDIA_MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB
+
+// ── Media processing (Sharp + ffmpeg) ─────────────────────────────────────────
+
+// pg-boss job queue name for media processing jobs.
+export const MEDIA_JOB_NAME   = 'process-media';
+
+// Sharp output settings for image optimisation.
+export const SHARP_FULL_SIZE  = 2400;  // max px on longest side
+export const SHARP_THUMB_SIZE = 400;   // thumb width (square crop)
+export const SHARP_QUALITY    = 85;    // WebP quality
 
 // Allowed MIME types for generic media uploads.
 export const MEDIA_ALLOWED_MIME = new Set([

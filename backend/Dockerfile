@@ -14,7 +14,9 @@ RUN apk add --no-cache \
   libstdc++ \
   git \
   docker-cli \
-  docker-compose
+  docker-compose \
+  ffmpeg \
+  vips
 
 WORKDIR /app
 
