@@ -31,7 +31,8 @@ What's queued for the next session.
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const setMessage = createMessenger('ai-blog-message');
+const setMessage    = createMessenger('ai-blog-message');
+const setGenMessage = createMessenger('ai-blog-gen-message');
 
 function clearForm() {
     document.getElementById('ai-blog-edit-id').value = '';
@@ -210,5 +211,37 @@ export function initAiBlog() {
         if (body.value.trim() && !confirm('The body has content — replace it with the template?')) return;
         body.value = ENTRY_TEMPLATE;
         body.focus();
+    });
+
+    document.getElementById('ai-blog-gen-btn').addEventListener('click', async () => {
+        const genBtn = document.getElementById('ai-blog-gen-btn');
+        const context = document.getElementById('ai-blog-gen-context').value.trim();
+        genBtn.disabled = true;
+        setGenMessage('Generating…');
+
+        try {
+            const res = await authFetch('/ai-blog/generate', {
+                method: 'POST',
+                body: JSON.stringify({ context }),
+            });
+
+            if (res.status === 503) {
+                setGenMessage('AI generation not configured (ANTHROPIC_API_KEY not set).', true);
+                return;
+            }
+            if (!res.ok) {
+                setGenMessage('Generation failed — try again.', true);
+                return;
+            }
+
+            const data = await res.json();
+            document.getElementById('ai-blog-title').value = data.title || '';
+            document.getElementById('ai-blog-body').value  = data.body_markdown || '';
+            setGenMessage('Draft generated — review and save.');
+        } catch {
+            setGenMessage('Generation failed — try again.', true);
+        } finally {
+            genBtn.disabled = false;
+        }
     });
 }

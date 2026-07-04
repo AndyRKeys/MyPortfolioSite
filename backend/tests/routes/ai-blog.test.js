@@ -162,6 +162,68 @@ describe('DELETE /ai-blog/:id', () => {
   });
 });
 
+describe('POST /ai-blog/generate', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).post('/ai-blog/generate').send({});
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 503 when ANTHROPIC_API_KEY is not set', async () => {
+    const original = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const res = await request(app)
+        .post('/ai-blog/generate')
+        .set('Authorization', `Bearer ${makeToken()}`)
+        .send({});
+      expect(res.status).toBe(503);
+      expect(res.body.error).toMatch(/ANTHROPIC_API_KEY/);
+    } finally {
+      if (original !== undefined) process.env.ANTHROPIC_API_KEY = original;
+    }
+  });
+
+  it('returns 502 when Anthropic API responds with an error', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok:   false,
+      status: 500,
+      text: () => Promise.resolve('Internal Server Error'),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+    try {
+      const res = await request(app)
+        .post('/ai-blog/generate')
+        .set('Authorization', `Bearer ${makeToken()}`)
+        .send({ context: 'worked on metrics' });
+      expect(res.status).toBe(502);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns title and body_markdown when Anthropic API succeeds', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const generatedText = `TITLE: Day 5 — Metrics feature\n---\n_We added metrics tracking today._\n\n## What we worked on\n\nMetrics endpoint.\n`;
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok:   true,
+      json: () => Promise.resolve({ content: [{ text: generatedText }] }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+    try {
+      const res = await request(app)
+        .post('/ai-blog/generate')
+        .set('Authorization', `Bearer ${makeToken()}`)
+        .send({ context: 'worked on metrics' });
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe('Day 5 — Metrics feature');
+      expect(res.body.body_markdown).toContain('_We added metrics tracking today._');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('GET /ai-blog/:slug', () => {
   it('returns 404 for an unknown slug', async () => {
     // rate-limiter increment (fails open) then handler SELECT returns empty → 404

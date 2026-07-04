@@ -28,6 +28,37 @@ const aiBlogRateLimit = rateLimit({
   store:           new PostgresStore({ windowMs: POSTS_RATE_WINDOW_MS, keyType: 'ai-blog' }),
 });
 
+// ── AI generation constants
+
+const AI_GENERATE_SYSTEM_PROMPT = `You are writing an AI dev blog post for a personal portfolio site. The owner (Andy) documents pair-programming sessions with Claude AI. Write in first person plural ("we") — Andy and Claude working together.
+
+The post should follow this exact structure:
+_One-line summary of the session._
+
+## What we worked on
+
+Brief description of the issue or feature tackled.
+
+## What we built
+
+- Key change one (be specific)
+- Key change two
+- Key change three
+
+## What we broke / what was tricky
+
+Honest note about obstacles, wrong turns, or surprising complexity. If nothing broke, write something like "Smooth session — no major obstacles."
+
+## What we learned
+
+An insight worth capturing — about the codebase, the tools, or the AI-assisted workflow.
+
+## Next up
+
+What's logically next based on what we just built.
+
+Keep it concise and honest. No marketing language. Write as if explaining to a fellow developer reading your dev diary. The one-line summary at the top is in italics (wrapped in _underscores_).`;
+
 // ── Helpers
 
 async function insertAiBlogPost(title, body_markdown, post_date, published_at) {
@@ -160,6 +191,68 @@ router.put('/:id', aiBlogRateLimit, resolveUser, authenticate, validate(UpdatePo
     res.json(updated);
   } catch (err) {
     logger.error({ err }, '[ai-blog] Request failed');
+    next(err);
+  }
+});
+
+// Admin: generate a draft AI dev blog post via Anthropic API
+router.post('/generate', aiBlogRateLimit, resolveUser, authenticate, async (req, res, next) => {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'AI generation is not configured. Set ANTHROPIC_API_KEY.' });
+  }
+
+  const { context } = req.body || {};
+  const userMessage = `Write an AI dev blog post about today's session.
+${context ? `Context from the developer: ${context}` : 'No specific context provided — generate a plausible draft based on common portfolio site development tasks.'}
+
+Return ONLY the blog post content — start with the italic one-line summary, then the sections. Do not include a title heading like "# Title" at the top. The first line is the italicized summary.
+
+For the post title (a separate field in the form), suggest: "Day N — [short description]" where N is a reasonable session number.
+
+Format your response as:
+TITLE: <suggested title here>
+---
+<blog post body starting with _italic summary_>`;
+
+  try {
+    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system:     AI_GENERATE_SYSTEM_PROMPT,
+        messages:   [{ role: 'user', content: userMessage }],
+      }),
+    });
+
+    if (!apiRes.ok) {
+      const errBody = await apiRes.text().catch(() => '');
+      logger.error({ status: apiRes.status, body: errBody }, '[ai-blog-generate] Anthropic API error');
+      return res.status(502).json({ error: 'AI generation failed — upstream API error.' });
+    }
+
+    const apiData = await apiRes.json();
+    const raw = apiData?.content?.[0]?.text || '';
+
+    const separatorIdx = raw.indexOf('\n---\n');
+    let title       = '';
+    let body_markdown = raw.trim();
+
+    if (separatorIdx !== -1) {
+      const titleLine = raw.slice(0, separatorIdx).trim();
+      title         = titleLine.startsWith('TITLE:') ? titleLine.slice(6).trim() : titleLine;
+      body_markdown = raw.slice(separatorIdx + 5).trim();
+    }
+
+    logger.info({ context: context || null, titleExtracted: !!title }, '[ai-blog-generate] Draft generated successfully');
+    res.json({ title, body_markdown });
+  } catch (err) {
+    logger.error({ err }, '[ai-blog-generate] Fetch to Anthropic API failed');
     next(err);
   }
 });

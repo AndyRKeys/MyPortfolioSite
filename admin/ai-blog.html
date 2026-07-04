@@ -48,6 +48,13 @@
                     <label>Body (Markdown)
                         <textarea id="ai-blog-body" rows="12" placeholder="Write your session summary in Markdown…"></textarea>
                     </label>
+                    <div class="gen-context-section">
+                        <label>Generate with AI
+                            <textarea id="ai-blog-gen-context" rows="2" placeholder="Optional: briefly describe what you worked on this session…"></textarea>
+                        </label>
+                        <button type="button" id="ai-blog-gen-btn" class="btn-secondary">Generate with AI</button>
+                        <p id="ai-blog-gen-message" class="admin-message"></p>
+                    </div>
                     <div class="form-actions">
                         <button type="submit" id="ai-blog-save-btn" class="btn-primary">Save draft</button>
                         <button type="submit" id="ai-blog-publish-btn" class="btn-primary">Publish</button>
