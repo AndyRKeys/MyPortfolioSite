@@ -205,9 +205,9 @@ try {
     smoke('Dashboard active in sub-nav', activeLabel.includes('Dashboard'), `active item: "${activeLabel}"`);
   }
 
-  // S4: all 7 dashboard navigation cards present (#378, +Activity card from #155)
+  // S4: all 8 dashboard navigation cards present (#378, +Activity card from #155, +AI Dev Blog from #106)
   const cardCount = await page.$$eval('.admin-dashboard-card', els => els.length).catch(() => 0);
-  smoke('Dashboard has 7 navigation cards', cardCount === 7, `found ${cardCount}`);
+  smoke('Dashboard has 8 navigation cards', cardCount === 8, `found ${cardCount}`);
 
   // S5: Search link present in public nav on blog and travel pages (#157)
   const blogNav = await page.evaluate(async (url) => {
