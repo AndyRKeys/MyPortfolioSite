@@ -129,6 +129,13 @@ describe('GET /upload/status', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 400 when file query param is absent', async () => {
+    const res = await request(app)
+      .get('/upload/status')
+      .set('Authorization', `Bearer ${makeToken()}`);
+    expect(res.status).toBe(400);
+  });
+
   it('returns status for a known file', async () => {
     const { pool } = await import('../../db/pool.js');
     pool.query.mockResolvedValueOnce({

@@ -75,63 +75,66 @@ router.post('/', uploadRateLimit, authenticate, wrapMulter(upload.single('file')
 
 // ── GET /status ───────────────────────────────────────────────────────────────
 
-router.get('/status', authenticate, async (req, res) => {
-  const { file } = req.query;
-  if (!file) return res.status(400).json({ error: 'file query param required' });
+router.get('/status', authenticate, async (req, res, next) => {
+  try {
+    const { file } = req.query;
+    if (!file) return res.status(400).json({ error: 'file query param required' });
 
-  const mediaUrl = `/uploads/original/${file}`;
-  const result = await pool.query(
-    'SELECT media_status, full_url, thumb_url FROM post_media WHERE media_url = $1 LIMIT 1',
-    [mediaUrl],
-  );
+    const mediaUrl = `/uploads/original/${file}`;
+    const result = await pool.query(
+      'SELECT media_status, full_url, thumb_url FROM post_media WHERE media_url = $1 LIMIT 1',
+      [mediaUrl],
+    );
 
-  if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
-  const row = result.rows[0];
-  res.json({ status: row.media_status, full_url: row.full_url, thumb_url: row.thumb_url });
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    const row = result.rows[0];
+    res.json({ status: row.media_status, full_url: row.full_url, thumb_url: row.thumb_url });
+  } catch (err) { next(err); }
 });
 
 // ── GET /jobs ─────────────────────────────────────────────────────────────────
 
-router.get('/jobs', authenticate, async (req, res) => {
-  const result = await pool.query(
-    `SELECT media_url, media_type, media_status, full_url, thumb_url, created_at
-     FROM post_media
-     WHERE media_status IS NOT NULL
-     ORDER BY created_at DESC
-     LIMIT 50`,
-  );
-  res.json(result.rows);
+router.get('/jobs', authenticate, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT media_url, media_type, media_status, full_url, thumb_url, created_at
+       FROM post_media
+       WHERE media_status IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
 });
 
 // ── POST /retry ───────────────────────────────────────────────────────────────
 
-router.post('/retry', authenticate, async (req, res) => {
-  const { file, mimeType } = req.body;
-  if (!file) return res.status(400).json({ error: 'file is required' });
-
-  const mediaUrl  = `/uploads/original/${file}`;
-  const filePath  = path.join(UPLOADS_ORIGINAL_DIR, file);
-
-  await pool.query(
-    'UPDATE posts      SET media_status = $1 WHERE media_url = $2',
-    ['pending', mediaUrl],
-  );
-  await pool.query(
-    'UPDATE post_media SET media_status = $1 WHERE media_url = $2',
-    ['pending', mediaUrl],
-  );
-
+router.post('/retry', authenticate, async (req, res, next) => {
   try {
-    const boss = getBoss();
-    if (boss) {
-      await boss.send(MEDIA_JOB_NAME, { filePath, mimeType: mimeType || 'application/octet-stream' }, { retryLimit: 3, retryDelay: 0, retryBackoff: true });
-      logger.info({ file }, '[upload/retry] job re-enqueued');
-    }
-  } catch (err) {
-    logger.error({ err: err.message, file }, '[upload/retry] failed to re-enqueue job');
-  }
+    const rawFile = req.body.file;
+    if (!rawFile) return res.status(400).json({ error: 'file is required' });
+    const file = path.basename(rawFile);  // strip any directory components
+    const { mimeType } = req.body;
+    const mediaUrl  = `/uploads/original/${file}`;
+    const filePath  = path.join(UPLOADS_ORIGINAL_DIR, file);
 
-  res.json({ ok: true });
+    await pool.query('UPDATE posts      SET media_status = $1 WHERE media_url = $2', ['pending', mediaUrl]);
+    await pool.query('UPDATE post_media SET media_status = $1 WHERE media_url = $2', ['pending', mediaUrl]);
+
+    try {
+      const boss = getBoss();
+      if (boss) {
+        await boss.send(MEDIA_JOB_NAME, { filePath, mimeType: mimeType || 'application/octet-stream' }, { retryLimit: 3, retryDelay: 0, retryBackoff: true });
+        logger.info({ file }, '[upload/retry] job re-enqueued');
+      } else {
+        logger.warn({ file }, '[upload/retry] boss not ready — job not re-enqueued');
+      }
+    } catch (err) {
+      logger.error({ err: err.message, file }, '[upload/retry] failed to re-enqueue job');
+    }
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 export default router;
