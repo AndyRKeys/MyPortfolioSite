@@ -214,10 +214,26 @@ export function initAiBlog() {
     });
 
     document.getElementById('ai-blog-gen-btn').addEventListener('click', async () => {
-        const genBtn = document.getElementById('ai-blog-gen-btn');
-        const context = document.getElementById('ai-blog-gen-context').value.trim();
+        const genBtn   = document.getElementById('ai-blog-gen-btn');
+        const context  = document.getElementById('ai-blog-gen-context').value.trim();
+        const start    = Date.now();
         genBtn.disabled = true;
-        setGenMessage('Generating…');
+
+        function elapsedStr() {
+            const s = Math.floor((Date.now() - start) / 1000);
+            return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+        }
+
+        function statusMsg() {
+            const s = Math.floor((Date.now() - start) / 1000);
+            if (s < 20)  return `Generating… (${elapsedStr()})`;
+            if (s < 45)  return `Still generating via Ollama… (${elapsedStr()})`;
+            if (s < 90)  return `Taking longer than usual — Ollama can be slow on first run… (${elapsedStr()})`;
+            return `Almost at the limit — hang tight… (${elapsedStr()})`;
+        }
+
+        setGenMessage(statusMsg());
+        const timer = setInterval(() => setGenMessage(statusMsg()), 1000);
 
         try {
             const res = await authFetch('/ai-blog/generate', {
@@ -241,6 +257,7 @@ export function initAiBlog() {
         } catch {
             setGenMessage('Generation failed — try again.', true);
         } finally {
+            clearInterval(timer);
             genBtn.disabled = false;
         }
     });
