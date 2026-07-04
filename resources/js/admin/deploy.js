@@ -20,6 +20,8 @@ export function initDeploy() {
     const statusRow        = document.getElementById('deploy-status-row');
     const commitList       = document.getElementById('commit-list');
     const logList          = document.getElementById('deploy-log-list');
+    const branchSelect     = document.getElementById('deploy-branch-select');
+    const branchInput      = document.getElementById('deploy-branch-input');
 
     const setMessage = createMessenger('deploy-message');
 
@@ -238,6 +240,33 @@ export function initDeploy() {
         }
     }
 
+    // ── Branch selector ────────────────────────────────────────────────────────
+
+    async function loadBranches() {
+        try {
+            const r = await authFetch('/deploy/branches');
+            if (!r.ok) throw new Error(await r.text());
+            const { branches } = await r.json();
+
+            branchSelect.innerHTML = branches.map(b =>
+                `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`
+            ).join('') + '<option value="__other__">Other (type below)</option>';
+
+            branchSelect.value = '';
+        } catch {
+            branchSelect.innerHTML = '<option value="__other__">Other (type below)</option>';
+        }
+    }
+
+    branchSelect.addEventListener('change', () => {
+        if (branchSelect.value === '__other__') {
+            branchInput.value = '';
+            branchInput.focus();
+        } else {
+            branchInput.value = branchSelect.value;
+        }
+    });
+
     // ── Data loaders ───────────────────────────────────────────────────────────
 
     async function loadStatus() {
@@ -304,4 +333,5 @@ export function initDeploy() {
     });
 
     loadStatus().then(() => loadHistory());
+    loadBranches();
 }

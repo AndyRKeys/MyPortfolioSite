@@ -18,13 +18,16 @@ vi.mock('../../db/pool.js', () => ({
 
 vi.mock('../../utils/shell.js', () => ({
   spawnPromise: vi.fn().mockImplementation((_cmd, args) => {
-    if (args.includes('--abbrev-ref'))  return Promise.resolve('main\n');
-    if (args.includes('rev-parse'))     return Promise.resolve('abc1234def5678901234567890123456789012345\n');
-    if (args.includes('--format=%s'))   return Promise.resolve('chore: test commit\n');
-    if (args.includes('--format=%ci'))  return Promise.resolve('2026-01-01 00:00:00 +0000\n');
-    if (args.includes('--count'))       return Promise.resolve('0\n');
-    if (args.includes('fetch'))         return Promise.resolve('');
-    if (args.includes('--format=%H'))   return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--abbrev-ref'))       return Promise.resolve('main\n');
+    if (args.includes('rev-parse'))          return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--format=%s'))        return Promise.resolve('chore: test commit\n');
+    if (args.includes('--format=%ci'))       return Promise.resolve('2026-01-01 00:00:00 +0000\n');
+    if (args.includes('--count'))            return Promise.resolve('0\n');
+    if (args.includes('fetch'))              return Promise.resolve('');
+    if (args.includes('--format=%H'))        return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--sort=-committerdate')) return Promise.resolve(
+      '  origin/dev\n  origin/feature/issue-497-deploy-branch-selector\n  origin/HEAD -> origin/main\n  origin/main\n'
+    );
     return Promise.resolve('');
   }),
   spawnStream: vi.fn().mockImplementation(() => (async function* () {})()),
@@ -178,6 +181,29 @@ describe('POST /deploy — queue-based trigger', () => {
   it('returns 401 without auth', async () => {
     const res = await request(app).post('/deploy');
     expect(res.status).toBe(401);
+  });
+});
+
+// ── GET /deploy/branches ──────────────────────────────────────────────────────
+
+describe('GET /deploy/branches', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).get('/deploy/branches');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with branches array for a valid admin JWT', async () => {
+    const res = await request(app)
+      .get('/deploy/branches')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('branches');
+    expect(Array.isArray(res.body.branches)).toBe(true);
+    // HEAD and main should be excluded; dev and feature branch included
+    expect(res.body.branches).not.toContain('HEAD');
+    expect(res.body.branches).not.toContain('main');
+    expect(res.body.branches).toContain('dev');
+    expect(res.body.branches).toContain('feature/issue-497-deploy-branch-selector');
   });
 });
 
