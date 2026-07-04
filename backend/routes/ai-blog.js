@@ -195,12 +195,8 @@ router.put('/:id', aiBlogRateLimit, resolveUser, authenticate, validate(UpdatePo
   }
 });
 
-// Admin: generate a draft AI dev blog post via Anthropic API
+// Admin: generate a draft AI dev blog post via Ollama (primary) or Anthropic API (fallback)
 router.post('/generate', aiBlogRateLimit, resolveUser, authenticate, async (req, res, next) => {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(503).json({ error: 'AI generation is not configured. Set ANTHROPIC_API_KEY.' });
-  }
-
   const { context } = req.body || {};
   const userMessage = `Write an AI dev blog post about today's session.
 ${context ? `Context from the developer: ${context}` : 'No specific context provided — generate a plausible draft based on common portfolio site development tasks.'}
@@ -213,6 +209,67 @@ Format your response as:
 TITLE: <suggested title here>
 ---
 <blog post body starting with _italic summary_>`;
+
+  // ── Helper: parse TITLE / body from raw LLM response
+  function parseResponse(raw) {
+    const separatorIdx = raw.indexOf('\n---\n');
+    let title         = '';
+    let body_markdown = raw.trim();
+    if (separatorIdx !== -1) {
+      const titleLine = raw.slice(0, separatorIdx).trim();
+      title           = titleLine.startsWith('TITLE:') ? titleLine.slice(6).trim() : titleLine;
+      body_markdown   = raw.slice(separatorIdx + 5).trim();
+    }
+    return { title, body_markdown };
+  }
+
+  // ── Priority 1: Ollama
+  const ollamaHost = process.env.OLLAMA_HOST || 'http://host.docker.internal:11434';
+  const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2';
+  let ollamaFailed = false;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    let ollamaRes;
+    try {
+      ollamaRes = await fetch(`${ollamaHost}/api/chat`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        signal:  controller.signal,
+        body: JSON.stringify({
+          model:    ollamaModel,
+          stream:   false,
+          messages: [
+            { role: 'system', content: AI_GENERATE_SYSTEM_PROMPT },
+            { role: 'user',   content: userMessage },
+          ],
+        }),
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!ollamaRes.ok) {
+      const errBody = await ollamaRes.text().catch(() => '');
+      logger.warn({ status: ollamaRes.status, body: errBody }, '[ai-blog-generate] Ollama unavailable, trying Anthropic fallback');
+      ollamaFailed = true;
+    } else {
+      const data = await ollamaRes.json();
+      const raw  = data?.message?.content || '';
+      const { title, body_markdown } = parseResponse(raw);
+      logger.info({ provider: 'ollama', model: ollamaModel, context: context || null, titleExtracted: !!title }, '[ai-blog-generate] Draft generated successfully');
+      return res.json({ title, body_markdown });
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, '[ai-blog-generate] Ollama unavailable, trying Anthropic fallback');
+    ollamaFailed = true;
+  }
+
+  // ── Priority 2: Anthropic API fallback
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'No AI provider available. Ollama is not running or Anthropic API key is not set.' });
+  }
 
   try {
     const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -238,18 +295,8 @@ TITLE: <suggested title here>
 
     const apiData = await apiRes.json();
     const raw = apiData?.content?.[0]?.text || '';
-
-    const separatorIdx = raw.indexOf('\n---\n');
-    let title       = '';
-    let body_markdown = raw.trim();
-
-    if (separatorIdx !== -1) {
-      const titleLine = raw.slice(0, separatorIdx).trim();
-      title         = titleLine.startsWith('TITLE:') ? titleLine.slice(6).trim() : titleLine;
-      body_markdown = raw.slice(separatorIdx + 5).trim();
-    }
-
-    logger.info({ context: context || null, titleExtracted: !!title }, '[ai-blog-generate] Draft generated successfully');
+    const { title, body_markdown } = parseResponse(raw);
+    logger.info({ provider: 'anthropic', context: context || null, titleExtracted: !!title }, '[ai-blog-generate] Draft generated successfully');
     res.json({ title, body_markdown });
   } catch (err) {
     logger.error({ err }, '[ai-blog-generate] Fetch to Anthropic API failed');
