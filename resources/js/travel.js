@@ -141,20 +141,22 @@ function loadPublicTravelPosts() {
             });
             var timelineEl = document.getElementById('travel-timeline');
             sorted.forEach(function (travel) {
-                var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+                var allMedia  = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
                 var firstMedia = allMedia ? allMedia[0] : null;
-                var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
-                var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+                var mediaUrl  = (firstMedia && firstMedia.url)       || travel.media_url  || travel.mediaUrl;
+                var thumbUrl  = (firstMedia && firstMedia.thumb_url) || travel.thumb_url  || null;
+                var mediaType = (firstMedia && firstMedia.type)      || travel.media_type || travel.mediaType;
 
                 var item = buildTimelineItem({
-                    dateStr: formatVisitDate(travel.post_date),
-                    title: travel.title,
-                    location: travel.location,
-                    notes: travel.notes,
-                    mediaUrl: mediaUrl,
-                    mediaType: mediaType,
+                    dateStr:    formatVisitDate(travel.post_date),
+                    title:      travel.title,
+                    location:   travel.location,
+                    notes:      travel.notes,
+                    mediaUrl:   mediaUrl,
+                    thumbUrl:   thumbUrl,
+                    mediaType:  mediaType,
                     mediaCount: allMedia ? allMedia.length : 0,
-                    linkHref: '/travel/post/?id=' + encodeURIComponent(travel.id),
+                    linkHref:   '/travel/post/?id=' + encodeURIComponent(travel.id),
                 });
 
                 var thumb = item.querySelector('.media-thumb-wrap');

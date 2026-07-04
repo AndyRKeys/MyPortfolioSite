@@ -34,12 +34,13 @@ const travelRateLimit = rateLimit({
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, p.lat, p.lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, p.lat, p.lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -51,12 +52,13 @@ const TRAVEL_COLS = `
 const TRAVEL_COLS_PUBLIC = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -73,10 +75,14 @@ async function replaceMedia(client, postId, mediaItems) {
     );
     return;
   }
-  const vals   = mediaItems.map((m, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, ${i})`).join(', ');
-  const params = [postId, ...mediaItems.flatMap(m => [m.url, m.type || null])];
+  const vals   = mediaItems.map((m, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4}, ${i})`).join(', ');
+  const params = [postId, ...mediaItems.flatMap(m => [
+    m.url,
+    m.type || null,
+    (m.url && m.url.startsWith('/uploads/original/')) ? 'pending' : null,
+  ])];
   await client.query(
-    `INSERT INTO post_media (post_id, media_url, media_type, order_index) VALUES ${vals}`,
+    `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index) VALUES ${vals}`,
     params
   );
   await client.query(
