@@ -112,6 +112,10 @@ A few packages are load-bearing for cross-cutting concerns and worth knowing abo
 
 - **`pino` + `pino-http`** — the backend's structured logging stack (#153). All backend code logs through `backend/utils/logger.js`; **no bare `console.log` in runtime code**. `pino-http` provides the per-request HTTP log line (method/path/status/latency) and a `req.log` child logger. Secret redaction (auth headers, tokens, passwords, refresh tokens) is configured centrally in `logger.js` — do not bypass it. `pino-pretty` (devDependency) pretty-prints in non-production; production emits JSON. Level is set by `LOG_LEVEL` (default `info`).
 
+- **`sharp` (`^0.35.3`)** — image resizing and WebP conversion in the media processing pipeline (#174). Standard Node.js image processing library; fast, well-maintained, ships pre-built Alpine binaries (no native build toolchain needed at runtime). Used in `backend/workers/mediaProcessor.js` to process image uploads into `full/` (≤2400px) and `thumb/` (400px square) variants at quality 85.
+
+- **`pg-boss` (`^10.4.2`)** — PostgreSQL-backed job queue for background media processing (#174). Reuses the existing PostgreSQL DB with no new infrastructure; provides retries, concurrency control, and dead-letter queue out of the box. Singleton initialized in `backend/utils/boss.js`, worker registered in `backend/workers/mediaProcessor.js`, job enqueued from `backend/routes/upload.js`. Processing runs asynchronously so upload responses are immediate regardless of file size.
+
 ## Security
 
 - Run `npm audit` regularly — treat vulnerabilities as blockers
