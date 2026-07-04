@@ -254,7 +254,9 @@ export function initDeploy() {
                 `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`
             ).join('') + '<option value="__other__">Other (type below)</option>';
 
-            branchSelect.value = '';
+            branchSelect.value = branches[0];
+            branchInput.value  = branches[0];
+            loadHistory(branches[0]);
         } catch {
             branchSelect.innerHTML = '<option value="__other__">Other (type below)</option>';
         }
