@@ -225,7 +225,7 @@ TITLE: <suggested title here>
 
   // ── Priority 1: Ollama
   const ollamaHost = process.env.OLLAMA_HOST || 'http://host.docker.internal:11434';
-  const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+  const ollamaModel = process.env.OLLAMA_MODEL || 'tinyllama';
   let ollamaFailed = false;
 
   try {
