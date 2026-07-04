@@ -12,6 +12,10 @@ import { writeQueueTrigger, tailLogFile } from '../utils/deployQueue.js';
 
 const router   = Router();
 
+// ── Branch list cache ─────────────────────────────────────────────────────────
+// Avoids shelling out on every click; TTL matches typical git fetch cadence.
+let branchCache = null; // { data: { branches: string[] }, expiresAt: number }
+
 // Limiter precedes authenticateDeploy on every route so CodeQL's
 // js/missing-rate-limiting detector sees it before the authorization step.
 const deployReadLimit = rateLimit({
@@ -44,7 +48,8 @@ const DEPLOY_LOG      = `/app/logs/${DEPLOY_ENV}-deploy.log`;
 const DEPLOY_BRANCH   = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
 
 // 7–40 hex chars — covers both short and full SHAs
-const SHA_RE = /^[0-9a-f]{7,40}$/i;
+const SHA_RE    = /^[0-9a-f]{7,40}$/i;
+const BRANCH_RE = /^[\w./-]+$/;
 
 // Byte offset at which the current (or most recent) deploy started in DEPLOY_LOG.
 // Used by GET /stream so the frontend can resume after a container restart.
@@ -127,6 +132,34 @@ async function streamQueuedDeploy(res, env, rollbackSha = null) {
   res.end();
 }
 
+// ── GET /api/deploy/branches ──────────────────────────────────────────────────
+
+router.get('/branches', deployReadLimit, authenticateDeploy, async (req, res) => {
+  const now = Date.now();
+  if (branchCache && branchCache.expiresAt > now) {
+    logger.info('[deploy-branches] cache hit');
+    return res.json(branchCache.data);
+  }
+
+  logger.info('[deploy-branches] fetching remote branch list');
+  try {
+    const out = await spawnPromise(
+      'git', ['branch', '-r', '--sort=-committerdate'],
+      { cwd: REPO_DIR }
+    );
+    const branches = out.trim().split('\n')
+      .map(b => b.trim().replace(/^origin\//, ''))
+      .filter(b => b && b !== 'HEAD' && b !== 'main')
+      .slice(0, 20);
+
+    const data = { branches };
+    branchCache = { data, expiresAt: now + 60_000 };
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list branches', detail: err.message });
+  }
+});
+
 // ── GET /api/deploy/status ────────────────────────────────────────────────────
 
 router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
@@ -197,8 +230,16 @@ router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
 
 router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
+    const { branch: branchParam } = req.query;
+
+    if (branchParam !== undefined && (!BRANCH_RE.test(branchParam) || branchParam.includes('..'))) {
+      return res.status(400).json({ error: 'Invalid branch name' });
+    }
+
+    const resolvedBranch = branchParam || DEPLOY_BRANCH;
+
     const gitOut = await spawnPromise(
-      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${DEPLOY_BRANCH}`],
+      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${resolvedBranch}`],
       { cwd: REPO_DIR }
     ).catch(() => '');
 
@@ -213,7 +254,7 @@ router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => 
       deploy_runs = parseDeployRuns(raw);
     } catch { /* log file may not exist yet */ }
 
-    res.json({ commits, deploy_runs });
+    res.json({ commits, deploy_runs, branch: resolvedBranch });
   } catch {
     res.json({ commits: [], deploy_runs: [] });
   }

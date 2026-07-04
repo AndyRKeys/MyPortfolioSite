@@ -1046,6 +1046,14 @@ footer {
 
 /* ── Deployment panel (#98 / #117) ─────────────────────────────────────────── */
 
+#branch-selector-group {
+    margin-top: 1rem;
+}
+
+#branch-selector-group #deploy-branch-input {
+    margin-top: 0.5rem;
+}
+
 .deploy-status-row {
     padding: 0.6rem 0.75rem;
     background: var(--color-bg-alt);
@@ -2362,7 +2370,8 @@ details.deploy-run + details.deploy-run {
 .admin-card input[type="number"],
 .admin-card input[type="date"],
 .admin-card textarea,
-.admin-card input[type="file"] {
+.admin-card input[type="file"],
+.admin-card select {
     width: 100%;
     padding: 0.65rem 0.85rem;
     margin-top: 0.35rem;
@@ -2379,9 +2388,24 @@ details.deploy-run + details.deploy-run {
 .admin-card input[type="text"]:focus,
 .admin-card input[type="email"]:focus,
 .admin-card input[type="number"]:focus,
-.admin-card input[type="date"]:focus {
+.admin-card input[type="date"]:focus,
+.admin-card select:focus {
     outline: none;
     border-color: var(--color-accent);
+}
+
+/* Custom chevron replaces the browser-native dropdown arrow */
+.admin-card select {
+    appearance: none;
+    padding-right: 2.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    cursor: pointer;
+}
+
+[data-theme="dark"] .admin-card select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 /* Suppress WebKit's native calendar icon so the field looks clean */
@@ -2438,7 +2462,8 @@ details.deploy-run + details.deploy-run {
     .admin-card input[type="number"],
     .admin-card input[type="date"],
     .admin-card input[type="password"],
-    .admin-card textarea {
+    .admin-card textarea,
+    .admin-card select {
         font-size: 16px;
         padding: 0.75rem 0.85rem;
     }

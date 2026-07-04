@@ -18,13 +18,16 @@ vi.mock('../../db/pool.js', () => ({
 
 vi.mock('../../utils/shell.js', () => ({
   spawnPromise: vi.fn().mockImplementation((_cmd, args) => {
-    if (args.includes('--abbrev-ref'))  return Promise.resolve('main\n');
-    if (args.includes('rev-parse'))     return Promise.resolve('abc1234def5678901234567890123456789012345\n');
-    if (args.includes('--format=%s'))   return Promise.resolve('chore: test commit\n');
-    if (args.includes('--format=%ci'))  return Promise.resolve('2026-01-01 00:00:00 +0000\n');
-    if (args.includes('--count'))       return Promise.resolve('0\n');
-    if (args.includes('fetch'))         return Promise.resolve('');
-    if (args.includes('--format=%H'))   return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--abbrev-ref'))       return Promise.resolve('main\n');
+    if (args.includes('rev-parse'))          return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--format=%s'))        return Promise.resolve('chore: test commit\n');
+    if (args.includes('--format=%ci'))       return Promise.resolve('2026-01-01 00:00:00 +0000\n');
+    if (args.includes('--count'))            return Promise.resolve('0\n');
+    if (args.includes('fetch'))              return Promise.resolve('');
+    if (args.includes('--format=%H'))        return Promise.resolve('abc1234def5678901234567890123456789012345\n');
+    if (args.includes('--sort=-committerdate')) return Promise.resolve(
+      '  origin/dev\n  origin/feature/issue-497-deploy-branch-selector\n  origin/HEAD -> origin/main\n  origin/main\n'
+    );
     return Promise.resolve('');
   }),
   spawnStream: vi.fn().mockImplementation(() => (async function* () {})()),
@@ -178,6 +181,95 @@ describe('POST /deploy — queue-based trigger', () => {
   it('returns 401 without auth', async () => {
     const res = await request(app).post('/deploy');
     expect(res.status).toBe(401);
+  });
+});
+
+// ── GET /deploy/branches ──────────────────────────────────────────────────────
+
+describe('GET /deploy/branches', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).get('/deploy/branches');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with branches array for a valid admin JWT', async () => {
+    const res = await request(app)
+      .get('/deploy/branches')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('branches');
+    expect(Array.isArray(res.body.branches)).toBe(true);
+    // HEAD and main should be excluded; dev and feature branch included
+    expect(res.body.branches).not.toContain('HEAD');
+    expect(res.body.branches).not.toContain('main');
+    expect(res.body.branches).toContain('dev');
+    expect(res.body.branches).toContain('feature/issue-497-deploy-branch-selector');
+  });
+});
+
+// ── GET /deploy/history ───────────────────────────────────────────────────────
+
+describe('GET /deploy/history', () => {
+  it('returns 401 without JWT', async () => {
+    const res = await request(app).get('/deploy/history');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with commits, deploy_runs, and branch when no ?branch= param', async () => {
+    const res = await request(app)
+      .get('/deploy/history')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('commits');
+    expect(res.body).toHaveProperty('deploy_runs');
+    expect(res.body).toHaveProperty('branch');
+    expect(Array.isArray(res.body.commits)).toBe(true);
+    expect(Array.isArray(res.body.deploy_runs)).toBe(true);
+  });
+
+  it('uses DEPLOY_BRANCH when ?branch= is omitted', async () => {
+    const { spawnPromise } = await import('../../utils/shell.js');
+    spawnPromise.mockClear();
+    await request(app)
+      .get('/deploy/history')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    const gitLogCall = spawnPromise.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('--format=%H|%h|%s|%ci')
+    );
+    expect(gitLogCall).toBeDefined();
+    // DEPLOY_ENV is not set in tests so DEPLOY_BRANCH defaults to 'dev'
+    expect(gitLogCall[1]).toContain('origin/dev');
+  });
+
+  it('returns 200 and uses supplied branch when ?branch= is a valid branch name', async () => {
+    const { spawnPromise } = await import('../../utils/shell.js');
+    spawnPromise.mockClear();
+    const res = await request(app)
+      .get('/deploy/history?branch=feature/issue-497-deploy-branch-selector')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.branch).toBe('feature/issue-497-deploy-branch-selector');
+    const gitLogCall = spawnPromise.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('--format=%H|%h|%s|%ci')
+    );
+    expect(gitLogCall).toBeDefined();
+    expect(gitLogCall[1]).toContain('origin/feature/issue-497-deploy-branch-selector');
+  });
+
+  it('returns 400 for an invalid branch name (path traversal)', async () => {
+    const res = await request(app)
+      .get('/deploy/history?branch=../../etc/passwd')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid branch/i);
+  });
+
+  it('returns 400 for a branch name with shell metacharacters', async () => {
+    const res = await request(app)
+      .get('/deploy/history?branch=main;rm+-rf+/')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid branch/i);
   });
 });
 
