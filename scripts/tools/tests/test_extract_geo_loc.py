@@ -303,6 +303,7 @@ def test_extract_file_video_ffprobe_unavailable(tmp_path):
          patch.object(geo, 'parse_gps_video') as mock_gps:
         row = geo.extract_file(vid, ffprobe_available=False)
     mock_gps.assert_not_called()
+    mock_date.assert_not_called()
     assert row['gps_found'] is False
 
 
@@ -321,7 +322,8 @@ def test_run_extract_writes_csv(tmp_path):
 
     csv_path = tmp_path / '01-extracted.csv'
     assert csv_path.exists()
-    rows = list(csv.DictReader(csv_path.open()))
+    with open(csv_path, newline='') as f:
+        rows = list(csv.DictReader(f))
     assert len(rows) == 2
     gps_rows = [r for r in rows if r['gps_found'] == 'True']
     assert len(gps_rows) == 1
@@ -334,7 +336,7 @@ def test_get_candidate_folders_basic(tmp_path):
     file = root / 'Paris' / 'Day1' / 'img.jpg'
     result = geo.get_candidate_folders(file, root)
     assert 'Paris' in result
-    assert 'Day1' not in result  # too short? no — "Day1" has digits... check ignore
+    assert 'Day1' not in result  # generic digit-containing folder names are excluded
 
 
 def test_get_candidate_folders_ignores_generic(tmp_path):
@@ -405,7 +407,8 @@ def test_run_group_gps_bucketing(tmp_path):
         tmp_path,
     )
 
-    groups = list(csv.DictReader(open(tmp_path / '02-lookup-groups.csv')))
+    with open(tmp_path / '02-lookup-groups.csv', newline='') as f:
+        groups = list(csv.DictReader(f))
     assert len(groups) == 1
     assert groups[0]['source'] == 'GPS'
     assert groups[0]['status'] == 'pending'
@@ -434,7 +437,8 @@ def test_run_group_folder_inference(tmp_path):
             root_folder=root,
         )
 
-    groups = list(csv.DictReader(open(tmp_path / '02-lookup-groups.csv')))
+    with open(tmp_path / '02-lookup-groups.csv', newline='') as f:
+        groups = list(csv.DictReader(f))
     assert len(groups) == 1
     assert groups[0]['source'] == 'Folder'
     assert groups[0]['status'] == 'pending'
@@ -545,7 +549,8 @@ def test_run_export_deduplicates_by_name(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+        rows = list(csv.DictReader(f))
     assert len(rows) == 1
     assert rows[0]['location'] == 'Paris, France'
     assert rows[0]['post_date'] == '2024-06-15'  # earliest date wins
@@ -569,7 +574,8 @@ def test_run_export_skips_failed_groups(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+        rows = list(csv.DictReader(f))
     assert len(rows) == 1
 
 
@@ -586,7 +592,8 @@ def test_run_export_output_columns(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+        rows = list(csv.DictReader(f))
     assert rows[0]['title']    == 'My Trip'
     assert rows[0]['location'] == 'Paris, France'
     assert rows[0]['notes']    == 'Nice'

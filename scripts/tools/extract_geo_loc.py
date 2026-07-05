@@ -5,8 +5,6 @@ Usage:
     python extract_geo_loc.py --stage all --root-folder "D:\\Photos" --working-folder "D:\\geo-work"
     python extract_geo_loc.py --stage resolve --working-folder "D:\\geo-work" --api-key "abc123"
 """
-from __future__ import annotations
-
 import argparse
 import asyncio
 import csv
@@ -29,7 +27,7 @@ import exifread
 
 # ── Constants
 
-DEFAULTS: dict = {
+DEFAULTS: dict[str, object] = {
     'geoapify_api_key':      '',
     'workers':               16,
     'throttle_ms':         1200,
@@ -281,7 +279,7 @@ def get_candidate_folders(file_path: Path, root: Path) -> list[str]:
             seen.add(clean)
             candidates.append(clean)
 
-    return candidates[-3:]  # most specific (deepest) folders first
+    return candidates[-3:]  # deepest folders last; caller uses reversed() for most-specific-first
 
 
 def extract_location_label(addr: dict, country: str | None) -> str | None:
@@ -334,7 +332,8 @@ def run_group(config: dict, working_folder: Path,
     if not extracted_csv.exists():
         raise FileNotFoundError(f'Run extract stage first: {extracted_csv}')
 
-    rows = list(csv.DictReader(open(extracted_csv, encoding='utf-8')))
+    with open(extracted_csv, encoding='utf-8') as f:
+        rows = list(csv.DictReader(f))
     lp = config['lookup_precision']
     cp = config['coordinate_precision']
     throttle = config['throttle_ms'] / 1000
@@ -521,8 +520,6 @@ async def resolve_group(
                     print(f'[resolve] FAILED after 3 attempts: {group["group_key"]} — {exc}')
                     return {**group, 'resolved_location': None, 'status': 'failed'}
 
-    return {**group, 'resolved_location': None, 'status': 'failed'}
-
 
 async def resolve_all(groups: list[dict], config: dict, cache: dict) -> list[dict]:
     """Reverse geocode all pending groups concurrently under a rate-limit semaphore."""
@@ -547,7 +544,8 @@ def run_resolve(config: dict, working_folder: Path) -> None:
 
     cache_path = working_folder / 'photo-location-cache.json'
     cache      = load_cache(cache_path)
-    groups     = list(csv.DictReader(open(groups_csv, encoding='utf-8')))
+    with open(groups_csv, encoding='utf-8') as f:
+        groups = list(csv.DictReader(f))
     pending    = [g for g in groups if g.get('status') != 'resolved']
 
     resolved = asyncio.run(resolve_all(pending, config, cache))
@@ -614,8 +612,9 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
     if not resolved_csv.exists():
         raise FileNotFoundError(f'Run resolve stage first: {resolved_csv}')
 
-    rows = [r for r in csv.DictReader(open(resolved_csv, encoding='utf-8'))
-            if r.get('status') == 'resolved' and r.get('resolved_location')]
+    with open(resolved_csv, encoding='utf-8') as f:
+        rows = [r for r in csv.DictReader(f)
+                if r.get('status') == 'resolved' and r.get('resolved_location')]
     if not rows:
         raise ValueError('No resolved locations found — nothing to export.')
 
