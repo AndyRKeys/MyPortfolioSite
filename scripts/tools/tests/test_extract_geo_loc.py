@@ -750,6 +750,7 @@ def test_run_geotag_preview_missing_file_raises(tmp_path):
 # ── Geotag write stage tests
 
 def test_check_exiftool_returns_false_when_missing():
+    geo._exiftool_warned = False
     with patch('subprocess.run', side_effect=FileNotFoundError):
         result = geo.check_exiftool()
     assert result is False
@@ -772,25 +773,36 @@ def test_run_geotag_write_no_exiftool_raises(tmp_path):
 
 
 def test_run_geotag_write_calls_exiftool_with_csv(tmp_path):
-    """exiftool is called with a CSV file containing SourceFile + GPS columns."""
+    """exiftool is called with correct args; N/S/E/W refs are correct."""
     preview = tmp_path / '05-geotag-preview.csv'
     with open(preview, 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.DictWriter(f, fieldnames=['file_path','resolved_location','lat','lng'])
         w.writeheader()
         w.writerow({'file_path':'/p/a.jpg','resolved_location':'Paris, France','lat':'48.8566','lng':'2.3522'})
-        w.writerow({'file_path':'/p/b.jpg','resolved_location':'Oslo, Norway','lat':'-33.8688','lng':'151.2093'})
+        w.writerow({'file_path':'/p/b.jpg','resolved_location':'Sydney, Australia','lat':'-33.8688','lng':'151.2093'})
 
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stderr = ''
+    captured = {}
+    def capture_csv(cmd, **kwargs):
+        csv_path = next(a.split('=', 1)[1] for a in cmd if a.startswith('-csv='))
+        with open(csv_path, encoding='utf-8') as cf:
+            captured['rows'] = list(csv.DictReader(cf))
+        return MagicMock(returncode=0, stderr='')
+
     with patch.object(geo, 'check_exiftool', return_value=True), \
-         patch('subprocess.run', return_value=mock_result) as mock_run:
+         patch('subprocess.run', side_effect=capture_csv) as mock_run:
         geo.run_geotag_write(tmp_path)
 
     call_args = mock_run.call_args[0][0]
     assert call_args[0] == 'exiftool'
     assert any('geotag-exiftool.csv' in a for a in call_args)
     assert '-overwrite_original' in call_args
+    assert '/p/a.jpg' in call_args
+    assert '/p/b.jpg' in call_args
+    # Verify N/S/E/W mapping for the southern/eastern row
+    b_row = next(r for r in captured['rows'] if r['SourceFile'] == '/p/b.jpg')
+    assert b_row['GPSLatitudeRef'] == 'S'
+    assert b_row['GPSLongitudeRef'] == 'E'
+    assert float(b_row['GPSLatitude']) == pytest.approx(33.8688)
     # Temp CSV cleaned up
     assert not (tmp_path / '05-geotag-exiftool.csv').exists()
 

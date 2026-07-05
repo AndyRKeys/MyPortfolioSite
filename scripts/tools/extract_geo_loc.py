@@ -860,16 +860,17 @@ def run_geotag_write(working_folder: Path) -> None:
                 'GPSLongitudeRef': 'E' if lng >= 0 else 'W',
             })
 
+    file_paths = [r['file_path'] for r in rows]
     print(f'[geotag-write] Writing GPS to {len(rows)} files...')
-    result = subprocess.run(
-        ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'],
-        capture_output=True, text=True)
-
-    if result.returncode != 0:
-        print(f'[geotag-write] exiftool error:\n{result.stderr}')
-        raise RuntimeError(f'exiftool exited with code {result.returncode}')
-
-    etool_csv.unlink(missing_ok=True)  # clean up temp file
+    try:
+        result = subprocess.run(
+            ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'] + file_paths,
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'[geotag-write] exiftool error:\n{result.stderr}')
+            raise RuntimeError(f'exiftool exited with code {result.returncode}')
+    finally:
+        etool_csv.unlink(missing_ok=True)
     print(f'[geotag-write] Done — GPS written to {len(rows)} files.')
 
 
