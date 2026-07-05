@@ -149,6 +149,21 @@ def check_ffprobe() -> bool:
         return False
 
 
+_exiftool_warned = False
+
+def check_exiftool() -> bool:
+    """Return True if exiftool is on PATH. Prints a one-time warning if absent."""
+    global _exiftool_warned
+    try:
+        subprocess.run(['exiftool', '-ver'], capture_output=True, timeout=5)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        if not _exiftool_warned:
+            print('[geotag] WARNING: exiftool not found. Install it to use geotag-write.')
+            _exiftool_warned = True
+        return False
+
+
 def _parse_iso6709(location_str: str) -> tuple[float, float] | None:
     """Parse ISO 6709 location string e.g. '+51.5074-000.1278/' → (lat, lng)."""
     match = re.match(r'^([+-]\d+\.?\d*)([+-]\d+\.?\d*)', location_str.strip())
@@ -812,6 +827,52 @@ def run_geotag_preview(working_folder: Path) -> None:
     print(f'[geotag-preview] then run --stage geotag-write to apply.')
 
 
+def run_geotag_write(working_folder: Path) -> None:
+    """Stage: write GPS coordinates into files listed in 05-geotag-preview.csv."""
+    preview_csv = working_folder / '05-geotag-preview.csv'
+    if not preview_csv.exists():
+        raise FileNotFoundError(f'Run geotag-preview stage first: {preview_csv}')
+    if not check_exiftool():
+        raise RuntimeError('exiftool is required for geotag-write. Install from https://exiftool.org')
+
+    with open(preview_csv, encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+
+    if not rows:
+        print('[geotag-write] Nothing to write — preview CSV is empty.')
+        return
+
+    # Build exiftool-format CSV (SourceFile + GPS tag columns)
+    etool_csv = working_folder / '05-geotag-exiftool.csv'
+    with open(etool_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'SourceFile', 'GPSLatitude', 'GPSLatitudeRef',
+            'GPSLongitude', 'GPSLongitudeRef'])
+        writer.writeheader()
+        for row in rows:
+            lat = float(row['lat'])
+            lng = float(row['lng'])
+            writer.writerow({
+                'SourceFile':      row['file_path'],
+                'GPSLatitude':     abs(lat),
+                'GPSLatitudeRef':  'N' if lat >= 0 else 'S',
+                'GPSLongitude':    abs(lng),
+                'GPSLongitudeRef': 'E' if lng >= 0 else 'W',
+            })
+
+    print(f'[geotag-write] Writing GPS to {len(rows)} files...')
+    result = subprocess.run(
+        ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'],
+        capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f'[geotag-write] exiftool error:\n{result.stderr}')
+        raise RuntimeError(f'exiftool exited with code {result.returncode}')
+
+    etool_csv.unlink(missing_ok=True)  # clean up temp file
+    print(f'[geotag-write] Done — GPS written to {len(rows)} files.')
+
+
 # ── CLI
 
 def main() -> None:
@@ -856,6 +917,8 @@ def main() -> None:
         run_export(config, working, output_csv)
     elif args.stage == 'geotag-preview':
         run_geotag_preview(working)
+    elif args.stage == 'geotag-write':
+        run_geotag_write(working)
     elif args.stage == 'all':
         _extract()
         _group()

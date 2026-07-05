@@ -745,3 +745,64 @@ def test_run_geotag_preview_skips_unresolved(tmp_path):
 def test_run_geotag_preview_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         geo.run_geotag_preview(tmp_path)
+
+
+# ── Geotag write stage tests
+
+def test_check_exiftool_returns_false_when_missing():
+    with patch('subprocess.run', side_effect=FileNotFoundError):
+        result = geo.check_exiftool()
+    assert result is False
+
+
+def test_run_geotag_write_missing_preview_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        geo.run_geotag_write(tmp_path)
+
+
+def test_run_geotag_write_no_exiftool_raises(tmp_path):
+    preview = tmp_path / '05-geotag-preview.csv'
+    with open(preview, 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','resolved_location','lat','lng'])
+        w.writeheader()
+        w.writerow({'file_path':'/p/a.jpg','resolved_location':'Paris, France','lat':'48.8566','lng':'2.3522'})
+    with patch.object(geo, 'check_exiftool', return_value=False):
+        with pytest.raises(RuntimeError, match='exiftool is required'):
+            geo.run_geotag_write(tmp_path)
+
+
+def test_run_geotag_write_calls_exiftool_with_csv(tmp_path):
+    """exiftool is called with a CSV file containing SourceFile + GPS columns."""
+    preview = tmp_path / '05-geotag-preview.csv'
+    with open(preview, 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','resolved_location','lat','lng'])
+        w.writeheader()
+        w.writerow({'file_path':'/p/a.jpg','resolved_location':'Paris, France','lat':'48.8566','lng':'2.3522'})
+        w.writerow({'file_path':'/p/b.jpg','resolved_location':'Oslo, Norway','lat':'-33.8688','lng':'151.2093'})
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ''
+    with patch.object(geo, 'check_exiftool', return_value=True), \
+         patch('subprocess.run', return_value=mock_result) as mock_run:
+        geo.run_geotag_write(tmp_path)
+
+    call_args = mock_run.call_args[0][0]
+    assert call_args[0] == 'exiftool'
+    assert any('geotag-exiftool.csv' in a for a in call_args)
+    assert '-overwrite_original' in call_args
+    # Temp CSV cleaned up
+    assert not (tmp_path / '05-geotag-exiftool.csv').exists()
+
+
+def test_run_geotag_write_empty_preview(tmp_path):
+    """Empty preview CSV prints a message and returns without calling exiftool."""
+    preview = tmp_path / '05-geotag-preview.csv'
+    with open(preview, 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','resolved_location','lat','lng'])
+        w.writeheader()
+
+    with patch.object(geo, 'check_exiftool', return_value=True), \
+         patch('subprocess.run') as mock_run:
+        geo.run_geotag_write(tmp_path)
+    mock_run.assert_not_called()

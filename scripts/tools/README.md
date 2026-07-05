@@ -66,6 +66,17 @@ If `ffprobe -version` still fails after reopening, add FFmpeg to your PATH manua
 3. Search Windows for **"Edit the system environment variables"** → Environment Variables → select `Path` → Edit → New → paste the path
 4. Restart PowerShell and run `ffprobe -version` to confirm
 
+### exiftool (for writing GPS back to photos)
+
+Required only if you use the `geotag-write` stage. Writes GPS coordinates
+into photos that were missing them.
+
+```powershell
+winget install exiftool
+# After installing, close and reopen PowerShell, then verify:
+exiftool -ver
+```
+
 ### Python dependencies
 
 ```bash
@@ -315,6 +326,35 @@ Export.
 **`No resolved locations found` error in Export**
 All groups failed geocoding. Check your internet connection and run Resolve again.
 If using Nominatim, make sure `throttle_ms` is at least `1200`.
+
+---
+
+## Optional: writing GPS back to photos
+
+After completing the main workflow, you can write the resolved GPS
+coordinates back into the original photo files that were missing GPS data.
+
+**This only modifies files where GPS was absent** — photos that already
+have GPS coordinates are never touched.
+
+```powershell
+# Step 1: Generate the review file (reads 02-file-group-map.csv + 03-resolved.csv)
+python extract_geo_loc.py --stage geotag-preview `
+  --working-folder "G:\Pictures\geo-work"
+
+# Step 2: Open 05-geotag-preview.csv in Excel
+#   - Review which files would be tagged and with what location
+#   - Delete any rows for files you do NOT want GPS written to
+#   - Save and close Excel
+
+# Step 3: Write GPS to all remaining rows
+python extract_geo_loc.py --stage geotag-write `
+  --working-folder "G:\Pictures\geo-work"
+```
+
+> **Note:** `geotag-write` uses exiftool's `-overwrite_original` flag —
+> it modifies files in-place with no backup. Review the preview CSV
+> carefully before running this stage.
 
 ---
 
