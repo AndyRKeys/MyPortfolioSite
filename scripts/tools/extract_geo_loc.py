@@ -104,9 +104,9 @@ def parse_date_exif(path: Path) -> str:
         if tag:
             raw = str(tag)  # "2024:06:15 10:30:00"
             return raw[:10].replace(':', '-')
+        return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
     except Exception:
-        pass
-    return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
+        return '1970-01-01'
 
 
 # ── Config
