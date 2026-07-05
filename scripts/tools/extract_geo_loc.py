@@ -33,6 +33,7 @@ DEFAULTS: dict[str, object] = {
     'throttle_ms':         1200,
     'coordinate_precision':   4,
     'lookup_precision':       3,
+    'city_precision':         1,
     'title_prefix':       'Trip',
     'skip_folder_inference': False,
     'user_agent': 'PhotoGeoExportScript/1.0 (andykeys.me)',
@@ -412,14 +413,46 @@ def run_group(config: dict, working_folder: Path,
                     'status':           'pending',
                 })
 
+    # City-level dedup: merge groups within the same ~11km cell to cut geocode calls
+    # city_precision=0 disables this pass (useful in tests or when fine resolution is wanted)
+    city_p = config.get('city_precision', 1)
+    if city_p < 1:
+        print(f'[group] {len(groups)} fine-grained groups (city-level dedup disabled)')
+        merged = groups
+    else:
+        city_buckets: dict[str, list[dict]] = {}
+        for g in groups:
+            city_key = f'{round(float(g["lookup_latitude"]), city_p)}|{round(float(g["lookup_longitude"]), city_p)}'
+            city_buckets.setdefault(city_key, []).append(g)
+
+        merged = []
+        for city_key, cluster in city_buckets.items():
+            avg_lat = sum(float(g['lookup_latitude'])  for g in cluster) / len(cluster)
+            avg_lng = sum(float(g['lookup_longitude']) for g in cluster) / len(cluster)
+            earliest = min((g['post_date'] for g in cluster if g.get('post_date')), default='')
+            total    = sum(int(g['item_count']) for g in cluster)
+            source   = 'GPS' if any(g['source'] == 'GPS' for g in cluster) else 'Folder'
+            merged.append({
+                'group_key':        cluster[0]['group_key'],
+                'item_count':       total,
+                'source':           source,
+                'lookup_latitude':  round(avg_lat, city_p),
+                'lookup_longitude': round(avg_lng, city_p),
+                'export_lat':       round(avg_lat, cp),
+                'export_lng':       round(avg_lng, cp),
+                'post_date':        earliest,
+                'status':           'pending',
+            })
+        print(f'[group] {len(groups)} fine-grained groups → {len(merged)} city-level groups (saved {len(groups) - len(merged)} geocode calls)')
+
     out = working_folder / '02-lookup-groups.csv'
     fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
                   'lookup_longitude', 'export_lat', 'export_lng', 'post_date', 'status']
     with open(out, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(groups)
-    print(f'[group] {len(groups)} location groups → {out}')
+        writer.writerows(merged)
+    print(f'[group] → {out}')
 
 
 # ── Resolve stage

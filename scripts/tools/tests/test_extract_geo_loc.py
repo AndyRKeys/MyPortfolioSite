@@ -431,8 +431,8 @@ def test_run_group_folder_inference(tmp_path):
     with patch.object(geo, 'forward_geocode', return_value=geocode_result):
         geo.run_group(
             {'lookup_precision': 3, 'coordinate_precision': 4,
-             'skip_folder_inference': False, 'throttle_ms': 0,
-             'geoapify_api_key': '', 'user_agent': 'test/1.0'},
+             'city_precision': 0, 'skip_folder_inference': False,
+             'throttle_ms': 0, 'geoapify_api_key': '', 'user_agent': 'test/1.0'},
             tmp_path,
             root_folder=root,
         )

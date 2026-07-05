@@ -5,6 +5,7 @@
   "throttle_ms":          1200,
   "coordinate_precision":    4,
   "lookup_precision":        3,
+  "city_precision":          1,
   "title_prefix":        "Trip",
   "skip_folder_inference": false,
   "user_agent": "PhotoGeoExportScript/1.0 (andykeys.me)"

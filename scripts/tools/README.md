@@ -99,7 +99,8 @@ Copy `.geo-config.example.json` to `.geo-config.json` (gitignored — never comm
 | `workers` | `16` | Thread count for the Extract stage. Increase on fast SSDs, decrease on HDDs. |
 | `throttle_ms` | `1200` | Milliseconds between geocoding requests. 1200 = Nominatim's 1 req/sec policy. Drop to 250 when using Geoapify. |
 | `coordinate_precision` | `4` | Decimal places for export lat/lng (4 dp ≈ 11 m accuracy). |
-| `lookup_precision` | `3` | Decimal places for grouping (3 dp ≈ 111 m — photos within ~100 m share one geocode call). |
+| `lookup_precision` | `3` | Decimal places for initial GPS grouping (3 dp ≈ 111 m — photos within ~100 m share a bucket). |
+| `city_precision` | `1` | Decimal places for city-level dedup before geocoding (1 dp ≈ 11 km — merges all groups in the same city into one geocode call). Increase to `2` for neighbourhood-level if you travel within large cities. |
 | `title_prefix` | `"Trip"` | Value written to the `title` column in the output CSV. |
 | `skip_folder_inference` | `false` | Set `true` to skip the folder-name geocoding fallback for non-GPS files. |
 | `user_agent` | `"PhotoGeoExportScript/1.0 (andykeys.me)"` | Sent with Nominatim requests (required by their policy). |
