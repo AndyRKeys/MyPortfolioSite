@@ -289,7 +289,12 @@ def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
 # ── Group stage
 
 def get_candidate_folders(file_path: Path, root: Path) -> list[str]:
-    """Return up to 3 usable place-name candidates from the folder path."""
+    """Return up to 3 usable place-name candidates from the folder path.
+
+    For clean folder names like "Paris" or "New York", the whole name is used.
+    For descriptive names like "2006 - CCF - Dorset Dash", digits and ignored
+    tokens are stripped and individual words are tried as fallback candidates.
+    """
     try:
         relative = file_path.parent.relative_to(root)
     except ValueError:
@@ -297,19 +302,33 @@ def get_candidate_folders(file_path: Path, root: Path) -> list[str]:
 
     candidates: list[str] = []
     seen: set[str] = set()
+
     for part in relative.parts:
         clean = re.sub(r'[_\-]+', ' ', part).strip()
-        if len(clean) < 3:
+        if len(clean) < 3 or clean.isdigit() or clean.lower() in FOLDER_IGNORE:
             continue
-        if clean.isdigit():
-            continue
-        if clean.lower() in FOLDER_IGNORE:
-            continue
-        if not re.match(r'^[A-Za-zÀ-ÿ\'\.\-\s,]+$', clean):
-            continue
-        if clean not in seen:
-            seen.add(clean)
-            candidates.append(clean)
+
+        if re.match(r'^[A-Za-zÀ-ÿ\'\.\-\s,]+$', clean):
+            # Simple place name — use as-is
+            if clean not in seen:
+                seen.add(clean)
+                candidates.append(clean)
+        else:
+            # Mixed name (e.g. "2006 - CCF - Dorset Dash") — extract word-level candidates
+            words = clean.split()
+            place_words = [
+                w for w in words
+                if not w.isdigit()
+                and len(w) >= 3
+                and w.lower() not in FOLDER_IGNORE
+                and re.match(r'^[A-Za-zÀ-ÿ\'\.\-]+$', w)
+            ]
+            # Try longest-to-shortest: full phrase first, then each word alone
+            phrase = ' '.join(place_words)
+            for token in ([phrase] + place_words) if phrase else place_words:
+                if token and token not in seen:
+                    seen.add(token)
+                    candidates.append(token)
 
     return candidates[-3:]  # deepest folders last; caller uses reversed() for most-specific-first
 

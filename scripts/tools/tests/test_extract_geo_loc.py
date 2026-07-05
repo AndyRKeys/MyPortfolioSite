@@ -378,6 +378,14 @@ def test_get_candidate_folders_returns_max_3(tmp_path):
     assert len(result) <= 3
 
 
+def test_get_candidate_folders_extracts_place_from_descriptive_name(tmp_path):
+    """Folder names like '2006 - CCF - Dorset Dash' yield 'Dorset' as a candidate."""
+    root = tmp_path / 'photos'
+    file = root / '2006 - CCF - Dorset Dash' / 'img.jpg'
+    result = geo.get_candidate_folders(file, root)
+    assert any('Dorset' in c for c in result), f'Expected Dorset in candidates, got {result}'
+
+
 def test_get_candidate_folders_file_at_root(tmp_path):
     root = tmp_path / 'photos'
     file = root / 'img.jpg'
