@@ -229,6 +229,14 @@ def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
         if f.is_file() and f.suffix.lower() in extensions
     ]
     if not files:
+        all_files = [f for f in root_folder.rglob('*') if f.is_file()]
+        if all_files:
+            found_exts = sorted({f.suffix.lower() for f in all_files})
+            print(f'[extract] Found {len(all_files)} files but none with supported extensions.')
+            print(f'[extract] Extensions found: {", ".join(found_exts) or "(none)"}')
+            print(f'[extract] Supported: {", ".join(sorted(extensions))}')
+        else:
+            print(f'[extract] No files found at all under: {root_folder}')
         raise FileNotFoundError(f'No supported files found under: {root_folder}')
 
     ffprobe_ok = check_ffprobe()
