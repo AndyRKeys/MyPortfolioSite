@@ -469,6 +469,42 @@ def test_run_group_folder_inference(tmp_path):
     assert float(groups[0]['lookup_latitude']) == pytest.approx(35.6762, abs=0.01)
 
 
+def test_run_group_writes_file_group_map(tmp_path):
+    """Group stage writes 02-file-group-map.csv with file→merged_group_key mapping."""
+    root = tmp_path / 'root'
+    root.mkdir()
+    extracted = tmp_path / '01-extracted.csv'
+    rows = [
+        {'file_path': '/p/a.jpg', 'folder_path': '/p', 'file_name': 'a.jpg',
+         'post_date': '2024-06-15', 'latitude': 48.8566, 'longitude': 2.3522,
+         'gps_found': 'True'},
+        {'file_path': '/p/b.jpg', 'folder_path': '/p', 'file_name': 'b.jpg',
+         'post_date': '2024-06-16', 'latitude': 48.8570, 'longitude': 2.3524,
+         'gps_found': 'True'},
+    ]
+    with open(extracted, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader(); writer.writerows(rows)
+
+    geo.run_group(
+        {'lookup_precision': 3, 'coordinate_precision': 4,
+         'city_precision': 0, 'skip_folder_inference': True, 'throttle_ms': 0},
+        tmp_path,
+    )
+
+    map_path = tmp_path / '02-file-group-map.csv'
+    assert map_path.exists()
+    with open(map_path, newline='', encoding='utf-8-sig') as f:
+        rows_out = list(csv.DictReader(f))
+    assert len(rows_out) == 2
+    fps = {r['file_path'] for r in rows_out}
+    assert '/p/a.jpg' in fps and '/p/b.jpg' in fps
+    # Both files share the same GPS bucket → same group_key
+    group_keys = {r['group_key'] for r in rows_out}
+    assert len(group_keys) == 1
+    assert all(r['gps_found'] == 'True' for r in rows_out)
+
+
 # ── Resolve stage tests
 
 def test_load_cache_empty_when_file_missing(tmp_path):

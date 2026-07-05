@@ -403,6 +403,8 @@ def run_group(config: dict, working_folder: Path,
         gps_buckets.setdefault(key, []).append(row)
 
     groups: list[dict] = []
+    file_to_fine: dict[str, str] = {}
+    file_gps_found: dict[str, str] = {}
 
     for key, bucket in gps_buckets.items():
         lats = [float(r['latitude'])  for r in bucket]
@@ -421,6 +423,9 @@ def run_group(config: dict, working_folder: Path,
             'post_date':        earliest,
             'status':           'pending',
         })
+        for r in bucket:
+            file_to_fine[r['file_path']] = key
+            file_gps_found[r['file_path']] = 'True'
 
     # Folder inference for non-GPS files
     if not config.get('skip_folder_inference') and root_folder:
@@ -454,13 +459,18 @@ def run_group(config: dict, working_folder: Path,
                     'post_date':        row.get('post_date', ''),
                     'status':           'pending',
                 })
+                file_to_fine[row['file_path']] = key
+                file_gps_found[row['file_path']] = 'False'
 
     # City-level dedup: merge groups within the same ~11km cell to cut geocode calls
     # city_precision=0 disables this pass (useful in tests or when fine resolution is wanted)
     city_p = config.get('city_precision', 1)
+    fine_to_merged: dict[str, str] = {}
     if city_p < 1:
         print(f'[group] {len(groups)} fine-grained groups (city-level dedup disabled)')
         merged = groups
+        for g in groups:
+            fine_to_merged[g['group_key']] = g['group_key']
     else:
         city_buckets: dict[str, list[dict]] = {}
         for g in groups:
@@ -474,8 +484,9 @@ def run_group(config: dict, working_folder: Path,
             earliest = min((g['post_date'] for g in cluster if g.get('post_date')), default='')
             total    = sum(int(g['item_count']) for g in cluster)
             source   = 'GPS' if any(g['source'] == 'GPS' for g in cluster) else 'Folder'
+            merged_key = cluster[0]['group_key']
             merged.append({
-                'group_key':        cluster[0]['group_key'],
+                'group_key':        merged_key,
                 'item_count':       total,
                 'source':           source,
                 'lookup_latitude':  round(avg_lat, city_p),
@@ -485,6 +496,8 @@ def run_group(config: dict, working_folder: Path,
                 'post_date':        earliest,
                 'status':           'pending',
             })
+            for g in cluster:
+                fine_to_merged[g['group_key']] = merged_key
         print(f'[group] {len(groups)} fine-grained groups → {len(merged)} city-level groups (saved {len(groups) - len(merged)} geocode calls)')
 
     out = working_folder / '02-lookup-groups.csv'
@@ -495,6 +508,18 @@ def run_group(config: dict, working_folder: Path,
         writer.writeheader()
         writer.writerows(merged)
     print(f'[group] → {out}')
+
+    map_out = working_folder / '02-file-group-map.csv'
+    with open(map_out, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=['file_path', 'group_key', 'gps_found'])
+        writer.writeheader()
+        for fp, fine_key in file_to_fine.items():
+            writer.writerow({
+                'file_path': fp,
+                'group_key': fine_to_merged.get(fine_key, fine_key),
+                'gps_found': file_gps_found[fp],
+            })
+    print(f'[group] file-group map → {map_out}')
 
 
 # ── Resolve stage
