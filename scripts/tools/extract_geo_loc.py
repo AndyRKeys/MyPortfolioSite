@@ -93,6 +93,28 @@ def parse_gps_exif(path: Path) -> tuple[float, float] | None:
         return None
 
 
+_EXIF_DATE_FORMATS = (
+    '%Y:%m:%d %H:%M:%S',  # standard EXIF:  2024:06:15 10:30:00
+    '%Y-%m-%d %H:%M:%S',  # ISO variant:    2024-06-15 10:30:00
+    '%d/%m/%Y %H:%M:%S',  # some older cams: 22/07/2011 10:30:00
+    '%m/%d/%Y %H:%M:%S',  # US variant:     07/22/2011 10:30:00
+    '%Y:%m:%d',
+    '%Y-%m-%d',
+    '%d/%m/%Y',
+    '%m/%d/%Y',
+)
+
+def _parse_exif_date_str(raw: str) -> str | None:
+    """Try multiple EXIF date formats; return YYYY-MM-DD string or None."""
+    raw = raw.strip()
+    for fmt in _EXIF_DATE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return None
+
+
 def parse_date_exif(path: Path) -> str:
     """Extract date taken from EXIF; falls back to file mtime. Always returns YYYY-MM-DD."""
     try:
@@ -101,8 +123,9 @@ def parse_date_exif(path: Path) -> str:
                                          stop_tag='EXIF DateTimeOriginal')
         tag = tags.get('EXIF DateTimeOriginal') or tags.get('Image DateTime')
         if tag:
-            raw = str(tag)  # "2024:06:15 10:30:00"
-            return raw[:10].replace(':', '-')
+            parsed = _parse_exif_date_str(str(tag))
+            if parsed:
+                return parsed
         return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
     except Exception:
         return '1970-01-01'

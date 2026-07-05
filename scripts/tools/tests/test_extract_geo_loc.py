@@ -168,6 +168,22 @@ def test_parse_date_exif_from_tag(tmp_path):
         assert geo.parse_date_exif(img) == '2024-06-15'
 
 
+def test_parse_date_exif_nonstandard_formats(tmp_path):
+    """Non-standard EXIF date formats (DD/MM/YYYY etc.) are normalised to YYYY-MM-DD."""
+    img = tmp_path / 'photo.jpg'
+    img.write_bytes(b'')
+    cases = [
+        ('22/07/2011 10:30:00', '2011-07-22'),
+        ('07/22/2011 10:30:00', '2011-07-22'),
+        ('2011-07-22 10:30:00', '2011-07-22'),
+        ('22/07/2011',          '2011-07-22'),
+    ]
+    for raw, expected in cases:
+        tag = MagicMock(); tag.__str__ = lambda _, r=raw: r
+        with patch('exifread.process_file', return_value={'EXIF DateTimeOriginal': tag}):
+            assert geo.parse_date_exif(img) == expected, f'failed for raw={raw!r}'
+
+
 def test_parse_date_exif_fallback_to_mtime(tmp_path):
     """Falls back to file mtime when no EXIF date."""
     img = tmp_path / 'photo.jpg'
