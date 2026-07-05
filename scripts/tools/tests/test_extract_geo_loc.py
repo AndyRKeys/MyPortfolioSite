@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import extract_geo_loc as geo
 
@@ -320,3 +322,117 @@ def test_run_extract_writes_csv(tmp_path):
     assert len(rows) == 2
     gps_rows = [r for r in rows if r['gps_found'] == 'True']
     assert len(gps_rows) == 1
+
+
+# ── Group stage tests
+
+def test_get_candidate_folders_basic(tmp_path):
+    root = tmp_path / 'photos'
+    file = root / 'Paris' / 'Day1' / 'img.jpg'
+    result = geo.get_candidate_folders(file, root)
+    assert 'Paris' in result
+    assert 'Day1' not in result  # too short? no — "Day1" has digits... check ignore
+
+
+def test_get_candidate_folders_ignores_generic(tmp_path):
+    root = tmp_path / 'photos'
+    file = root / 'holidays' / 'Barcelona' / 'img.jpg'
+    result = geo.get_candidate_folders(file, root)
+    assert 'holidays' not in result
+    assert 'Barcelona' in result
+
+
+def test_get_candidate_folders_ignores_year(tmp_path):
+    root = tmp_path / 'photos'
+    file = root / '2024' / 'Tokyo' / 'img.jpg'
+    result = geo.get_candidate_folders(file, root)
+    assert '2024' not in result
+    assert 'Tokyo' in result
+
+
+def test_get_candidate_folders_returns_max_3(tmp_path):
+    root = tmp_path / 'photos'
+    file = root / 'Europe' / 'France' / 'Paris' / 'Montmartre' / 'img.jpg'
+    result = geo.get_candidate_folders(file, root)
+    assert len(result) <= 3
+
+
+def test_get_candidate_folders_file_at_root(tmp_path):
+    root = tmp_path / 'photos'
+    file = root / 'img.jpg'
+    assert geo.get_candidate_folders(file, root) == []
+
+
+def test_extract_location_label_prefers_city():
+    addr = {'city': 'Paris', 'town': 'Elsewhere', 'country': 'France'}
+    assert geo.extract_location_label(addr, 'France') == 'Paris, France'
+
+
+def test_extract_location_label_falls_back_to_town():
+    addr = {'town': 'Totnes', 'state': 'Devon'}
+    assert geo.extract_location_label(addr, 'United Kingdom') == 'Totnes, United Kingdom'
+
+
+def test_extract_location_label_no_match_returns_country():
+    assert geo.extract_location_label({}, 'France') == 'France'
+
+
+def test_extract_location_label_all_empty_returns_none():
+    assert geo.extract_location_label({}, None) is None
+
+
+def test_run_group_gps_bucketing(tmp_path):
+    """GPS photos in same bucket → one group."""
+    extracted = tmp_path / '01-extracted.csv'
+    rows = [
+        {'file_path': '/p/a.jpg', 'folder_path': '/p', 'file_name': 'a.jpg',
+         'post_date': '2024-06-15', 'latitude': 48.8566, 'longitude': 2.3522,
+         'gps_found': 'True'},
+        {'file_path': '/p/b.jpg', 'folder_path': '/p', 'file_name': 'b.jpg',
+         'post_date': '2024-06-16', 'latitude': 48.8570, 'longitude': 2.3524,
+         'gps_found': 'True'},
+    ]
+    with open(extracted, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader(); writer.writerows(rows)
+
+    geo.run_group(
+        {'lookup_precision': 3, 'coordinate_precision': 4,
+         'skip_folder_inference': True, 'throttle_ms': 0},
+        tmp_path,
+    )
+
+    groups = list(csv.DictReader(open(tmp_path / '02-lookup-groups.csv')))
+    assert len(groups) == 1
+    assert groups[0]['source'] == 'GPS'
+    assert groups[0]['status'] == 'pending'
+
+
+def test_run_group_folder_inference(tmp_path):
+    """Non-GPS file with resolvable folder name → one pending group with coords."""
+    root = tmp_path / 'photos'
+    root.mkdir()
+    extracted = tmp_path / '01-extracted.csv'
+    rows = [{'file_path': str(root / 'Tokyo' / 'img.jpg'),
+             'folder_path': str(root / 'Tokyo'),
+             'file_name': 'img.jpg', 'post_date': '2024-03-01',
+             'latitude': '', 'longitude': '', 'gps_found': 'False'}]
+    with open(extracted, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader(); writer.writerows(rows)
+
+    geocode_result = {'lat': 35.6762, 'lng': 139.6503}
+    with patch.object(geo, 'forward_geocode', return_value=geocode_result):
+        geo.run_group(
+            {'lookup_precision': 3, 'coordinate_precision': 4,
+             'skip_folder_inference': False, 'throttle_ms': 0,
+             'geoapify_api_key': '', 'user_agent': 'test/1.0'},
+            tmp_path,
+            root_folder=root,
+        )
+
+    groups = list(csv.DictReader(open(tmp_path / '02-lookup-groups.csv')))
+    assert len(groups) == 1
+    assert groups[0]['source'] == 'Folder'
+    assert groups[0]['status'] == 'pending'
+    assert float(groups[0]['lookup_latitude']) == pytest.approx(35.6762, abs=0.01)

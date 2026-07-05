@@ -256,6 +256,165 @@ def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
     print(f'[extract] Done → {out}')
 
 
+# ── Group stage
+
+def get_candidate_folders(file_path: Path, root: Path) -> list[str]:
+    """Return up to 3 usable place-name candidates from the folder path."""
+    try:
+        relative = file_path.parent.relative_to(root)
+    except ValueError:
+        return []
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for part in relative.parts:
+        clean = re.sub(r'[_\-]+', ' ', part).strip()
+        if len(clean) < 3:
+            continue
+        if clean.isdigit():
+            continue
+        if clean.lower() in FOLDER_IGNORE:
+            continue
+        if not re.match(r'^[A-Za-zÀ-ÿ\'\.\-\s,]+$', clean):
+            continue
+        if clean not in seen:
+            seen.add(clean)
+            candidates.append(clean)
+
+    return candidates[-3:]  # most specific (deepest) folders first
+
+
+def extract_location_label(addr: dict, country: str | None) -> str | None:
+    """Pick the best human-readable place name from a geocoder address dict."""
+    for field in ADDRESS_FIELDS:
+        value = addr.get(field, '').strip()
+        if value:
+            return f'{value}, {country}' if country else value
+    return country or None
+
+
+def _http_get_json(url: str, user_agent: str) -> object:
+    """Minimal synchronous HTTP GET → parsed JSON. Uses stdlib only."""
+    req = urllib.request.Request(
+        url, headers={'User-Agent': user_agent, 'Accept': 'application/json'})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def forward_geocode(query: str, config: dict) -> dict | None:
+    """Forward geocode a place name → {'lat': float, 'lng': float}.
+    Uses Geoapify if api key present, else Nominatim. Returns None on failure."""
+    try:
+        encoded = urllib.parse.quote(query)
+        if config.get('geoapify_api_key'):
+            url = (f'https://api.geoapify.com/v1/geocode/search'
+                   f'?text={encoded}&format=json&limit=1'
+                   f'&apiKey={config["geoapify_api_key"]}')
+            data = _http_get_json(url, config['user_agent'])
+            items = data.get('results', [])
+            if not items:
+                return None
+            return {'lat': float(items[0]['lat']), 'lng': float(items[0]['lon'])}
+        else:
+            url = (f'https://nominatim.openstreetmap.org/search'
+                   f'?q={encoded}&format=json&limit=1&addressdetails=1')
+            data = _http_get_json(url, config['user_agent'])
+            if not data:
+                return None
+            return {'lat': float(data[0]['lat']), 'lng': float(data[0]['lon'])}
+    except Exception as exc:
+        print(f'[group] WARNING: forward geocode failed for "{query}" — {exc}')
+        return None
+
+
+def run_group(config: dict, working_folder: Path,
+              root_folder: Path | None = None) -> None:
+    """Stage 2: bucket GPS coords + resolve folder names → 02-lookup-groups.csv."""
+    extracted_csv = working_folder / '01-extracted.csv'
+    if not extracted_csv.exists():
+        raise FileNotFoundError(f'Run extract stage first: {extracted_csv}')
+
+    rows = list(csv.DictReader(open(extracted_csv, encoding='utf-8')))
+    lp = config['lookup_precision']
+    cp = config['coordinate_precision']
+    throttle = config['throttle_ms'] / 1000
+
+    # GPS bucketing
+    gps_buckets: dict[str, list[dict]] = {}
+    for row in rows:
+        if row['gps_found'] != 'True':
+            continue
+        try:
+            lat = round(float(row['latitude']),  lp)
+            lng = round(float(row['longitude']), lp)
+        except (ValueError, TypeError):
+            continue
+        key = f'GPS|{lat}|{lng}'
+        gps_buckets.setdefault(key, []).append(row)
+
+    groups: list[dict] = []
+
+    for key, bucket in gps_buckets.items():
+        lats = [float(r['latitude'])  for r in bucket]
+        lngs = [float(r['longitude']) for r in bucket]
+        avg_lat = sum(lats) / len(lats)
+        avg_lng = sum(lngs) / len(lngs)
+        earliest = min(r['post_date'] for r in bucket if r.get('post_date'))
+        groups.append({
+            'group_key':        key,
+            'item_count':       len(bucket),
+            'source':           'GPS',
+            'lookup_latitude':  round(avg_lat, lp),
+            'lookup_longitude': round(avg_lng, lp),
+            'export_lat':       round(avg_lat, cp),
+            'export_lng':       round(avg_lng, cp),
+            'post_date':        earliest,
+            'status':           'pending',
+        })
+
+    # Folder inference for non-GPS files
+    if not config.get('skip_folder_inference') and root_folder:
+        folder_cache: dict[str, dict | None] = {}
+        for row in rows:
+            if row['gps_found'] == 'True':
+                continue
+            candidates = get_candidate_folders(
+                Path(row['file_path']), root_folder)
+            result = None
+            for candidate in reversed(candidates):  # most specific first
+                if candidate in folder_cache:
+                    result = folder_cache[candidate]
+                else:
+                    result = forward_geocode(candidate, config)
+                    folder_cache[candidate] = result
+                    if throttle > 0:
+                        time.sleep(throttle)
+                if result:
+                    break
+            if result:
+                key = f'FOLDER|{row["file_path"]}'
+                groups.append({
+                    'group_key':        key,
+                    'item_count':       1,
+                    'source':           'Folder',
+                    'lookup_latitude':  round(result['lat'], lp),
+                    'lookup_longitude': round(result['lng'], lp),
+                    'export_lat':       round(result['lat'], cp),
+                    'export_lng':       round(result['lng'], cp),
+                    'post_date':        row.get('post_date', ''),
+                    'status':           'pending',
+                })
+
+    out = working_folder / '02-lookup-groups.csv'
+    fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
+                  'lookup_longitude', 'export_lat', 'export_lng', 'post_date', 'status']
+    with open(out, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(groups)
+    print(f'[group] {len(groups)} location groups → {out}')
+
+
 # ── Config
 
 def load_config(args: argparse.Namespace,
