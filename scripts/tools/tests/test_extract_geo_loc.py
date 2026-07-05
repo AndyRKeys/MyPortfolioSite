@@ -514,3 +514,94 @@ async def test_resolve_group_marks_failed_after_retries():
         result = await geo.resolve_group(None, sem, group, config, {})
     assert result['status'] == 'failed'
     assert result['resolved_location'] is None
+
+
+# ── Export stage tests
+
+def _write_resolved(path, rows):
+    fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
+                  'lookup_longitude', 'export_lat', 'export_lng',
+                  'post_date', 'status', 'resolved_location']
+    with open(path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader(); writer.writerows(rows)
+
+
+def test_run_export_deduplicates_by_name(tmp_path):
+    """Two groups with same resolved name → one output row."""
+    _write_resolved(tmp_path / '03-resolved.csv', [
+        {'group_key': 'GPS|48.856|2.352', 'item_count': 3, 'source': 'GPS',
+         'lookup_latitude': 48.856, 'lookup_longitude': 2.352,
+         'export_lat': 48.8566, 'export_lng': 2.3522,
+         'post_date': '2024-06-15', 'status': 'resolved',
+         'resolved_location': 'Paris, France'},
+        {'group_key': 'FOLDER|/p/Paris/img.jpg', 'item_count': 1, 'source': 'Folder',
+         'lookup_latitude': 48.860, 'lookup_longitude': 2.360,
+         'export_lat': 48.860, 'export_lng': 2.360,
+         'post_date': '2024-07-01', 'status': 'resolved',
+         'resolved_location': 'Paris, France'},
+    ])
+    geo.run_export({'title_prefix': 'Trip', 'notes': '', 'publish': False,
+                    'coordinate_precision': 4},
+                   tmp_path, tmp_path / '04-travel-import.csv')
+
+    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    assert len(rows) == 1
+    assert rows[0]['location'] == 'Paris, France'
+    assert rows[0]['post_date'] == '2024-06-15'  # earliest date wins
+
+
+def test_run_export_skips_failed_groups(tmp_path):
+    """Failed groups are excluded from output."""
+    _write_resolved(tmp_path / '03-resolved.csv', [
+        {'group_key': 'GPS|1|1', 'item_count': 1, 'source': 'GPS',
+         'lookup_latitude': 1, 'lookup_longitude': 1,
+         'export_lat': 1.0, 'export_lng': 1.0,
+         'post_date': '2024-01-01', 'status': 'failed',
+         'resolved_location': ''},
+        {'group_key': 'GPS|48.856|2.352', 'item_count': 2, 'source': 'GPS',
+         'lookup_latitude': 48.856, 'lookup_longitude': 2.352,
+         'export_lat': 48.8566, 'export_lng': 2.3522,
+         'post_date': '2024-06-15', 'status': 'resolved',
+         'resolved_location': 'Paris, France'},
+    ])
+    geo.run_export({'title_prefix': 'Trip', 'notes': '', 'publish': False,
+                    'coordinate_precision': 4},
+                   tmp_path, tmp_path / '04-travel-import.csv')
+
+    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    assert len(rows) == 1
+
+
+def test_run_export_output_columns(tmp_path):
+    """Output CSV has exactly the columns the bulk-import route expects."""
+    _write_resolved(tmp_path / '03-resolved.csv', [
+        {'group_key': 'GPS|48.856|2.352', 'item_count': 1, 'source': 'GPS',
+         'lookup_latitude': 48.856, 'lookup_longitude': 2.352,
+         'export_lat': 48.8566, 'export_lng': 2.3522,
+         'post_date': '2024-06-15', 'status': 'resolved',
+         'resolved_location': 'Paris, France'},
+    ])
+    geo.run_export({'title_prefix': 'My Trip', 'notes': 'Nice', 'publish': True,
+                    'coordinate_precision': 4},
+                   tmp_path, tmp_path / '04-travel-import.csv')
+
+    rows = list(csv.DictReader(open(tmp_path / '04-travel-import.csv')))
+    assert rows[0]['title']    == 'My Trip'
+    assert rows[0]['location'] == 'Paris, France'
+    assert rows[0]['notes']    == 'Nice'
+    assert rows[0]['publish']  == 'true'
+    assert set(rows[0].keys()) == {'title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish'}
+
+
+def test_run_export_no_resolved_raises(tmp_path):
+    _write_resolved(tmp_path / '03-resolved.csv', [
+        {'group_key': 'GPS|1|1', 'item_count': 1, 'source': 'GPS',
+         'lookup_latitude': 1, 'lookup_longitude': 1,
+         'export_lat': 1, 'export_lng': 1,
+         'post_date': '2024-01-01', 'status': 'failed', 'resolved_location': ''},
+    ])
+    with pytest.raises(ValueError, match='No resolved'):
+        geo.run_export({'title_prefix': 'Trip', 'notes': '', 'publish': False,
+                        'coordinate_precision': 4},
+                       tmp_path, tmp_path / '04-travel-import.csv')

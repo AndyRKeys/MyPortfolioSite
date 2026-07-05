@@ -606,10 +606,92 @@ def load_config(args: argparse.Namespace,
     return config
 
 
-# ── CLI (placeholder — filled in Task 7)
+# ── Export stage
+
+def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
+    """Stage 4: deduplicate resolved groups by name, write final import CSV."""
+    resolved_csv = working_folder / '03-resolved.csv'
+    if not resolved_csv.exists():
+        raise FileNotFoundError(f'Run resolve stage first: {resolved_csv}')
+
+    rows = [r for r in csv.DictReader(open(resolved_csv, encoding='utf-8'))
+            if r.get('status') == 'resolved' and r.get('resolved_location')]
+    if not rows:
+        raise ValueError('No resolved locations found — nothing to export.')
+
+    # Name dedup: group by resolved_location, keep earliest post_date
+    by_name: dict[str, dict] = {}
+    for row in rows:
+        name = row['resolved_location']
+        if name not in by_name or row['post_date'] < by_name[name]['post_date']:
+            by_name[name] = row
+
+    cp    = config.get('coordinate_precision', 4)
+    final = sorted(by_name.values(), key=lambda r: r['resolved_location'])
+
+    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(
+            f, fieldnames=['title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish'])
+        writer.writeheader()
+        for row in final:
+            writer.writerow({
+                'title':     config.get('title_prefix', 'Trip'),
+                'location':  row['resolved_location'],
+                'notes':     config.get('notes', ''),
+                'post_date': row['post_date'],
+                'lat':       round(float(row['export_lat']), cp),
+                'lng':       round(float(row['export_lng']), cp),
+                'publish':   str(config.get('publish', False)).lower(),
+            })
+    print(f'[export] {len(final)} unique locations → {output_csv}')
+
+
+# ── CLI
 
 def main() -> None:
-    pass
+    parser = argparse.ArgumentParser(
+        description='Extract GPS locations from photos/videos and produce a travel-import CSV.')
+    parser.add_argument('--stage', required=True,
+                        choices=['extract', 'group', 'resolve', 'export', 'all'])
+    parser.add_argument('--root-folder',    type=Path)
+    parser.add_argument('--working-folder', type=Path, required=True)
+    parser.add_argument('--output-csv',     type=Path)
+    parser.add_argument('--api-key')
+    parser.add_argument('--workers',        type=int)
+    parser.add_argument('--throttle-ms',    type=int, dest='throttle_ms')
+    parser.add_argument('--title-prefix',   dest='title_prefix')
+    parser.add_argument('--notes',          default='')
+    parser.add_argument('--publish',        action='store_true')
+    parser.add_argument('--skip-folder-inference', action='store_true',
+                        dest='skip_folder_inference')
+    args = parser.parse_args()
+
+    config     = load_config(args)
+    working    = args.working_folder
+    working.mkdir(parents=True, exist_ok=True)
+    output_csv = args.output_csv or working / '04-travel-import.csv'
+
+    def _extract():
+        if not args.root_folder:
+            parser.error('--root-folder is required for extract stage')
+        run_extract(config, args.root_folder, working)
+
+    def _group():
+        run_group(config, working, root_folder=args.root_folder)
+
+    if args.stage == 'extract':
+        _extract()
+    elif args.stage == 'group':
+        _group()
+    elif args.stage == 'resolve':
+        run_resolve(config, working)
+    elif args.stage == 'export':
+        run_export(config, working, output_csv)
+    elif args.stage == 'all':
+        _extract()
+        _group()
+        run_resolve(config, working)
+        run_export(config, working, output_csv)
 
 
 if __name__ == '__main__':
