@@ -244,22 +244,46 @@ remaining folder name to get approximate coordinates.
 
 ## Typical workflow for populating travel memories
 
-1. **Run the extractor** on your photo library (takes a few minutes for 13k files):
+1. **Run Extract and Group:**
    ```powershell
-   python extract_geo_loc.py --stage all `
+   python extract_geo_loc.py --stage extract `
      --root-folder "G:\Pictures" `
+     --working-folder "G:\Pictures\geo-work"
+
+   python extract_geo_loc.py --stage group `
+     --root-folder "G:\Pictures" `
+     --working-folder "G:\Pictures\geo-work"
+   ```
+
+2. **Run Resolve** (one geocode call per city-level group — progress is printed):
+   ```powershell
+   python extract_geo_loc.py --stage resolve `
+     --working-folder "G:\Pictures\geo-work"
+   ```
+
+3. **Review and edit `03-resolved.csv` in Excel** — this is the right stage to
+   curate. Each row is one city-level group with a geocoded `resolved_location`.
+   - Delete rows for places you haven't personally visited (e.g. photos someone
+     sent you, or screenshots)
+   - Fix any wrong city names by editing the `resolved_location` column directly
+   - Save and close Excel before running the next step
+   > **Tip:** the geocode cache (`photo-location-cache.json`) means re-running
+   > Resolve is free — already-resolved groups are skipped. If you want to
+   > re-geocode a row, set its `status` back to `pending` and re-run Resolve.
+
+4. **Run Export** to produce the final import CSV:
+   ```powershell
+   python extract_geo_loc.py --stage export `
      --working-folder "G:\Pictures\geo-work" `
      --title-prefix "Trip"
    ```
 
-2. **Review the output** — open `04-travel-import.csv` in Excel or VS Code and
-   check the `location` column. Edit any wrong city names before importing.
-
-3. **Import via admin panel** — Admin → Travel → Bulk import → choose the CSV.
+5. **Import via admin panel** — Admin → Travel → Bulk import → choose
+   `G:\Pictures\geo-work\04-travel-import.csv`.
    The route returns `{ imported, skipped, errors }`. Skipped rows have missing
    required fields; errors include the row number and reason.
 
-4. **Add photos** — travel memories are imported as drafts with no photos.
+6. **Add photos** — travel memories are imported as drafts with no photos.
    Use the admin Travel editor to attach photos and publish each entry.
 
 ---
