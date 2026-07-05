@@ -2,12 +2,15 @@ import sys
 import csv
 import json
 import argparse
+import asyncio
 import os
 import re
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
+
+pytest_plugins = ('pytest_asyncio',)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import extract_geo_loc as geo
@@ -436,3 +439,78 @@ def test_run_group_folder_inference(tmp_path):
     assert groups[0]['source'] == 'Folder'
     assert groups[0]['status'] == 'pending'
     assert float(groups[0]['lookup_latitude']) == pytest.approx(35.6762, abs=0.01)
+
+
+# ── Resolve stage tests
+
+def test_load_cache_empty_when_file_missing(tmp_path):
+    cache = geo.load_cache(tmp_path / 'photo-location-cache.json')
+    assert cache == {}
+
+
+def test_load_cache_reads_existing(tmp_path):
+    p = tmp_path / 'photo-location-cache.json'
+    p.write_text(json.dumps({'48.857,2.352|Nominatim|city': {'Location': 'Paris, France'}}))
+    cache = geo.load_cache(p)
+    assert cache['48.857,2.352|Nominatim|city']['Location'] == 'Paris, France'
+
+
+def test_save_cache_round_trips(tmp_path):
+    p = tmp_path / 'photo-location-cache.json'
+    data = {'key': {'Location': 'Tokyo, Japan'}}
+    geo.save_cache(data, p)
+    assert json.loads(p.read_text())['key']['Location'] == 'Tokyo, Japan'
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_nominatim_returns_label():
+    nominatim_resp = {
+        'address': {'city': 'Paris', 'country': 'France'},
+        'display_name': 'Paris, Île-de-France, France',
+    }
+    mock_resp = MagicMock()
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__  = AsyncMock(return_value=None)
+    mock_resp.json       = AsyncMock(return_value=nominatim_resp)
+    mock_resp.status     = 200
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+
+    config = {'user_agent': 'test/1.0'}
+    label = await geo.reverse_geocode_nominatim(mock_session, 48.857, 2.352, config)
+    assert label == 'Paris, France'
+
+
+@pytest.mark.asyncio
+async def test_resolve_group_uses_cache():
+    cache = {'48.857,2.352|Nominatim|city': {'Location': 'Paris, France'}}
+    group = {'group_key': 'GPS|48.857|2.352', 'item_count': 5,
+             'source': 'GPS', 'lookup_latitude': 48.857,
+             'lookup_longitude': 2.352, 'export_lat': 48.857,
+             'export_lng': 2.352, 'post_date': '2024-06-15', 'status': 'pending'}
+    config = {'geoapify_api_key': '', 'user_agent': 'test/1.0',
+              'throttle_ms': 0, 'lookup_precision': 3}
+    sem = asyncio.Semaphore(1)
+
+    result = await geo.resolve_group(None, sem, group, config, cache)
+    assert result['resolved_location'] == 'Paris, France'
+    assert result['status'] == 'resolved'
+
+
+@pytest.mark.asyncio
+async def test_resolve_group_marks_failed_after_retries():
+    group = {'group_key': 'GPS|48.857|2.352', 'item_count': 1,
+             'source': 'GPS', 'lookup_latitude': 48.857,
+             'lookup_longitude': 2.352, 'export_lat': 48.857,
+             'export_lng': 2.352, 'post_date': '2024-06-15', 'status': 'pending'}
+    config = {'geoapify_api_key': '', 'user_agent': 'test/1.0',
+              'throttle_ms': 0, 'lookup_precision': 3}
+    sem = asyncio.Semaphore(1)
+
+    with patch.object(geo, 'reverse_geocode_nominatim',
+                      side_effect=Exception('network error')), \
+         patch('asyncio.sleep', new=AsyncMock()):
+        result = await geo.resolve_group(None, sem, group, config, {})
+    assert result['status'] == 'failed'
+    assert result['resolved_location'] is None

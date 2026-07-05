@@ -415,6 +415,156 @@ def run_group(config: dict, working_folder: Path,
     print(f'[group] {len(groups)} location groups → {out}')
 
 
+# ── Resolve stage
+
+def load_cache(path: Path) -> dict:
+    """Load geocode cache from JSON. Returns empty dict if file absent or corrupt."""
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_cache(cache: dict, path: Path) -> None:
+    """Persist geocode cache to JSON, sorted for stable diffs."""
+    try:
+        path.write_text(
+            json.dumps(dict(sorted(cache.items())), indent=2, ensure_ascii=False),
+            encoding='utf-8')
+    except OSError as exc:
+        print(f'[resolve] WARNING: could not save cache — {exc}')
+
+
+async def reverse_geocode_nominatim(
+        session: aiohttp.ClientSession,
+        lat: float, lng: float,
+        config: dict) -> str | None:
+    """Reverse geocode via Nominatim. Returns city/town label or None."""
+    url = (f'https://nominatim.openstreetmap.org/reverse'
+           f'?lat={lat}&lon={lng}&format=json&zoom=10')
+    async with session.get(url, headers={'User-Agent': config['user_agent']}) as resp:
+        data = await resp.json(content_type=None)
+    addr    = data.get('address', {})
+    country = addr.get('country')
+    label   = extract_location_label(addr, country)
+    if not label:
+        display = data.get('display_name', '')
+        parts   = display.split(',')
+        label   = f'{parts[0].strip()}, {parts[-1].strip()}' if len(parts) >= 2 else display
+    return label or None
+
+
+async def reverse_geocode_geoapify(
+        session: aiohttp.ClientSession,
+        lat: float, lng: float,
+        config: dict) -> str | None:
+    """Reverse geocode via Geoapify. Returns city/town label or None."""
+    url = (f'https://api.geoapify.com/v1/geocode/reverse'
+           f'?lat={lat}&lon={lng}&type=city&format=json'
+           f'&apiKey={config["geoapify_api_key"]}')
+    async with session.get(url, headers={'User-Agent': config['user_agent']}) as resp:
+        data = await resp.json(content_type=None)
+    results = data.get('results', [])
+    if not results:
+        return None
+    item    = results[0]
+    country = item.get('country')
+    label   = extract_location_label(item, country)
+    if not label:
+        formatted = item.get('formatted', '')
+        parts     = formatted.split(',')
+        label     = f'{parts[0].strip()}, {parts[-1].strip()}' if len(parts) >= 2 else formatted
+    return label or None
+
+
+async def resolve_group(
+        session: aiohttp.ClientSession | None,
+        sem: asyncio.Semaphore,
+        group: dict,
+        config: dict,
+        cache: dict) -> dict:
+    """Reverse geocode one group; returns updated group dict."""
+    lp        = config.get('lookup_precision', 3)
+    provider  = 'Geoapify' if config.get('geoapify_api_key') else 'Nominatim'
+    lat       = round(float(group['lookup_latitude']),  lp)
+    lng       = round(float(group['lookup_longitude']), lp)
+    cache_key = f'{lat},{lng}|{provider}|city'
+
+    if cache_key in cache:
+        return {**group,
+                'resolved_location': cache[cache_key].get('Location'),
+                'status': 'resolved'}
+
+    async with sem:
+        throttle = config.get('throttle_ms', 1200) / 1000
+        if throttle > 0:
+            await asyncio.sleep(throttle)
+
+        for attempt in range(3):
+            try:
+                if config.get('geoapify_api_key'):
+                    label = await reverse_geocode_geoapify(session, lat, lng, config)
+                else:
+                    label = await reverse_geocode_nominatim(session, lat, lng, config)
+
+                if label:
+                    cache[cache_key] = {'Location': label, 'Lat': lat, 'Lng': lng}
+                    return {**group, 'resolved_location': label, 'status': 'resolved'}
+                return {**group, 'resolved_location': None, 'status': 'failed'}
+
+            except Exception as exc:
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    print(f'[resolve] FAILED after 3 attempts: {group["group_key"]} — {exc}')
+                    return {**group, 'resolved_location': None, 'status': 'failed'}
+
+    return {**group, 'resolved_location': None, 'status': 'failed'}
+
+
+async def resolve_all(groups: list[dict], config: dict, cache: dict) -> list[dict]:
+    """Reverse geocode all pending groups concurrently under a rate-limit semaphore."""
+    sem_count = 5 if config.get('geoapify_api_key') else 1
+    sem       = asyncio.Semaphore(sem_count)
+    provider  = 'Geoapify' if config.get('geoapify_api_key') else 'Nominatim'
+    print(f'[resolve] {len(groups)} groups via {provider} '
+          f'(semaphore={sem_count}, throttle={config.get("throttle_ms")}ms)')
+
+    connector = aiohttp.TCPConnector(limit=sem_count)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks   = [resolve_group(session, sem, g, config, cache) for g in groups]
+        results = await asyncio.gather(*tasks)
+    return list(results)
+
+
+def run_resolve(config: dict, working_folder: Path) -> None:
+    """Stage 3: async reverse geocode all groups → 03-resolved.csv."""
+    groups_csv = working_folder / '02-lookup-groups.csv'
+    if not groups_csv.exists():
+        raise FileNotFoundError(f'Run group stage first: {groups_csv}')
+
+    cache_path = working_folder / 'photo-location-cache.json'
+    cache      = load_cache(cache_path)
+    groups     = list(csv.DictReader(open(groups_csv, encoding='utf-8')))
+    pending    = [g for g in groups if g.get('status') != 'resolved']
+
+    resolved = asyncio.run(resolve_all(pending, config, cache))
+    save_cache(cache, cache_path)
+
+    out       = working_folder / '03-resolved.csv'
+    fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
+                  'lookup_longitude', 'export_lat', 'export_lng',
+                  'post_date', 'status', 'resolved_location']
+    with open(out, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(resolved)
+    resolved_count = sum(1 for r in resolved if r.get('status') == 'resolved')
+    print(f'[resolve] {resolved_count}/{len(resolved)} resolved → {out}')
+
+
 # ── Config
 
 def load_config(args: argparse.Namespace,
