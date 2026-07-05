@@ -111,14 +111,19 @@ def parse_date_exif(path: Path) -> str:
 
 # ── Video GPS parsing via ffprobe
 
+_ffprobe_warned = False
+
 def check_ffprobe() -> bool:
     """Return True if ffprobe is on PATH. Prints a one-time warning if absent."""
+    global _ffprobe_warned
     try:
         subprocess.run(['ffprobe', '-version'], capture_output=True, timeout=5)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        print('[extract] WARNING: ffprobe not found — video files will fall through '
-              'to folder inference. Install FFmpeg to enable video GPS extraction.')
+        if not _ffprobe_warned:
+            print('[extract] WARNING: ffprobe not found — video files will fall through '
+                  'to folder inference. Install FFmpeg to enable video GPS extraction.')
+            _ffprobe_warned = True
         return False
 
 
@@ -170,13 +175,16 @@ def parse_gps_video(path: Path) -> tuple[float, float] | None:
 
 
 def parse_date_video(path: Path) -> str:
-    """Extract recording date from video metadata; falls back to file mtime."""
-    data = _run_ffprobe(path)
-    if data:
-        creation_time = data.get('format', {}).get('tags', {}).get('creation_time', '')
-        if creation_time:
-            return creation_time[:10]  # "2024-06-15T10:30:00Z" → "2024-06-15"
-    return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
+    """Extract recording date from video metadata; falls back to file mtime. Always returns YYYY-MM-DD."""
+    try:
+        data = _run_ffprobe(path)
+        if data:
+            creation_time = data.get('format', {}).get('tags', {}).get('creation_time', '')
+            if creation_time:
+                return creation_time[:10]
+        return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
+    except Exception:
+        return '1970-01-01'
 
 
 # ── Config
