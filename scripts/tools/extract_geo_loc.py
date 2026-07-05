@@ -743,13 +743,58 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
     print(f'[export] {len(final)} unique locations → {output_csv}')
 
 
+# ── Geotag stages
+
+def run_geotag_preview(working_folder: Path) -> None:
+    """Stage: generate 05-geotag-preview.csv for review before GPS writing."""
+    map_csv     = working_folder / '02-file-group-map.csv'
+    resolved_csv = working_folder / '03-resolved.csv'
+    for p in (map_csv, resolved_csv):
+        if not p.exists():
+            stage = 'group' if 'map' in p.name else 'resolve'
+            raise FileNotFoundError(f'Run {stage} stage first: {p}')
+
+    with open(map_csv, encoding='utf-8-sig') as f:
+        file_map = {r['file_path']: r for r in csv.DictReader(f)}
+
+    with open(resolved_csv, encoding='utf-8-sig') as f:
+        resolved = {r['group_key']: r for r in csv.DictReader(f)}
+
+    preview_rows = []
+    skipped = 0
+    for fp, entry in file_map.items():
+        if entry['gps_found'] == 'True':
+            continue  # never overwrite existing GPS
+        group = resolved.get(entry['group_key'])
+        if not group or group.get('status') != 'resolved':
+            skipped += 1
+            continue
+        preview_rows.append({
+            'file_path':         fp,
+            'resolved_location': group['resolved_location'],
+            'lat':               group['export_lat'],
+            'lng':               group['export_lng'],
+        })
+
+    out = working_folder / '05-geotag-preview.csv'
+    with open(out, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=['file_path', 'resolved_location', 'lat', 'lng'])
+        writer.writeheader()
+        writer.writerows(preview_rows)
+
+    print(f'[geotag-preview] {len(preview_rows)} files would be tagged, {skipped} skipped (unresolved)')
+    print(f'[geotag-preview] Review {out}, remove any rows you do not want tagged,')
+    print(f'[geotag-preview] then run --stage geotag-write to apply.')
+
+
 # ── CLI
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description='Extract GPS locations from photos/videos and produce a travel-import CSV.')
     parser.add_argument('--stage', required=True,
-                        choices=['extract', 'group', 'resolve', 'export', 'all'])
+                        choices=['extract', 'group', 'resolve', 'export', 'all',
+                                 'geotag-preview', 'geotag-write'])
     parser.add_argument('--root-folder',    type=Path)
     parser.add_argument('--working-folder', type=Path, required=True)
     parser.add_argument('--output-csv',     type=Path)
@@ -784,6 +829,8 @@ def main() -> None:
         run_resolve(config, working)
     elif args.stage == 'export':
         run_export(config, working, output_csv)
+    elif args.stage == 'geotag-preview':
+        run_geotag_preview(working)
     elif args.stage == 'all':
         _extract()
         _group()

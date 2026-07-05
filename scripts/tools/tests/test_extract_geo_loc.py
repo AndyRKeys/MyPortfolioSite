@@ -636,3 +636,76 @@ def test_run_export_no_resolved_raises(tmp_path):
         geo.run_export({'title_prefix': 'Trip', 'notes': '', 'publish': False,
                         'coordinate_precision': 4},
                        tmp_path, tmp_path / '04-travel-import.csv')
+
+
+# ── Geotag preview stage tests
+
+def test_run_geotag_preview_basic(tmp_path):
+    """Preview CSV contains non-GPS files whose group resolved successfully."""
+    map_rows = [
+        {'file_path': '/p/a.jpg', 'group_key': 'GPS|48.857|2.352', 'gps_found': 'True'},
+        {'file_path': '/p/b.jpg', 'group_key': 'FOLDER|/p/b.jpg',  'gps_found': 'False'},
+    ]
+    resolved_rows = [
+        {'group_key': 'FOLDER|/p/b.jpg', 'status': 'resolved',
+         'resolved_location': 'Paris, France', 'export_lat': '48.8566', 'export_lng': '2.3522'},
+    ]
+    with open(tmp_path / '02-file-group-map.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','group_key','gps_found'])
+        w.writeheader(); w.writerows(map_rows)
+    with open(tmp_path / '03-resolved.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['group_key','status','resolved_location','export_lat','export_lng'])
+        w.writeheader(); w.writerows(resolved_rows)
+
+    geo.run_geotag_preview(tmp_path)
+
+    with open(tmp_path / '05-geotag-preview.csv', newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]['file_path'] == '/p/b.jpg'
+    assert rows[0]['resolved_location'] == 'Paris, France'
+    assert rows[0]['lat'] == '48.8566'
+    assert rows[0]['lng'] == '2.3522'
+
+
+def test_run_geotag_preview_skips_gps_files(tmp_path):
+    """Files with gps_found=True are excluded from preview."""
+    map_rows = [{'file_path': '/p/a.jpg', 'group_key': 'GPS|48.857|2.352', 'gps_found': 'True'}]
+    resolved_rows = [{'group_key': 'GPS|48.857|2.352', 'status': 'resolved',
+                      'resolved_location': 'Paris, France', 'export_lat': '48.8566', 'export_lng': '2.3522'}]
+    with open(tmp_path / '02-file-group-map.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','group_key','gps_found'])
+        w.writeheader(); w.writerows(map_rows)
+    with open(tmp_path / '03-resolved.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['group_key','status','resolved_location','export_lat','export_lng'])
+        w.writeheader(); w.writerows(resolved_rows)
+
+    geo.run_geotag_preview(tmp_path)
+
+    with open(tmp_path / '05-geotag-preview.csv', newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 0
+
+
+def test_run_geotag_preview_skips_unresolved(tmp_path):
+    """Files whose group has status=failed are counted as skipped."""
+    map_rows = [{'file_path': '/p/b.jpg', 'group_key': 'FOLDER|/p/b.jpg', 'gps_found': 'False'}]
+    resolved_rows = [{'group_key': 'FOLDER|/p/b.jpg', 'status': 'failed',
+                      'resolved_location': '', 'export_lat': '48.8566', 'export_lng': '2.3522'}]
+    with open(tmp_path / '02-file-group-map.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['file_path','group_key','gps_found'])
+        w.writeheader(); w.writerows(map_rows)
+    with open(tmp_path / '03-resolved.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=['group_key','status','resolved_location','export_lat','export_lng'])
+        w.writeheader(); w.writerows(resolved_rows)
+
+    geo.run_geotag_preview(tmp_path)
+
+    with open(tmp_path / '05-geotag-preview.csv', newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 0
+
+
+def test_run_geotag_preview_missing_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        geo.run_geotag_preview(tmp_path)
