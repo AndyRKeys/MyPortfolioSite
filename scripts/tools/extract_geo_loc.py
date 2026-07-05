@@ -256,7 +256,7 @@ def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
     out = working_folder / '01-extracted.csv'
     fieldnames = ['file_path', 'folder_path', 'file_name',
                   'post_date', 'latitude', 'longitude', 'gps_found']
-    with open(out, 'w', newline='', encoding='utf-8') as f:
+    with open(out, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
@@ -448,7 +448,7 @@ def run_group(config: dict, working_folder: Path,
     out = working_folder / '02-lookup-groups.csv'
     fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
                   'lookup_longitude', 'export_lat', 'export_lng', 'post_date', 'status']
-    with open(out, 'w', newline='', encoding='utf-8') as f:
+    with open(out, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(merged)
@@ -611,7 +611,7 @@ def run_resolve(config: dict, working_folder: Path) -> None:
     fieldnames = ['group_key', 'item_count', 'source', 'lookup_latitude',
                   'lookup_longitude', 'export_lat', 'export_lng',
                   'post_date', 'status', 'resolved_location']
-    with open(out, 'w', newline='', encoding='utf-8') as f:
+    with open(out, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(resolved)
@@ -684,7 +684,7 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
     cp    = config.get('coordinate_precision', 4)
     final = sorted(by_name.values(), key=lambda r: r['resolved_location'])
 
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+    with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(
             f, fieldnames=['title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish'])
         writer.writeheader()

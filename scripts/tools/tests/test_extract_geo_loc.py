@@ -549,7 +549,7 @@ def test_run_export_deduplicates_by_name(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+    with open(tmp_path / '04-travel-import.csv', newline='', encoding='utf-8-sig') as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
     assert rows[0]['location'] == 'Paris, France'
@@ -574,7 +574,7 @@ def test_run_export_skips_failed_groups(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+    with open(tmp_path / '04-travel-import.csv', newline='', encoding='utf-8-sig') as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
 
@@ -592,7 +592,7 @@ def test_run_export_output_columns(tmp_path):
                     'coordinate_precision': 4},
                    tmp_path, tmp_path / '04-travel-import.csv')
 
-    with open(tmp_path / '04-travel-import.csv', newline='') as f:
+    with open(tmp_path / '04-travel-import.csv', newline='', encoding='utf-8-sig') as f:
         rows = list(csv.DictReader(f))
     assert rows[0]['title']    == 'My Trip'
     assert rows[0]['location'] == 'Paris, France'
