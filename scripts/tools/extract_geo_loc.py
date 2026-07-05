@@ -187,6 +187,75 @@ def parse_date_video(path: Path) -> str:
         return '1970-01-01'
 
 
+# ── Extract stage
+
+def extract_file(path: Path, ffprobe_available: bool) -> dict:
+    """Extract GPS + date from one file. Pure function safe for ThreadPoolExecutor.
+    Never raises — returns gps_found=False on any error."""
+    row: dict = {
+        'file_path':  str(path),
+        'folder_path': str(path.parent),
+        'file_name':  path.name,
+        'post_date':  None,
+        'latitude':   None,
+        'longitude':  None,
+        'gps_found':  False,
+    }
+    try:
+        ext = path.suffix.lower()
+        if ext in IMAGE_EXTENSIONS:
+            gps = parse_gps_exif(path)
+            row['post_date'] = parse_date_exif(path)
+        elif ext in VIDEO_EXTENSIONS and ffprobe_available:
+            gps = parse_gps_video(path)
+            row['post_date'] = parse_date_video(path)
+        else:
+            gps = None
+            row['post_date'] = datetime.fromtimestamp(
+                path.stat().st_mtime).strftime('%Y-%m-%d')
+
+        if gps:
+            row['latitude']  = gps[0]
+            row['longitude'] = gps[1]
+            row['gps_found'] = True
+    except Exception as exc:
+        print(f'[extract] WARNING: skipping {path.name} — {exc}')
+    return row
+
+
+def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
+    """Stage 1: scan all images and videos in parallel, write 01-extracted.csv."""
+    extensions = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+    files = [
+        f for f in root_folder.rglob('*')
+        if f.is_file() and f.suffix.lower() in extensions
+    ]
+    if not files:
+        raise FileNotFoundError(f'No supported files found under: {root_folder}')
+
+    ffprobe_ok = check_ffprobe()
+    worker = functools.partial(extract_file, ffprobe_available=ffprobe_ok)
+    total = len(files)
+    results: list[dict] = []
+
+    print(f'[extract] Scanning {total} files with {config["workers"]} workers...')
+    with ThreadPoolExecutor(max_workers=config['workers']) as executor:
+        futures = {executor.submit(worker, f): f for f in files}
+        for i, future in enumerate(as_completed(futures), 1):
+            results.append(future.result())
+            if i % 500 == 0 or i == total:
+                print(f'[extract] {i}/{total}')
+
+    out = working_folder / '01-extracted.csv'
+    fieldnames = ['file_path', 'folder_path', 'file_name',
+                  'post_date', 'latitude', 'longitude', 'gps_found']
+    with open(out, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(results)
+    print(f'[extract] Done → {out}')
+
+
 # ── Config
 
 def load_config(args: argparse.Namespace,

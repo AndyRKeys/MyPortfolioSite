@@ -1,4 +1,5 @@
 import sys
+import csv
 import json
 import argparse
 import os
@@ -252,3 +253,70 @@ def test_check_ffprobe_available():
 def test_check_ffprobe_absent():
     with patch('subprocess.run', side_effect=FileNotFoundError):
         assert geo.check_ffprobe() is False
+
+
+# ── Extract stage tests
+
+def test_extract_file_image_with_gps(tmp_path):
+    img = tmp_path / 'photo.jpg'
+    img.write_bytes(b'')
+    with patch.object(geo, 'parse_gps_exif', return_value=(51.5, -0.12)), \
+         patch.object(geo, 'parse_date_exif', return_value='2024-06-15'):
+        row = geo.extract_file(img, ffprobe_available=False)
+    assert row['gps_found'] is True
+    assert row['latitude'] == 51.5
+    assert row['longitude'] == -0.12
+    assert row['post_date'] == '2024-06-15'
+    assert row['file_name'] == 'photo.jpg'
+
+
+def test_extract_file_image_no_gps(tmp_path):
+    img = tmp_path / 'photo.jpg'
+    img.write_bytes(b'')
+    with patch.object(geo, 'parse_gps_exif', return_value=None), \
+         patch.object(geo, 'parse_date_exif', return_value='2024-01-01'):
+        row = geo.extract_file(img, ffprobe_available=False)
+    assert row['gps_found'] is False
+    assert row['latitude'] is None
+
+
+def test_extract_file_video_with_gps(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    with patch.object(geo, 'parse_gps_video', return_value=(48.8, 2.35)), \
+         patch.object(geo, 'parse_date_video', return_value='2024-07-01'):
+        row = geo.extract_file(vid, ffprobe_available=True)
+    assert row['gps_found'] is True
+    assert row['latitude'] == 48.8
+
+
+def test_extract_file_video_ffprobe_unavailable(tmp_path):
+    """When ffprobe absent, video is processed as no-GPS without calling parse_gps_video."""
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    with patch.object(geo, 'parse_date_video', return_value='2024-01-01') as mock_date, \
+         patch.object(geo, 'parse_gps_video') as mock_gps:
+        row = geo.extract_file(vid, ffprobe_available=False)
+    mock_gps.assert_not_called()
+    assert row['gps_found'] is False
+
+
+def test_run_extract_writes_csv(tmp_path):
+    root = tmp_path / 'photos'
+    root.mkdir()
+    (root / 'photo.jpg').write_bytes(b'')
+    (root / 'clip.mp4').write_bytes(b'')
+
+    with patch.object(geo, 'check_ffprobe', return_value=False), \
+         patch.object(geo, 'parse_gps_exif', return_value=(51.5, -0.12)), \
+         patch.object(geo, 'parse_date_exif', return_value='2024-06-15'), \
+         patch.object(geo, 'parse_date_video', return_value='2024-06-15'):
+        geo.run_extract({'workers': 2, 'skip_folder_inference': True},
+                        root, tmp_path)
+
+    csv_path = tmp_path / '01-extracted.csv'
+    assert csv_path.exists()
+    rows = list(csv.DictReader(csv_path.open()))
+    assert len(rows) == 2
+    gps_rows = [r for r in rows if r['gps_found'] == 'True']
+    assert len(gps_rows) == 1
