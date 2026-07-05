@@ -570,11 +570,26 @@ async def resolve_all(groups: list[dict], config: dict, cache: dict) -> list[dic
     print(f'[resolve] {len(groups)} groups via {provider} '
           f'(semaphore={sem_count}, throttle={config.get("throttle_ms")}ms)')
 
+    total     = len(groups)
+    results   = []
+    done      = 0
+    failed    = 0
+    interval  = max(1, min(10, total // 20))  # print ~20 updates, min every 1
+
     connector = aiohttp.TCPConnector(limit=sem_count)
     async with aiohttp.ClientSession(connector=connector) as session:
-        tasks   = [resolve_group(session, sem, g, config, cache) for g in groups]
-        results = await asyncio.gather(*tasks)
-    return list(results)
+        tasks = [resolve_group(session, sem, g, config, cache) for g in groups]
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            results.append(result)
+            done += 1
+            if result.get('status') == 'failed':
+                failed += 1
+            if done % interval == 0 or done == total:
+                pct = int(done / total * 100)
+                print(f'[resolve] {done}/{total} ({pct}%) — {failed} failed so far', flush=True)
+
+    return results
 
 
 def run_resolve(config: dict, working_folder: Path) -> None:
