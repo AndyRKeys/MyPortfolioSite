@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to .geo-config.json and fill in values. geoapify_api_key is optional — omit to use Nominatim (free, no signup).",
+  "geoapify_api_key":       "",
+  "workers":                16,
+  "throttle_ms":          1200,
+  "coordinate_precision":    4,
+  "lookup_precision":        3,
+  "title_prefix":        "Trip",
+  "skip_folder_inference": false,
+  "user_agent": "PhotoGeoExportScript/1.0 (andykeys.me)"
+}

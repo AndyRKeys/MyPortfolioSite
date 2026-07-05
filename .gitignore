@@ -13,3 +13,9 @@ backend/coverage/
 scripts/config/certs/
 .env.bak-*
 /~/
+
+# Geo-extract tool — local config with API key
+scripts/tools/.geo-config.json
+scripts/tools/.venv/
+scripts/tools/__pycache__/
+scripts/tools/tests/__pycache__/
