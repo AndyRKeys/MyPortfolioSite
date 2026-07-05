@@ -3,7 +3,7 @@ import json
 import argparse
 import os
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import extract_geo_loc as geo
@@ -24,7 +24,8 @@ def _args(**kwargs):
 
 def test_load_config_defaults_when_no_file(tmp_path):
     """No config file → falls back to built-in defaults."""
-    config = geo.load_config(_args(), config_path=tmp_path / '.geo-config.json')
+    with patch.dict(os.environ, {'GEOAPIFY_API_KEY': ''}):
+        config = geo.load_config(_args(), config_path=tmp_path / '.geo-config.json')
     assert config['workers'] == 16
     assert config['throttle_ms'] == 1200
     assert config['coordinate_precision'] == 4
