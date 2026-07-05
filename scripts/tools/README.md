@@ -19,18 +19,18 @@ pip install -r requirements.txt
 
 # 2. Copy and edit the config file (optional — see Config section below)
 Copy-Item .geo-config.example.json .geo-config.json
-#    Verify it was created:
+#    Verify it was createG:
 Test-Path .geo-config.json        # should print: True
 #    Open in VS Code to edit (leave geoapify_api_key blank to use free Nominatim geocoder):
 code .geo-config.json
 
 # 3. Run all four stages (use backtick ` for line continuation in PowerShell)
 python extract_geo_loc.py --stage all `
-  --root-folder "D:\Pictures" `
-  --working-folder "D:\Pictures\geo-work"
+  --root-folder "G:\Pictures" `
+  --working-folder "G:\Pictures\geo-work"
 
 # 4. Upload the result via the admin panel
-#    Admin → Travel → Bulk import → choose D:\Pictures\geo-work\04-travel-import.csv
+#    Admin → Travel → Bulk import → choose G:\Pictures\geo-work\04-travel-import.csv
 ```
 
 ---
@@ -180,8 +180,8 @@ python extract_geo_loc.py --stage <stage> [options]
 
 ```powershell
 python extract_geo_loc.py --stage all `
-  --root-folder "D:\Pictures" `
-  --working-folder "D:\Pictures\geo-work"
+  --root-folder "G:\Pictures" `
+  --working-folder "G:\Pictures\geo-work"
 ```
 
 ### Stage by stage (useful for large libraries or re-running Resolve with a different provider)
@@ -189,21 +189,21 @@ python extract_geo_loc.py --stage all `
 ```powershell
 # Stage 1: scan all files (slow — reads ~13k files in parallel)
 python extract_geo_loc.py --stage extract `
-  --root-folder "D:\Pictures" `
-  --working-folder "D:\Pictures\geo-work"
+  --root-folder "G:\Pictures" `
+  --working-folder "G:\Pictures\geo-work"
 
 # Stage 2: group GPS coords + infer locations from folder names
 python extract_geo_loc.py --stage group `
-  --root-folder "D:\Pictures" `
-  --working-folder "D:\Pictures\geo-work"
+  --root-folder "G:\Pictures" `
+  --working-folder "G:\Pictures\geo-work"
 
 # Stage 3: reverse geocode all groups (slow — one API call per group)
 python extract_geo_loc.py --stage resolve `
-  --working-folder "D:\Pictures\geo-work"
+  --working-folder "G:\Pictures\geo-work"
 
 # Stage 4: deduplicate and write final CSV
 python extract_geo_loc.py --stage export `
-  --working-folder "D:\Pictures\geo-work" `
+  --working-folder "G:\Pictures\geo-work" `
   --title-prefix "My Trip" `
   --publish
 ```
@@ -247,8 +247,8 @@ remaining folder name to get approximate coordinates.
 1. **Run the extractor** on your photo library (takes a few minutes for 13k files):
    ```powershell
    python extract_geo_loc.py --stage all `
-     --root-folder "D:\Pictures" `
-     --working-folder "D:\Pictures\geo-work" `
+     --root-folder "G:\Pictures" `
+     --working-folder "G:\Pictures\geo-work" `
      --title-prefix "Trip"
    ```
 
@@ -272,9 +272,9 @@ folder-name inference in the meantime.
 
 **Many `status: failed` rows in `03-resolved.csv`**
 Network issue or rate limit hit. Re-run just the Resolve stage — the cache means
-already-resolved groups are skipped:
+already-resolved groups are skippeG:
 ```powershell
-python extract_geo_loc.py --stage resolve --working-folder "D:\Pictures\geo-work"
+python extract_geo_loc.py --stage resolve --working-folder "G:\Pictures\geo-work"
 ```
 
 **Folder inference not finding a city**
