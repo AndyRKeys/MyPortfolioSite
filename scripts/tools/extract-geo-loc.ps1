@@ -24,11 +24,12 @@ param(
     [ValidateRange(2, 5)]
     [int]$LookupPrecision = 3,
 
-    [int]$ThrottleMs = 250,
+    # 1200 ms = safe for Nominatim's 1-req/sec policy; lower to 250 when using Geoapify
+    [int]$ThrottleMs = 1200,
 
-    [switch]$EnableFolderInference,
+    [switch]$SkipFolderInference,
 
-    [string]$UserAgent = "PhotoGeoExportScript/4.0"
+    [string]$UserAgent = "PhotoGeoExportScript/1.0 (andykeys.me)"
 )
 
 Set-StrictMode -Version Latest
@@ -316,6 +317,84 @@ function Invoke-GeoapifyReverse {
     }
 }
 
+function Invoke-NominatimReverse {
+    param(
+        [double]$Latitude,
+        [double]$Longitude
+    )
+
+    # zoom=10 returns city/town-level granularity without street-level noise
+    $url = "https://nominatim.openstreetmap.org/reverse?lat=$Latitude&lon=$Longitude&format=json&zoom=10"
+
+    $response = Invoke-RestMethod `
+        -Uri $url `
+        -Method Get `
+        -Headers @{
+            "User-Agent" = $UserAgent
+            "Accept"     = "application/json"
+        } `
+        -TimeoutSec 30
+
+    if (-not $response) { return $null }
+
+    $addr    = $response.address
+    $country = Get-OptionalValue -Object $addr -Name 'country'
+    $label   = Get-LocationLabel -Object $addr -Country $country
+
+    if (-not $label) {
+        $display = Get-OptionalValue -Object $response -Name 'display_name'
+        if ($display) {
+            $parts = $display -split ','
+            $label = if ($parts.Count -ge 2) {
+                "$($parts[0].Trim()), $($parts[-1].Trim())"
+            } else {
+                $display.Trim()
+            }
+        }
+    }
+
+    if (-not $label) { return $null }
+
+    [pscustomobject]@{
+        Location = $label
+        Lat      = [math]::Round($Latitude, $CoordinatePrecision)
+        Lng      = [math]::Round($Longitude, $CoordinatePrecision)
+        Source   = "GPS"
+    }
+}
+
+function Invoke-NominatimSearch {
+    param([string]$Query)
+
+    $encoded  = [System.Uri]::EscapeDataString($Query)
+    $url      = "https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=1&addressdetails=1"
+
+    $response = Invoke-RestMethod `
+        -Uri $url `
+        -Method Get `
+        -Headers @{
+            "User-Agent" = $UserAgent
+            "Accept"     = "application/json"
+        } `
+        -TimeoutSec 30
+
+    $item = if ($response -and $response.Count -gt 0) { $response | Select-Object -First 1 } else { $null }
+    if (-not $item) { return $null }
+
+    $addr    = $item.address
+    $country = Get-OptionalValue -Object $addr -Name 'country'
+    $label   = Get-LocationLabel -Object $addr -Country $country
+
+    if (-not $label) { return $null }
+
+    [pscustomobject]@{
+        Location = $label
+        Lat      = [math]::Round([double]$item.lat, $CoordinatePrecision)
+        Lng      = [math]::Round([double]$item.lon, $CoordinatePrecision)
+        Source   = "Folder"
+    }
+}
+
 function Invoke-ReverseGeocode {
     param(
         [double]$Latitude,
@@ -324,7 +403,8 @@ function Invoke-ReverseGeocode {
 
     $roundedLat = [math]::Round($Latitude, $LookupPrecision)
     $roundedLng = [math]::Round($Longitude, $LookupPrecision)
-    $cacheKey = "{0},{1}|Geoapify|city" -f $roundedLat, $roundedLng
+    $provider   = if ($ApiKey) { 'Geoapify' } else { 'Nominatim' }
+    $cacheKey   = "{0},{1}|{2}|city" -f $roundedLat, $roundedLng, $provider
 
     if ($script:GeoCache.ContainsKey($cacheKey)) {
         return $script:GeoCache[$cacheKey]
@@ -332,7 +412,11 @@ function Invoke-ReverseGeocode {
 
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
-            $result = Invoke-GeoapifyReverse -Latitude $roundedLat -Longitude $roundedLng
+            $result = if ($ApiKey) {
+                Invoke-GeoapifyReverse -Latitude $roundedLat -Longitude $roundedLng
+            } else {
+                Invoke-NominatimReverse -Latitude $roundedLat -Longitude $roundedLng
+            }
             if ($result) {
                 $script:GeoCache[$cacheKey] = $result
                 return $result
@@ -358,39 +442,34 @@ function Search-PlaceByName {
     }
 
     try {
-        $encoded = [System.Uri]::EscapeDataString($Query)
-        $url = "https://api.geoapify.com/v1/geocode/search?text=$encoded&format=json&limit=1&apiKey=$ApiKey"
+        $result = if ($ApiKey) {
+            $encoded = [System.Uri]::EscapeDataString($Query)
+            $url     = "https://api.geoapify.com/v1/geocode/search?text=$encoded&format=json&limit=1&apiKey=$ApiKey"
 
-        $response = Invoke-RestMethod `
-            -Uri $url `
-            -Method Get `
-            -Headers @{
-                "User-Agent" = $UserAgent
-                "Accept"     = "application/json"
-            } `
-            -TimeoutSec 30
+            $response = Invoke-RestMethod `
+                -Uri $url `
+                -Method Get `
+                -Headers @{ "User-Agent" = $UserAgent; "Accept" = "application/json" } `
+                -TimeoutSec 30
 
-        $item = $null
-        if ($response.results -and $response.results.Count -gt 0) {
-            $item = $response.results | Select-Object -First 1
-        }
+            $item = if ($response.results -and $response.results.Count -gt 0) {
+                $response.results | Select-Object -First 1
+            } else { $null }
 
-        if (-not $item) {
-            return $null
-        }
-
-        $country = Get-OptionalValue -Object $item -Name 'country'
-        $label = Get-LocationLabel -Object $item -Country $country
-
-        if (-not $label) {
-            return $null
-        }
-
-        $result = [pscustomobject]@{
-            Location = $label
-            Lat      = [math]::Round([double](Get-OptionalValue -Object $item -Name 'lat'), $CoordinatePrecision)
-            Lng      = [math]::Round([double](Get-OptionalValue -Object $item -Name 'lon'), $CoordinatePrecision)
-            Source   = "Folder"
+            if (-not $item) { $null } else {
+                $country = Get-OptionalValue -Object $item -Name 'country'
+                $label   = Get-LocationLabel -Object $item -Country $country
+                if (-not $label) { $null } else {
+                    [pscustomobject]@{
+                        Location = $label
+                        Lat      = [math]::Round([double](Get-OptionalValue -Object $item -Name 'lat'), $CoordinatePrecision)
+                        Lng      = [math]::Round([double](Get-OptionalValue -Object $item -Name 'lon'), $CoordinatePrecision)
+                        Source   = "Folder"
+                    }
+                }
+            }
+        } else {
+            Invoke-NominatimSearch -Query $Query
         }
 
         $script:SearchCache[$Query] = $result
@@ -513,7 +592,7 @@ function Invoke-ExtractStage {
             $row.gps_found = $true
             $row.source    = "GPS"
         }
-        elseif ($EnableFolderInference) {
+        elseif (-not $SkipFolderInference) {
             $folderResult = Resolve-FromFolderName -FilePath $file.FullName -RootFolder $RootFolder
             if ($folderResult) {
                 $row.inferred_location = $folderResult.Location
@@ -567,10 +646,13 @@ function Invoke-GroupStage {
             $exportLng = $null
 
             if ($gpsRows) {
-                $lookupLat = [math]::Round((($gpsRows | Measure-Object -Property latitude -Average).Average), $LookupPrecision)
-                $lookupLng = [math]::Round((($gpsRows | Measure-Object -Property longitude -Average).Average), $LookupPrecision)
-                $exportLat = [math]::Round((($gpsRows | Measure-Object -Property latitude -Average).Average), $CoordinatePrecision)
-                $exportLng = [math]::Round((($gpsRows | Measure-Object -Property longitude -Average).Average), $CoordinatePrecision)
+                # CSV values are strings; explicit cast required before Measure-Object arithmetic
+                $avgLat    = ($gpsRows | ForEach-Object { [double]$_.latitude  } | Measure-Object -Average).Average
+                $avgLng    = ($gpsRows | ForEach-Object { [double]$_.longitude } | Measure-Object -Average).Average
+                $lookupLat = [math]::Round($avgLat, $LookupPrecision)
+                $lookupLng = [math]::Round($avgLng, $LookupPrecision)
+                $exportLat = [math]::Round($avgLat, $CoordinatePrecision)
+                $exportLng = [math]::Round($avgLng, $CoordinatePrecision)
             }
             else {
                 $lookupLat = [double]$first.inferred_lat
@@ -599,9 +681,8 @@ function Invoke-GroupStage {
 }
 
 function Invoke-ResolveStage {
-    if (-not $ApiKey) {
-        throw "ApiKey is required for Resolve stage."
-    }
+    $provider = if ($ApiKey) { "Geoapify (ApiKey provided)" } else { "Nominatim (free, 1 req/sec — set -ApiKey to use Geoapify)" }
+    Write-Host "Geocoding provider: $provider"
 
     if (-not (Test-Path -LiteralPath $GroupCsv)) {
         throw "Group CSV not found: $GroupCsv"
