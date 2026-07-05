@@ -169,3 +169,86 @@ def test_parse_date_exif_fallback_to_mtime(tmp_path):
     with patch('exifread.process_file', return_value={}):
         result = geo.parse_date_exif(img)
     assert re.match(r'\d{4}-\d{2}-\d{2}', result)
+
+
+# ── Video / ffprobe tests
+
+def test_parse_iso6709_north_east():
+    assert geo._parse_iso6709('+51.5074-000.1278/') == (51.5074, -0.1278)
+
+
+def test_parse_iso6709_south_west():
+    lat, lng = geo._parse_iso6709('-33.8651+151.2099/')
+    assert lat < 0 and lng > 0
+
+
+def test_parse_iso6709_no_match():
+    assert geo._parse_iso6709('not-a-location') is None
+
+
+def _ffprobe_output(location=None, creation_time=None):
+    tags = {}
+    if location:
+        tags['location'] = location
+    if creation_time:
+        tags['creation_time'] = creation_time
+    return json.dumps({'format': {'tags': tags}, 'streams': []})
+
+
+def test_parse_gps_video_from_format_tags(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    ffout = _ffprobe_output(location='+48.8566+002.3522/')
+    with patch('subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=ffout)
+        result = geo.parse_gps_video(vid)
+    assert result is not None
+    lat, lng = result
+    assert abs(lat - 48.8566) < 0.001
+    assert abs(lng - 2.3522) < 0.001
+
+
+def test_parse_gps_video_no_location_tag(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    with patch('subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(returncode=0,
+                                           stdout=json.dumps({'format': {'tags': {}}, 'streams': []}))
+        assert geo.parse_gps_video(vid) is None
+
+
+def test_parse_gps_video_ffprobe_absent(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    with patch('subprocess.run', side_effect=FileNotFoundError):
+        assert geo.parse_gps_video(vid) is None
+
+
+def test_parse_date_video_from_creation_time(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    ffout = _ffprobe_output(creation_time='2024-06-15T10:30:00.000000Z')
+    with patch('subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=ffout)
+        assert geo.parse_date_video(vid) == '2024-06-15'
+
+
+def test_parse_date_video_fallback_to_mtime(tmp_path):
+    vid = tmp_path / 'clip.mp4'
+    vid.write_bytes(b'')
+    with patch('subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(returncode=0,
+                                           stdout=json.dumps({'format': {'tags': {}}, 'streams': []}))
+        result = geo.parse_date_video(vid)
+    assert re.match(r'\d{4}-\d{2}-\d{2}', result)
+
+
+def test_check_ffprobe_available():
+    with patch('subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        assert geo.check_ffprobe() is True
+
+
+def test_check_ffprobe_absent():
+    with patch('subprocess.run', side_effect=FileNotFoundError):
+        assert geo.check_ffprobe() is False

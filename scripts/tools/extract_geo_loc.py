@@ -109,6 +109,76 @@ def parse_date_exif(path: Path) -> str:
         return '1970-01-01'
 
 
+# ── Video GPS parsing via ffprobe
+
+def check_ffprobe() -> bool:
+    """Return True if ffprobe is on PATH. Prints a one-time warning if absent."""
+    try:
+        subprocess.run(['ffprobe', '-version'], capture_output=True, timeout=5)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        print('[extract] WARNING: ffprobe not found — video files will fall through '
+              'to folder inference. Install FFmpeg to enable video GPS extraction.')
+        return False
+
+
+def _parse_iso6709(location_str: str) -> tuple[float, float] | None:
+    """Parse ISO 6709 location string e.g. '+51.5074-000.1278/' → (lat, lng)."""
+    match = re.match(r'^([+-]\d+\.?\d*)([+-]\d+\.?\d*)', location_str.strip())
+    if not match:
+        return None
+    return float(match.group(1)), float(match.group(2))
+
+
+def _run_ffprobe(path: Path) -> dict | None:
+    """Run ffprobe and return parsed JSON, or None on any failure."""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-print_format', 'json',
+             '-show_format', '-show_streams', str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+        return json.loads(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError,
+            OSError):
+        return None
+
+
+def parse_gps_video(path: Path) -> tuple[float, float] | None:
+    """Extract (latitude, longitude) from video metadata via ffprobe.
+    Returns None if GPS absent, ffprobe unavailable, or file unreadable."""
+    data = _run_ffprobe(path)
+    if data is None:
+        return None
+
+    # Check format tags (DJI and Samsung both store location here)
+    tags = data.get('format', {}).get('tags', {})
+    location = (tags.get('location') or
+                tags.get('com.apple.quicktime.location.ISO6709') or
+                tags.get('location-eng'))
+
+    # Fall back to stream tags
+    if not location:
+        for stream in data.get('streams', []):
+            location = stream.get('tags', {}).get('location')
+            if location:
+                break
+
+    return _parse_iso6709(location) if location else None
+
+
+def parse_date_video(path: Path) -> str:
+    """Extract recording date from video metadata; falls back to file mtime."""
+    data = _run_ffprobe(path)
+    if data:
+        creation_time = data.get('format', {}).get('tags', {}).get('creation_time', '')
+        if creation_time:
+            return creation_time[:10]  # "2024-06-15T10:30:00Z" → "2024-06-15"
+    return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
+
+
 # ── Config
 
 def load_config(args: argparse.Namespace,
