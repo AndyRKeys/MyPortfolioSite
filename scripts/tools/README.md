@@ -6,32 +6,31 @@ produces a `04-travel-import.csv` ready for the bulk-import route in the admin p
 
 ---
 
-## Quick start
+## Quick start (PowerShell)
 
-```bash
+```powershell
 cd scripts/tools
 
 # 1. Create a virtual environment and install dependencies
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
+.venv\Scripts\activate
 
 pip install -r requirements.txt
 
 # 2. Copy and edit the config file (optional — see Config section below)
-copy .geo-config.example.json .geo-config.json
-#    PowerShell's copy command succeeds silently — no output means it worked.
-#    Then open .geo-config.json in your editor:
+Copy-Item .geo-config.example.json .geo-config.json
+#    Verify it was created:
+Test-Path .geo-config.json        # should print: True
+#    Open in VS Code to edit (leave geoapify_api_key blank to use free Nominatim geocoder):
 code .geo-config.json
-#    At minimum, leave geoapify_api_key blank to use the free Nominatim geocoder.
 
-# 3. Run all four stages
-python extract_geo_loc.py --stage all \
-  --root-folder "D:\Pictures" \
-  --working-folder "D:Pictures\geo-work"
+# 3. Run all four stages (use backtick ` for line continuation in PowerShell)
+python extract_geo_loc.py --stage all `
+  --root-folder "D:\Pictures" `
+  --working-folder "D:\Pictures\geo-work"
 
 # 4. Upload the result via the admin panel
-#    Admin → Travel → Bulk import → choose D:\geo-work\04-travel-import.csv
+#    Admin → Travel → Bulk import → choose D:\Pictures\geo-work\04-travel-import.csv
 ```
 
 ---
@@ -169,33 +168,33 @@ python extract_geo_loc.py --stage <stage> [options]
 
 ### All at once
 
-```bash
-python extract_geo_loc.py --stage all \
-  --root-folder "D:\Photos" \
-  --working-folder "D:\geo-work"
+```powershell
+python extract_geo_loc.py --stage all `
+  --root-folder "D:\Pictures" `
+  --working-folder "D:\Pictures\geo-work"
 ```
 
 ### Stage by stage (useful for large libraries or re-running Resolve with a different provider)
 
-```bash
+```powershell
 # Stage 1: scan all files (slow — reads ~13k files in parallel)
-python extract_geo_loc.py --stage extract \
-  --root-folder "D:\Photos" \
-  --working-folder "D:\geo-work"
+python extract_geo_loc.py --stage extract `
+  --root-folder "D:\Pictures" `
+  --working-folder "D:\Pictures\geo-work"
 
 # Stage 2: group GPS coords + infer locations from folder names
-python extract_geo_loc.py --stage group \
-  --root-folder "D:\Photos" \
-  --working-folder "D:\geo-work"
+python extract_geo_loc.py --stage group `
+  --root-folder "D:\Pictures" `
+  --working-folder "D:\Pictures\geo-work"
 
 # Stage 3: reverse geocode all groups (slow — one API call per group)
-python extract_geo_loc.py --stage resolve \
-  --working-folder "D:\geo-work"
+python extract_geo_loc.py --stage resolve `
+  --working-folder "D:\Pictures\geo-work"
 
 # Stage 4: deduplicate and write final CSV
-python extract_geo_loc.py --stage export \
-  --working-folder "D:\geo-work" \
-  --title-prefix "My Trip" \
+python extract_geo_loc.py --stage export `
+  --working-folder "D:\Pictures\geo-work" `
+  --title-prefix "My Trip" `
   --publish
 ```
 
@@ -236,10 +235,10 @@ remaining folder name to get approximate coordinates.
 ## Typical workflow for populating travel memories
 
 1. **Run the extractor** on your photo library (takes a few minutes for 13k files):
-   ```bash
-   python extract_geo_loc.py --stage all \
-     --root-folder "D:\Photos" \
-     --working-folder "D:\geo-work" \
+   ```powershell
+   python extract_geo_loc.py --stage all `
+     --root-folder "D:\Pictures" `
+     --working-folder "D:\Pictures\geo-work" `
      --title-prefix "Trip"
    ```
 
@@ -264,8 +263,8 @@ folder-name inference in the meantime.
 **Many `status: failed` rows in `03-resolved.csv`**
 Network issue or rate limit hit. Re-run just the Resolve stage — the cache means
 already-resolved groups are skipped:
-```bash
-python extract_geo_loc.py --stage resolve --working-folder "D:\geo-work"
+```powershell
+python extract_geo_loc.py --stage resolve --working-folder "D:\Pictures\geo-work"
 ```
 
 **Folder inference not finding a city**
