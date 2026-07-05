@@ -54,6 +54,61 @@ FOLDER_IGNORE = {
 ADDRESS_FIELDS = ('city', 'town', 'village', 'hamlet', 'municipality',
                   'county', 'state_district', 'state')
 
+# ── EXIF image parsing
+
+def _rational_to_decimal(values: list) -> float | None:
+    """Convert exifread GPS rational triplet (deg, min, sec) to decimal degrees."""
+    try:
+        d = values[0].num / values[0].den
+        m = values[1].num / values[1].den
+        s = values[2].num / values[2].den
+        return d + m / 60.0 + s / 3600.0
+    except (IndexError, ZeroDivisionError, AttributeError):
+        return None
+
+
+def parse_gps_exif(path: Path) -> tuple[float, float] | None:
+    """Extract (latitude, longitude) decimal degrees from JPEG/TIFF EXIF.
+    Returns None if GPS tags absent or file is unreadable."""
+    try:
+        with open(path, 'rb') as f:
+            tags = exifread.process_file(f, details=False,
+                                         stop_tag='GPS GPSLongitude')
+        lat_tag = tags.get('GPS GPSLatitude')
+        lng_tag = tags.get('GPS GPSLongitude')
+        if not (lat_tag and lng_tag):
+            return None
+
+        lat = _rational_to_decimal(lat_tag.values)
+        lng = _rational_to_decimal(lng_tag.values)
+        if lat is None or lng is None:
+            return None
+
+        if str(tags.get('GPS GPSLatitudeRef', 'N')) == 'S':
+            lat = -lat
+        if str(tags.get('GPS GPSLongitudeRef', 'E')) == 'W':
+            lng = -lng
+
+        return round(lat, 6), round(lng, 6)
+    except Exception:
+        return None
+
+
+def parse_date_exif(path: Path) -> str:
+    """Extract date taken from EXIF; falls back to file mtime. Always returns YYYY-MM-DD."""
+    try:
+        with open(path, 'rb') as f:
+            tags = exifread.process_file(f, details=False,
+                                         stop_tag='EXIF DateTimeOriginal')
+        tag = tags.get('EXIF DateTimeOriginal') or tags.get('Image DateTime')
+        if tag:
+            raw = str(tag)  # "2024:06:15 10:30:00"
+            return raw[:10].replace(':', '-')
+    except Exception:
+        pass
+    return datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d')
+
+
 # ── Config
 
 def load_config(args: argparse.Namespace,
