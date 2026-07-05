@@ -25,8 +25,8 @@ copy .geo-config.example.json .geo-config.json
 
 # 3. Run all four stages
 python extract_geo_loc.py --stage all \
-  --root-folder "D:\Photos" \
-  --working-folder "D:\geo-work"
+  --root-folder "D:\Pictures" \
+  --working-folder "D:Pictures\geo-work"
 
 # 4. Upload the result via the admin panel
 #    Admin → Travel → Bulk import → choose D:\geo-work\04-travel-import.csv
