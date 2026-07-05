@@ -48,14 +48,23 @@ python --version   # must be 3.10 or higher
 Required to extract GPS from DJI Osmo / Samsung video files. Without it, videos
 fall through to folder-name inference with a warning — image extraction is unaffected.
 
-```bash
-# Windows (pick one)
+```powershell
+# Windows — install FFmpeg (pick one)
 winget install ffmpeg
+# or
 choco install ffmpeg
 
-# Verify
+# After installing, close and reopen PowerShell, then verify:
 ffprobe -version
 ```
+
+> **Important:** After installing FFmpeg you must **close and reopen your PowerShell window** before running the script — the new `ffprobe` command won't be on the PATH in your current session.
+
+If `ffprobe -version` still fails after reopening, add FFmpeg to your PATH manually:
+1. Download from [ffmpeg.org/download.html](https://ffmpeg.org/download.html) and extract the zip
+2. Copy the path to the `bin\` folder inside (e.g. `C:\ffmpeg\bin`)
+3. Search Windows for **"Edit the system environment variables"** → Environment Variables → select `Path` → Edit → New → paste the path
+4. Restart PowerShell and run `ffprobe -version` to confirm
 
 ### Python dependencies
 
