@@ -18,7 +18,7 @@ consistent city/town names via Nominatim or Geoapify, deduplicate, and produce a
 ## Context
 
 - ~13,000 photos, dozens of folders
-- Shot on Android (Samsung Galaxy S22 Ultra) and DJI (Osmo Action 5) — all JPEG, no HEIC, no RAW
+- Shot on Android (Samsung Galaxy S22 Ultra) and DJI (Osmo Action 5) — JPEG images and MP4/MOV video, no HEIC, no RAW
 - Run on Windows (local machine where photos live)
 - Geocoding: Nominatim by default (free, no API key); Geoapify when API key is configured
 
@@ -126,21 +126,36 @@ Same names as the PowerShell script so existing working folders remain compatibl
 
 ## Stage 1 — Extract (parallel)
 
-**Goal:** Read EXIF from every image file; record GPS coords and date taken.
+**Goal:** Read GPS coords and date from every image and video file; record results.
 No API calls.
 
+**Supported file types:**
+
+| Type | Extensions | GPS source |
+|------|-----------|------------|
+| Image | `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.png` | EXIF tags via `exifread` |
+| Video | `.mp4`, `.mov`, `.avi` | Format/stream metadata via `ffprobe` subprocess |
+
 **Implementation:**
-- Recursively collect all `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.png` files under `--root-folder`
+- Recursively collect all supported files under `--root-folder`
 - `concurrent.futures.ThreadPoolExecutor(max_workers=workers)`
-- Each thread calls a pure function `extract_file(path) -> dict`:
-  - Opens file with `exifread` (reads tag headers only — never decodes the full image)
-  - Extracts GPS rational triplets (lat, lng, lat_ref, lng_ref) → decimal degrees
-  - Extracts date taken (EXIF tag 0x9003, fallback 0x0132, fallback file mtime)
-  - Returns `{file_path, folder_path, file_name, post_date, latitude, longitude, gps_found}`
-  - On any exception: logs a warning, returns row with `gps_found=False` and null coords
+- Each thread calls a pure function `extract_file(path) -> dict` that dispatches by extension:
+  - **Images:** `exifread` opens tag headers only (never decodes the full image); extracts
+    GPS rational triplets → decimal degrees; date taken from EXIF tag 0x9003, fallback
+    0x0132, fallback file mtime
+  - **Videos:** `ffprobe -v quiet -print_format json -show_format -show_streams <file>`
+    via subprocess; parses the `location` tag from format or stream metadata
+    (`+lat+lng/` ISO 6709 format that both DJI and Samsung embed); date taken from
+    `creation_time` tag, fallback file mtime
+  - Both paths return `{file_path, folder_path, file_name, post_date, latitude, longitude, gps_found}`
+  - On any exception (corrupt file, ffprobe not found, missing tag): logs a warning,
+    returns row with `gps_found=False` and null coords
 - Main thread collects results as futures complete; prints progress every 500 files
   via a `threading.Lock` counter
 - Writes `01-extracted.csv`
+
+**System dependency:** `ffprobe` must be on `PATH` (install FFmpeg). If `ffprobe` is
+absent, video files are processed with a warning and fall through to folder inference.
 
 **Thread safety:** `extract_file` is a pure function with no shared mutable state.
 Results aggregated only in the main thread.
@@ -244,7 +259,8 @@ from the same service and call direction.
 
 | Scenario | Behaviour |
 |----------|-----------|
-| Corrupt / unreadable image | Warning logged; file skipped; Extract continues |
+| Corrupt / unreadable image or video | Warning logged; file skipped; Extract continues |
+| `ffprobe` not on PATH | Warning logged once; all video files fall through to folder inference |
 | No GPS and no usable folder name | File produces no group; silently dropped |
 | Forward geocode returns no result | Folder candidate skipped; next candidate tried |
 | Reverse geocode fails after 3 retries | Group marked `status = "failed"`; excluded from Export |
@@ -255,19 +271,26 @@ from the same service and call direction.
 
 ## Dependencies
 
+**Python packages (`requirements.txt`):**
 ```
-# requirements.txt
 exifread    # EXIF tag reading — header-only, never decodes full image
 aiohttp     # async HTTP for Resolve stage
 ```
 
-No other runtime dependencies. `aiohttp` requires Python 3.8+.
+**System dependency:**
+```
+ffprobe     # part of FFmpeg — required for GPS extraction from video files
+            # install: https://ffmpeg.org/download.html
+            # Windows: winget install ffmpeg  or  choco install ffmpeg
+```
+
+If `ffprobe` is not on `PATH`, video files fall through to folder inference with a
+warning; image extraction is unaffected. `aiohttp` requires Python 3.8+.
 
 ---
 
 ## Not in scope
 
-- Video files (MP4 from DJI) — GPS telemetry extraction requires ffprobe; out of scope
 - HEIC files — not present in this photo library
 - RAW files (DNG) — not present; standard JPEG assumed throughout
 - GUI or interactive mode
