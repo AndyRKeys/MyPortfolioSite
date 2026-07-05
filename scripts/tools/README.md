@@ -18,8 +18,10 @@ python -m venv .venv
 
 pip install -r requirements.txt
 
-# 2. Copy and fill in the config file (optional — see Config section)
+# 2. Copy and edit the config file (optional — see Config section below)
 copy .geo-config.example.json .geo-config.json
+#    Then open scripts/tools/.geo-config.json in your editor.
+#    At minimum, leave geoapify_api_key blank to use the free Nominatim geocoder.
 
 # 3. Run all four stages
 python extract_geo_loc.py --stage all \
