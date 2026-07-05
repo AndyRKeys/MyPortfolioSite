@@ -364,7 +364,7 @@ def run_group(config: dict, working_folder: Path,
     if not extracted_csv.exists():
         raise FileNotFoundError(f'Run extract stage first: {extracted_csv}')
 
-    with open(extracted_csv, encoding='utf-8') as f:
+    with open(extracted_csv, encoding='utf-8-sig') as f:
         rows = list(csv.DictReader(f))
     lp = config['lookup_precision']
     cp = config['coordinate_precision']
@@ -623,7 +623,7 @@ def run_resolve(config: dict, working_folder: Path) -> None:
 
     cache_path = working_folder / 'photo-location-cache.json'
     cache      = load_cache(cache_path)
-    with open(groups_csv, encoding='utf-8') as f:
+    with open(groups_csv, encoding='utf-8-sig') as f:
         groups = list(csv.DictReader(f))
     pending    = [g for g in groups if g.get('status') != 'resolved']
 
@@ -691,7 +691,7 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
     if not resolved_csv.exists():
         raise FileNotFoundError(f'Run resolve stage first: {resolved_csv}')
 
-    with open(resolved_csv, encoding='utf-8') as f:
+    with open(resolved_csv, encoding='utf-8-sig') as f:
         rows = [r for r in csv.DictReader(f)
                 if r.get('status') == 'resolved' and r.get('resolved_location')]
     if not rows:
