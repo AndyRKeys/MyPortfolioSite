@@ -847,36 +847,41 @@ def run_geotag_write(working_folder: Path) -> None:
         print('[geotag-write] Nothing to write — preview CSV is empty.')
         return
 
-    # Build exiftool-format CSV (SourceFile + GPS tag columns)
     etool_csv = working_folder / '05-geotag-exiftool.csv'
-    with open(etool_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            'SourceFile', 'GPSLatitude', 'GPSLatitudeRef',
-            'GPSLongitude', 'GPSLongitudeRef'])
-        writer.writeheader()
-        for row in rows:
-            lat = float(row['lat'])
-            lng = float(row['lng'])
-            writer.writerow({
-                'SourceFile':      row['file_path'],
-                'GPSLatitude':     abs(lat),
-                'GPSLatitudeRef':  'N' if lat >= 0 else 'S',
-                'GPSLongitude':    abs(lng),
-                'GPSLongitudeRef': 'E' if lng >= 0 else 'W',
-            })
-
-    file_paths = [r['file_path'] for r in rows]
-    print(f'[geotag-write] Writing GPS to {len(rows)} files...')
-    try:
-        result = subprocess.run(
-            ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'] + file_paths,
-            capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f'[geotag-write] exiftool error:\n{result.stderr}')
-            raise RuntimeError(f'exiftool exited with code {result.returncode}')
-    finally:
-        etool_csv.unlink(missing_ok=True)
-    print(f'[geotag-write] Done — GPS written to {len(rows)} files.')
+    total = len(rows)
+    chunk_size = 50
+    print(f'[geotag-write] Writing GPS to {total} files in chunks of {chunk_size}...')
+    done = 0
+    for chunk_start in range(0, total, chunk_size):
+        chunk = rows[chunk_start:chunk_start + chunk_size]
+        with open(etool_csv, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'SourceFile', 'GPSLatitude', 'GPSLatitudeRef',
+                'GPSLongitude', 'GPSLongitudeRef'])
+            writer.writeheader()
+            for row in chunk:
+                lat = float(row['lat'])
+                lng = float(row['lng'])
+                writer.writerow({
+                    'SourceFile':      row['file_path'],
+                    'GPSLatitude':     abs(lat),
+                    'GPSLatitudeRef':  'N' if lat >= 0 else 'S',
+                    'GPSLongitude':    abs(lng),
+                    'GPSLongitudeRef': 'E' if lng >= 0 else 'W',
+                })
+        file_paths = [r['file_path'] for r in chunk]
+        try:
+            result = subprocess.run(
+                ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'] + file_paths,
+                capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f'[geotag-write] exiftool error:\n{result.stderr}')
+                raise RuntimeError(f'exiftool exited with code {result.returncode}')
+        finally:
+            etool_csv.unlink(missing_ok=True)
+        done += len(chunk)
+        print(f'[geotag-write] {done}/{total}', flush=True)
+    print(f'[geotag-write] Done — GPS written to {total} files.')
 
 
 # ── CLI
