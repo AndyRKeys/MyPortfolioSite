@@ -138,7 +138,7 @@ describe('POST /travel/import — row handling', () => {
   });
 
   it('skips a row with an invalid post_date format', async () => {
-    const csv = 'title,post_date\n"Good row",2024-06-15\n"Bad date",15/06/2024\n';
+    const csv = 'title,post_date\n"Good row",2024-06-15\n"Bad date",not-a-date\n';
     const res = await request(app)
       .post('/travel/import')
       .set('Authorization', `Bearer ${makeToken()}`)
@@ -147,6 +147,17 @@ describe('POST /travel/import — row handling', () => {
     expect(res.body.imported).toBe(1);
     expect(res.body.skipped).toBe(1);
     expect(res.body.errors[0].reason).toMatch(/YYYY-MM-DD/);
+  });
+
+  it('accepts DD/MM/YYYY dates and normalises them to YYYY-MM-DD', async () => {
+    const csv = 'title,post_date\n"Excel date",15/06/2024\n';
+    const res = await request(app)
+      .post('/travel/import')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('file', Buffer.from(csv), { filename: 'travel.csv', contentType: 'text/csv' });
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1);
+    expect(res.body.skipped).toBe(0);
   });
 
   it('imports an empty CSV (header only) without error', async () => {
