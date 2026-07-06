@@ -1,5 +1,59 @@
 # Release Notes
 
+## Release 2026-07-06
+
+**Released:** 2026-07-06
+**Branch:** release/2026-07-06
+**PR:** [#TBD](https://github.com/AndyRKeys/MyPortfolioSite/pull/TBD)
+**Closes:** #105, #106, #156, #169, #174, #245, #275, #338, #377, #436, #467, #470, #487, #497, #503, #504, #505
+
+### Summary
+
+Major feature release: nine new user-facing features shipped alongside significant ops infrastructure work. Highlights include an AI dev blog, GitHub project history page, travel CSV bulk import, image/video optimisation pipeline, deploy management suite, request metrics, error webhook alerting, a search UI overhaul, and scoped service-account JWTs. Backed by a host-level deploy daemon, deploy-lib refactor, and lightweight schema migration versioning. 26 PRs merged since the 2026-06-15 release.
+
+### Features
+
+- **feat(#106):** AI development blog page — displays AI pair-programming session summaries; admin can generate drafts with one click and publish manually
+- **feat(#105):** GitHub project history page — lists repos, recent commits, and contribution activity pulled live from the GitHub API
+- **feat(#245):** CSV bulk import for travel memories — upload a CSV of visited locations, auto-geocode missing coordinates via Nominatim, preview before confirming, import as drafts or published
+- **feat(#174):** Image and video optimisation pipeline — server-side compression, resizing, and format conversion for uploaded travel media
+- **feat(#377):** Deploy management suite — commit browser, deploy log history viewer, and enhanced output controls in the admin deploy panel
+- **feat(#338):** Request metrics — error-rate counters and latency percentiles per endpoint, surfaced in the admin stats panel
+- **feat(#156):** Error webhook notifications — unhandled 5xx errors trigger a configurable outbound webhook so incidents are caught without polling the admin panel
+- **feat(#497):** Deploy page branch selector — drop-down of recent branches with a branch-aware commit browser for selecting what to deploy
+- **feat(#470):** Search UI overhaul — pill-style type filters, result cards with post metadata, skeleton loader while searching
+
+### Security
+
+- **security(#275):** Scoped service-account JWTs for deploy routes — deploy endpoints now require a dedicated short-lived token rather than a user JWT, reducing blast radius if a session token is compromised
+
+### Bug Fixes
+
+- **fix(#467):** Audit log rows older than 90 days pruned at startup — prevents unbounded table growth
+- **fix(#503, #505):** Deploy page auto-selects the first branch on load; `OLLAMA_MODEL` default aligned between `.env.example` and the backend default
+- **fix(#504):** AI blog generate button shows live elapsed time during generation — previously the button appeared frozen for the ~30 s API call
+
+### Ops / Infra
+
+- **ops(#487):** Host-level deploy daemon — a lightweight systemd service that runs outside Docker and can restart the stack if containers go down, closing the gap where Docker itself was healthy but the app was unreachable
+- **ops(#436):** `deploy-lib.sh` split into six focused sub-libraries (`deploy-lib-env.sh`, `deploy-lib-docker.sh`, `deploy-lib-health.sh`, `deploy-lib-tests.sh`, `deploy-lib-checks.sh`, `deploy-lib-report.sh`) — easier to navigate and extend
+- **chore(#169):** Lightweight SQL migration versioning — numbered migration files in `backend/db/migrations/` applied at startup and tracked in `schema_migrations`; new DB changes go in a new file instead of editing the schema directly
+
+### Deps / Docs
+
+- **chore(deps):** Vite bumped to 8.1.0; four npm workspace dependencies updated
+- **docs(#173):** GTX 970 GPU and Ollama installation on `ak-home-server` documented
+- **docs(#174):** Image/video optimisation pipeline design spec added to `docs/superpowers/specs/`
+
+### Deployment Notes
+
+- **`ERROR_WEBHOOK_URL`** (optional) — add to `.env` to enable 5xx error webhook delivery (#156); omitting it disables webhooks silently
+- **`schema_migrations` table** — created automatically at startup by the migration runner (#169); safe on an existing DB
+- **Host-level deploy daemon (#487)** — the systemd service is configured on `ak-home-server` outside this repo; no compose or `.env` change required for the application itself
+- No other new required env vars; startup env validation will warn on first boot if anything is missing
+
+---
+
 ## Release 2026-06-15
 
 **Released:** 2026-06-15
