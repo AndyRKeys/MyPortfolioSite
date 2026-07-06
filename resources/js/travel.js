@@ -40,7 +40,9 @@ function initTravelMap(memories) {
         return;
     }
 
-    travelMap = L.map('travel-map', { scrollWheelZoom: false }).setView([20, 0], 2);
+    travelMap = L.map('travel-map', { scrollWheelZoom: false, worldCopyJump: false, maxBounds: [[-90, -180], [90, 180]], maxBoundsViscosity: 1.0 }).setView([20, 0], 2);
+    travelMap.getContainer().addEventListener('mouseenter', function () { travelMap.scrollWheelZoom.enable(); });
+    travelMap.getContainer().addEventListener('mouseleave', function () { travelMap.scrollWheelZoom.disable(); });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
@@ -62,6 +64,49 @@ function initTravelMap(memories) {
         var group = L.featureGroup(markers);
         travelMap.fitBounds(group.getBounds().pad(0.2));
     }
+
+    // ── Map size controls (expand + fullscreen) ───────────────────────────────
+    var controls = document.createElement('div');
+    controls.className = 'map-size-controls';
+
+    var expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'map-ctrl-btn';
+    expandBtn.textContent = '⤢'; // ⤢ resize arrows
+    expandBtn.title = 'Expand map';
+    expandBtn.setAttribute('aria-label', 'Expand map');
+    expandBtn.addEventListener('click', function () {
+        var expanded = mapEl.classList.toggle('expanded');
+        expandBtn.title = expanded ? 'Collapse map' : 'Expand map';
+        expandBtn.setAttribute('aria-label', expanded ? 'Collapse map' : 'Expand map');
+        travelMap.invalidateSize();
+    });
+
+    var fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'map-ctrl-btn';
+    fsBtn.textContent = '⛶'; // ⛶ four corners
+    fsBtn.title = 'Fullscreen';
+    fsBtn.setAttribute('aria-label', 'Enter fullscreen');
+    fsBtn.addEventListener('click', function () {
+        if (!document.fullscreenElement) {
+            mapEl.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    });
+
+    document.addEventListener('fullscreenchange', function () {
+        var inFs = !!document.fullscreenElement;
+        fsBtn.textContent = inFs ? '✕' : '⛶'; // ✕ or ⛶
+        fsBtn.title = inFs ? 'Exit fullscreen' : 'Fullscreen';
+        fsBtn.setAttribute('aria-label', inFs ? 'Exit fullscreen' : 'Enter fullscreen');
+        setTimeout(function () { travelMap.invalidateSize(); }, 100);
+    });
+
+    controls.appendChild(expandBtn);
+    controls.appendChild(fsBtn);
+    mapEl.appendChild(controls);
 }
 
 function applyTravelView(view) {

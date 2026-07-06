@@ -660,6 +660,88 @@ export function initTravel() {
         clearForm();
     });
 
+    // ── CSV bulk import ───────────────────────────────────────────────────────
+
+    const csvFileInput   = document.getElementById('travel-csv-file');
+    const csvFileLabel   = document.getElementById('csv-file-label');
+    const csvFileBtn     = document.getElementById('csv-file-btn');
+    const csvImportBtn   = document.getElementById('travel-csv-import-btn');
+    const csvTemplateBtn = document.getElementById('travel-csv-template-btn');
+    const csvMessage     = document.getElementById('travel-csv-message');
+
+    function setCsvMessage(text, isError = false) {
+        if (!csvMessage) return;
+        csvMessage.textContent = text;
+        csvMessage.style.color = isError ? 'var(--color-error)' : '';
+    }
+
+    if (csvFileBtn && csvFileInput) {
+        csvFileBtn.addEventListener('click', () => csvFileInput.click());
+    }
+
+    if (csvFileInput) {
+        csvFileInput.addEventListener('change', () => {
+            const file = csvFileInput.files[0];
+            if (csvFileLabel) csvFileLabel.textContent = file ? file.name : 'No file chosen';
+            if (csvImportBtn) csvImportBtn.disabled = !file;
+            setCsvMessage('');
+        });
+    }
+
+    if (csvImportBtn && csvFileInput) {
+        csvImportBtn.addEventListener('click', async () => {
+            const file = csvFileInput.files[0];
+            if (!file) return;
+
+            csvImportBtn.disabled = true;
+            setCsvMessage('Importing…');
+
+            try {
+                const fd = new FormData();
+                fd.append('file', file);
+                const res  = await authFetchMultipart('/travel/import', fd);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    setCsvMessage(data.error || 'Import failed.', true);
+                    return;
+                }
+
+                const { imported, skipped, errors } = data;
+                let msg = `Imported ${imported} row${imported !== 1 ? 's' : ''}`;
+                if (skipped) msg += `, skipped ${skipped}`;
+                if (errors && errors.length) {
+                    msg += '. Errors: ' + errors.map(e => `row ${e.row}: ${e.reason}`).join('; ');
+                }
+                setCsvMessage(msg, skipped > 0 && imported === 0);
+
+                // Reset the file input and reload the list if anything was imported
+                csvFileInput.value = '';
+                if (csvFileLabel) csvFileLabel.textContent = 'No file chosen';
+                csvImportBtn.disabled = true;
+                if (imported > 0) await loadAll();
+            } catch {
+                setCsvMessage('Import failed — check your connection and try again.', true);
+            } finally {
+                csvImportBtn.disabled = false;
+            }
+        });
+    }
+
+    if (csvTemplateBtn) {
+        csvTemplateBtn.addEventListener('click', () => {
+            const header  = 'title,location,notes,post_date,lat,lng,publish';
+            const example = '"My trip","Paris, France","A wonderful visit",2024-06-15,48.8566,2.3522,false';
+            const blob    = new Blob([header + '\n' + example + '\n'], { type: 'text/csv' });
+            const url     = URL.createObjectURL(blob);
+            const a       = document.createElement('a');
+            a.href        = url;
+            a.download    = 'travel-import-template.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
     // Start queue panel with initial poll; polling continues if active jobs exist.
     refreshJobQueue();
     startJobPolling();
