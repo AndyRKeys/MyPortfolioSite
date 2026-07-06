@@ -8,32 +8,32 @@ function truncate(str, len) {
     return str.length > len ? str.slice(0, len).trimEnd() + '…' : str;
 }
 
-function loadEntries() {
-    fetch(API_BASE + '/ai-blog')
-        .then(function (res) { return res.json(); })
-        .then(function (entries) {
-            var timelineEl = document.getElementById('ai-blog-timeline');
-            var emptyEl    = document.getElementById('ai-blog-empty');
+async function loadEntries() {
+    try {
+        const res = await fetch(API_BASE + '/ai-blog');
+        const entries = await res.json();
 
-            if (!entries.length) {
-                emptyEl.classList.remove('hidden');
-                return;
-            }
+        const timelineEl = document.getElementById('ai-blog-timeline');
+        const emptyEl    = document.getElementById('ai-blog-empty');
 
-            entries.forEach(function (entry) {
-                timelineEl.append(buildTimelineItem({
-                    dateStr:  formatPostDate(entry),
-                    title:    entry.title,
-                    notes:    entry.excerpt ? truncate(entry.excerpt, 200) : null,
-                    linkHref: '/ai-blog/post/?slug=' + encodeURIComponent(entry.slug),
-                }));
-            });
-        })
-        .catch(function (err) {
-            console.error('[ai-blog] loadEntries failed:', err && (err.message || String(err)));
-            var timelineEl = document.getElementById('ai-blog-timeline');
-            timelineEl.innerHTML = '<p class="hint" style="color:var(--color-error)">Could not load entries.</p>';
+        if (!entries.length) {
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+
+        entries.forEach(function (entry) {
+            timelineEl.append(buildTimelineItem({
+                dateStr:  formatPostDate(entry),
+                title:    entry.title,
+                notes:    entry.excerpt ? truncate(entry.excerpt, 200) : null,
+                linkHref: '/ai-blog/post/?slug=' + encodeURIComponent(entry.slug),
+            }));
         });
+    } catch (err) {
+        console.error('[ai-blog] loadEntries failed:', err && (err.message || String(err)));
+        const timelineEl = document.getElementById('ai-blog-timeline');
+        timelineEl.innerHTML = '<p class="hint" style="color:var(--color-error)">Could not load entries.</p>';
+    }
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
