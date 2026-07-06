@@ -230,7 +230,7 @@ router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
 
 router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
   try {
-    const { branch: branchParam } = req.query;
+    const branchParam = typeof req.query.branch === 'string' ? req.query.branch : undefined;
 
     if (branchParam !== undefined && (!BRANCH_RE.test(branchParam) || branchParam.includes('..'))) {
       return res.status(400).json({ error: 'Invalid branch name' });
