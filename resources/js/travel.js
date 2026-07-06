@@ -41,6 +41,8 @@ function initTravelMap(memories) {
     }
 
     travelMap = L.map('travel-map', { scrollWheelZoom: false }).setView([20, 0], 2);
+    travelMap.getContainer().addEventListener('mouseenter', function () { travelMap.scrollWheelZoom.enable(); });
+    travelMap.getContainer().addEventListener('mouseleave', function () { travelMap.scrollWheelZoom.disable(); });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
