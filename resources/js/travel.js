@@ -40,7 +40,7 @@ function initTravelMap(memories) {
         return;
     }
 
-    travelMap = L.map('travel-map', { scrollWheelZoom: false }).setView([20, 0], 2);
+    travelMap = L.map('travel-map', { scrollWheelZoom: false, worldCopyJump: false, maxBounds: [[-90, -180], [90, 180]], maxBoundsViscosity: 1.0 }).setView([20, 0], 2);
     travelMap.getContainer().addEventListener('mouseenter', function () { travelMap.scrollWheelZoom.enable(); });
     travelMap.getContainer().addEventListener('mouseleave', function () { travelMap.scrollWheelZoom.disable(); });
 
