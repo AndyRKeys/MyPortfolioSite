@@ -105,6 +105,16 @@ export async function processJob(job) {
 
 export async function registerMediaWorker(boss) {
   await boss.createQueue(MEDIA_JOB_NAME);
-  await boss.work(MEDIA_JOB_NAME, { teamSize: 1, teamConcurrency: 1 }, processJob);
+  // pg-boss v10 delivers a batch (array) of jobs to the handler, and dropped
+  // the v9 teamSize/teamConcurrency options in favour of batchSize. Iterate the
+  // batch and process each job individually so a single bad job doesn't fail the
+  // whole batch's siblings silently. Passing the array straight to processJob
+  // (which expects one job) is what caused "Cannot destructure property
+  // 'filePath' of 'job.data'" and 3 failed retries per upload (#174).
+  await boss.work(MEDIA_JOB_NAME, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      await processJob(job);
+    }
+  });
   logger.info('[mediaProcessor] worker registered');
 }

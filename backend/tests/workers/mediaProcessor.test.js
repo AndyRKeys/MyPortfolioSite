@@ -29,7 +29,7 @@ process.env.UPLOADS_DIR  = '/tmp/test-uploads';
 
 // ── Import under test ────────────────────────────────────────────────────────
 
-const { processJob } = await import('../../workers/mediaProcessor.js');
+const { processJob, registerMediaWorker } = await import('../../workers/mediaProcessor.js');
 const { pool }       = await import('../../db/pool.js');
 const sharp          = (await import('sharp')).default;
 const { execFile }   = await import('child_process');
@@ -100,6 +100,38 @@ describe('processJob — video', () => {
       expect(params[1]).toMatch(/^\/uploads\/thumb\//); // thumb_url
       expect(params[2]).toBe('ready');
     });
+  });
+});
+
+// ── Worker registration (pg-boss v10 batch handling) ─────────────────────────
+
+describe('registerMediaWorker', () => {
+  it('creates the queue then registers a worker', async () => {
+    const boss = { createQueue: vi.fn().mockResolvedValue(), work: vi.fn().mockResolvedValue() };
+    await registerMediaWorker(boss);
+    expect(boss.createQueue).toHaveBeenCalled();
+    expect(boss.work).toHaveBeenCalled();
+    // createQueue must run before work (queue must exist before subscribing)
+    expect(boss.createQueue.mock.invocationCallOrder[0])
+      .toBeLessThan(boss.work.mock.invocationCallOrder[0]);
+  });
+
+  it('unwraps the pg-boss v10 job batch (array) before processing', async () => {
+    let handler;
+    const boss = {
+      createQueue: vi.fn().mockResolvedValue(),
+      work: vi.fn((_name, _opts, cb) => { handler = cb; return Promise.resolve(); }),
+    };
+    await registerMediaWorker(boss);
+
+    // pg-boss v10 hands the callback an ARRAY of jobs — this is the regression
+    // that broke every upload with "Cannot destructure property 'filePath'".
+    await handler([
+      { data: { filePath: '/tmp/test-uploads/original/a.jpg', mimeType: 'image/jpeg' } },
+    ]);
+
+    // Two sharp calls (full + thumb) prove the single job inside the batch was processed.
+    expect(sharp).toHaveBeenCalledTimes(2);
   });
 });
 
