@@ -20,6 +20,7 @@ let existingMedia   = [];   // {id, url, type} from post_media (on edit)
 let removedMediaIds = [];   // post_media ids to delete on save
 let geoconfirmMap   = null; // Leaflet map for coordinate confirmation
 let geoconfirmMarker = null;
+let bulkFiles       = [];   // Files queued for bulk direct-upload to saved memory
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,16 @@ function clearForm() {
     hideGeoconfirmMap();
     syncUploadBtn();
     if (uploadStatus) uploadStatus.textContent = '';
+
+    // Hide bulk upload section and reset its state
+    bulkFiles = [];
+    const bulkSection = document.getElementById('travel-bulk-upload-section');
+    if (bulkSection) bulkSection.classList.add('hidden');
+    const bulkLabel = document.getElementById('bulk-file-label');
+    if (bulkLabel) bulkLabel.textContent = 'No files chosen';
+    const bulkStatus = document.getElementById('travel-bulk-status');
+    if (bulkStatus) bulkStatus.textContent = '';
+    syncBulkUploadBtn();
 }
 
 // ── Saved memories list ───────────────────────────────────────────────────────
@@ -189,6 +200,16 @@ async function loadForEdit(memory) {
         renderMediaList();
         syncUploadBtn();
         if (uploadStatus) uploadStatus.textContent = '';
+
+        // Show bulk upload section (only meaningful when editing a saved memory)
+        bulkFiles = [];
+        const bulkSection = document.getElementById('travel-bulk-upload-section');
+        if (bulkSection) bulkSection.classList.remove('hidden');
+        const bulkLabel = document.getElementById('bulk-file-label');
+        if (bulkLabel) bulkLabel.textContent = 'No files chosen';
+        const bulkStatusEl = document.getElementById('travel-bulk-status');
+        if (bulkStatusEl) bulkStatusEl.textContent = '';
+        syncBulkUploadBtn();
 
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
@@ -521,6 +542,11 @@ function syncUploadBtn() {
     uploadBtn.disabled = pendingFiles.length === 0;
 }
 
+function syncBulkUploadBtn() {
+    const btn = document.getElementById('travel-bulk-upload-btn');
+    if (btn) btn.disabled = bulkFiles.length === 0;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initTravel() {
@@ -739,6 +765,95 @@ export function initTravel() {
             a.download    = 'travel-import-template.csv';
             a.click();
             URL.revokeObjectURL(url);
+        });
+    }
+
+    // ── Bulk photo/video upload (edit mode) ───────────────────────────────────
+
+    const bulkFileInput = document.getElementById('travel-bulk-file');
+    const bulkFileBtn   = document.getElementById('bulk-file-btn');
+    const bulkUploadBtn = document.getElementById('travel-bulk-upload-btn');
+    const bulkFileLabel = document.getElementById('bulk-file-label');
+    const bulkStatusEl  = document.getElementById('travel-bulk-status');
+
+    function setBulkStatus(text, isError = false) {
+        if (!bulkStatusEl) return;
+        bulkStatusEl.textContent = text;
+        bulkStatusEl.style.color = isError ? 'var(--color-error)' : '';
+    }
+
+    if (bulkFileBtn && bulkFileInput) {
+        bulkFileBtn.addEventListener('click', () => bulkFileInput.click());
+    }
+
+    if (bulkFileInput) {
+        bulkFileInput.addEventListener('change', () => {
+            const files = Array.from(bulkFileInput.files || []);
+            if (!files.length) return;
+            bulkFiles = bulkFiles.concat(files);
+            if (bulkFileLabel) {
+                bulkFileLabel.textContent = bulkFiles.length + ' file' + (bulkFiles.length !== 1 ? 's' : '') + ' selected';
+            }
+            bulkFileInput.value = ''; // allow re-selecting the same file
+            setBulkStatus('');
+            syncBulkUploadBtn();
+        });
+    }
+
+    if (bulkUploadBtn) {
+        bulkUploadBtn.addEventListener('click', async () => {
+            const editId = document.getElementById('travel-edit-id').value;
+            if (!editId || !bulkFiles.length) return;
+
+            bulkUploadBtn.disabled = true;
+            setBulkStatus(`Uploading ${bulkFiles.length} file${bulkFiles.length !== 1 ? 's' : ''}…`);
+
+            const fd = new FormData();
+            for (const f of bulkFiles) fd.append('photos', f);
+
+            try {
+                const res  = await authFetchMultipart(`/travel/${editId}/photos/bulk`, fd);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    setBulkStatus(data.error || 'Upload failed.', true);
+                    return;
+                }
+
+                const { uploaded, errors } = data;
+                let msg = `Uploaded ${uploaded.length} file${uploaded.length !== 1 ? 's' : ''}`;
+                if (errors && errors.length) {
+                    msg += `, ${errors.length} failed: ` + errors.map(e => e.file).join(', ');
+                }
+                setBulkStatus(msg, errors && errors.length > 0 && uploaded.length === 0);
+
+                // Reset file list after upload
+                bulkFiles = [];
+                if (bulkFileLabel) bulkFileLabel.textContent = 'No files chosen';
+                syncBulkUploadBtn();
+
+                // Refresh the media list by reloading the current memory from the API
+                if (uploaded.length) {
+                    try {
+                        const memRes = await authFetch(`/travel/admin/${editId}`);
+                        if (memRes.ok) {
+                            const full = await memRes.json();
+                            existingMedia = Array.isArray(full.media) && full.media.length
+                                ? full.media.map(m => ({ id: m.id, url: m.url, type: m.type }))
+                                : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
+                            renderMediaList();
+                            startJobPolling();
+                            refreshJobQueue();
+                        }
+                    } catch {
+                        // Non-fatal — media list will refresh on next form load
+                    }
+                }
+            } catch {
+                setBulkStatus('Upload failed — check connection and try again.', true);
+            } finally {
+                syncBulkUploadBtn();
+            }
         });
     }
 

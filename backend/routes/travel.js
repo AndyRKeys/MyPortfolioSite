@@ -10,10 +10,15 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
-import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
+import {
+  TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT,
+  MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME, MEDIA_JOB_NAME,
+} from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
 import { wrapMulter } from '../utils/wrapMulter.js';
+import { getBoss } from '../utils/boss.js';
+import { UPLOADS_ORIGINAL_DIR } from '../utils/paths.js';
 
 const router = Router();
 
@@ -369,6 +374,124 @@ function parseCSV(text) {
 }
 
 const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish';
+
+// ── Bulk photo upload ─────────────────────────────────────────────────────────
+
+const MAX_BULK_FILES = 20; // reasonable per-request cap
+
+const bulkPhotoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_ORIGINAL_DIR),
+  filename:    (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+  },
+});
+
+const bulkPhotoUpload = multer({
+  storage:    bulkPhotoStorage,
+  limits:     { fileSize: MEDIA_MAX_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    MEDIA_ALLOWED_MIME.has(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('File type not allowed'));
+  },
+});
+
+// Admin: bulk upload photos/videos to an existing travel memory.
+// Accepts multipart/form-data with a "photos" field (up to MAX_BULK_FILES files).
+// Response: { uploaded: [{ url, type, status }], errors: [{ file, error }] }
+router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrapMulter(bulkPhotoUpload.array('photos', MAX_BULK_FILES)), async (req, res, next) => {
+  const { id } = req.params;
+  const files   = req.files || [];
+
+  logger.info({ postId: id, fileCount: files.length }, '[travel/bulk-upload] Received bulk upload request');
+
+  if (!files.length) {
+    return res.status(400).json({ error: 'No files received' });
+  }
+
+  // Verify the travel memory exists before writing any rows
+  try {
+    const check = await pool.query(
+      `SELECT id FROM posts WHERE id = $1 AND post_type = 'travel'`,
+      [id],
+    );
+    if (!check.rows.length) {
+      logger.warn({ postId: id }, '[travel/bulk-upload] Travel memory not found');
+      return res.status(404).json({ error: 'Memory not found' });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to verify travel memory');
+    return next(err);
+  }
+
+  // Determine starting order_index (append after existing media)
+  let orderIdx = 0;
+  try {
+    const orderResult = await pool.query(
+      `SELECT COALESCE(MAX(order_index), -1) AS max_idx FROM post_media WHERE post_id = $1`,
+      [id],
+    );
+    orderIdx = (orderResult.rows[0]?.max_idx ?? -1) + 1;
+  } catch (err) {
+    logger.warn({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to get order_index — defaulting to 0');
+  }
+
+  const uploaded = [];
+  const errors   = [];
+  const boss     = getBoss();
+
+  for (const file of files) {
+    const url = `/uploads/original/${file.filename}`;
+    try {
+      await pool.query(
+        `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index)
+         VALUES ($1, $2, $3, 'pending', $4)`,
+        [id, url, file.mimetype, orderIdx],
+      );
+      orderIdx++;
+
+      // Enqueue processing job — non-fatal if boss is unavailable
+      try {
+        if (boss) {
+          const jobId = await boss.send(
+            MEDIA_JOB_NAME,
+            { filePath: file.path, mimeType: file.mimetype },
+            { retryLimit: 3, retryDelay: 0, retryBackoff: true },
+          );
+          logger.info({ file: file.filename, mime: file.mimetype, jobId, postId: id }, '[travel/bulk-upload] job enqueued');
+        } else {
+          logger.warn({ file: file.filename }, '[travel/bulk-upload] boss not ready — skipping job enqueue');
+        }
+      } catch (jobErr) {
+        logger.error({ err: jobErr.message, file: file.filename }, '[travel/bulk-upload] failed to enqueue job');
+      }
+
+      uploaded.push({ url, type: file.mimetype, status: 'pending' });
+    } catch (err) {
+      logger.error({ err: err.message, file: file.filename, postId: id }, '[travel/bulk-upload] failed to insert media row');
+      errors.push({ file: file.originalname, error: err.message });
+    }
+  }
+
+  // Set posts.media_url / posts.media_type to the first uploaded file if none exists yet
+  if (uploaded.length) {
+    await pool.query(
+      `UPDATE posts
+       SET media_url  = COALESCE(media_url, $1),
+           media_type = COALESCE(media_type, $2)
+       WHERE id = $3`,
+      [uploaded[0].url, uploaded[0].type, id],
+    ).catch(err => logger.error({ err: err.message, postId: id }, '[travel/bulk-upload] failed to update primary media'));
+  }
+
+  await logAudit(req, 'travel.bulk_upload', 'travel', id, { uploaded: uploaded.length, errors: errors.length }).catch(() => {});
+  logger.info({ postId: id, uploaded: uploaded.length, errors: errors.length }, '[travel/bulk-upload] Complete');
+
+  res.json({ uploaded, errors });
+});
+
+// ── CSV import ────────────────────────────────────────────────────────────────
 
 // Admin: bulk-import travel entries from a CSV file.
 // Accepts multipart/form-data with a single "file" field (must be .csv, max 1 MB).
