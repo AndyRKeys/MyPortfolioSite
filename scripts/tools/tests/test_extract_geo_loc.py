@@ -795,7 +795,7 @@ def test_run_geotag_write_calls_exiftool_with_csv(tmp_path):
     call_args = mock_run.call_args[0][0]
     assert call_args[0] == 'exiftool'
     assert any('geotag-exiftool.csv' in a for a in call_args)
-    assert '-overwrite_original' in call_args
+    assert '-overwrite_original_in_place' in call_args
     assert '/p/a.jpg' in call_args
     assert '/p/b.jpg' in call_args
     # Verify N/S/E/W mapping for the southern/eastern row

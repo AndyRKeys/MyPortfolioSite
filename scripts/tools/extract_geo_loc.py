@@ -872,11 +872,10 @@ def run_geotag_write(working_folder: Path) -> None:
         file_paths = [r['file_path'] for r in chunk]
         try:
             result = subprocess.run(
-                ['exiftool', f'-csv={etool_csv}', '-overwrite_original', '-q'] + file_paths,
+                ['exiftool', f'-csv={etool_csv}', '-overwrite_original_in_place', '-q'] + file_paths,
                 capture_output=True, text=True)
             if result.returncode != 0:
-                print(f'[geotag-write] exiftool error:\n{result.stderr}')
-                raise RuntimeError(f'exiftool exited with code {result.returncode}')
+                print(f'[geotag-write] WARNING: exiftool reported errors for some files:\n{result.stderr.strip()}')
         finally:
             etool_csv.unlink(missing_ok=True)
         done += len(chunk)
