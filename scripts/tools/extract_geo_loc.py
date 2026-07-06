@@ -404,6 +404,7 @@ def run_group(config: dict, working_folder: Path,
     cp = config['coordinate_precision']
     throttle = config['throttle_ms'] / 1000
 
+    print(f'[group] Processing {len(rows)} extracted rows...')
     # GPS bucketing
     gps_buckets: dict[str, list[dict]] = {}
     for row in rows:
@@ -445,9 +446,13 @@ def run_group(config: dict, working_folder: Path,
     # Folder inference for non-GPS files
     if not config.get('skip_folder_inference') and root_folder:
         folder_cache: dict[str, dict | None] = {}
-        for row in rows:
-            if row['gps_found'] == 'True':
-                continue
+        no_gps_rows = [r for r in rows if r['gps_found'] != 'True']
+        total_infer = len(no_gps_rows)
+        interval = max(1, min(50, total_infer // 20))
+        print(f'[group] Forward geocoding folder names for {total_infer} non-GPS files...')
+        for i, row in enumerate(no_gps_rows, 1):
+            if i % interval == 0 or i == total_infer:
+                print(f'[group] folder inference {i}/{total_infer}', flush=True)
             candidates = get_candidate_folders(
                 Path(row['file_path']), root_folder)
             result = None
