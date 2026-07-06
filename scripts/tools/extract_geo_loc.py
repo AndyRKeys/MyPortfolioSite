@@ -876,12 +876,29 @@ def run_geotag_write(working_folder: Path) -> None:
 
 # ── CLI
 
+_STAGES = ['extract', 'group', 'resolve', 'export', 'geotag-preview', 'geotag-write']
+
+
+def _parse_stage_arg(value: str) -> list[str]:
+    if value == 'all':
+        return ['extract', 'group', 'resolve', 'export']
+    if value in _STAGES:
+        return [value]
+    m = re.match(r'^(\d+)(?:-(\d+))?$', value)
+    if m:
+        start = int(m.group(1))
+        end = int(m.group(2)) if m.group(2) else start
+        if 1 <= start <= end <= len(_STAGES):
+            return _STAGES[start - 1:end]
+    raise argparse.ArgumentTypeError(
+        f"invalid stage {value!r} — use a name ({', '.join(_STAGES)}, all) "
+        f"or a numeric range like 1, 1-3, 2-4 (1=extract … 6=geotag-write)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description='Extract GPS locations from photos/videos and produce a travel-import CSV.')
-    parser.add_argument('--stage', required=True,
-                        choices=['extract', 'group', 'resolve', 'export', 'all',
-                                 'geotag-preview', 'geotag-write'])
+    parser.add_argument('--stage', required=True, type=_parse_stage_arg, metavar='STAGE')
     parser.add_argument('--root-folder',    type=Path)
     parser.add_argument('--working-folder', type=Path, required=True)
     parser.add_argument('--output-csv',     type=Path)
@@ -908,23 +925,16 @@ def main() -> None:
     def _group():
         run_group(config, working, root_folder=args.root_folder)
 
-    if args.stage == 'extract':
-        _extract()
-    elif args.stage == 'group':
-        _group()
-    elif args.stage == 'resolve':
-        run_resolve(config, working)
-    elif args.stage == 'export':
-        run_export(config, working, output_csv)
-    elif args.stage == 'geotag-preview':
-        run_geotag_preview(working)
-    elif args.stage == 'geotag-write':
-        run_geotag_write(working)
-    elif args.stage == 'all':
-        _extract()
-        _group()
-        run_resolve(config, working)
-        run_export(config, working, output_csv)
+    _dispatch = {
+        'extract':        _extract,
+        'group':          _group,
+        'resolve':        lambda: run_resolve(config, working),
+        'export':         lambda: run_export(config, working, output_csv),
+        'geotag-preview': lambda: run_geotag_preview(working),
+        'geotag-write':   lambda: run_geotag_write(working),
+    }
+    for stage in args.stage:
+        _dispatch[stage]()
 
 
 if __name__ == '__main__':

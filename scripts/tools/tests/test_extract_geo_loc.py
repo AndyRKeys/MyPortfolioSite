@@ -818,3 +818,34 @@ def test_run_geotag_write_empty_preview(tmp_path):
          patch('subprocess.run') as mock_run:
         geo.run_geotag_write(tmp_path)
     mock_run.assert_not_called()
+
+
+# ── Stage arg parsing tests
+
+def test_parse_stage_arg_named():
+    assert geo._parse_stage_arg('extract') == ['extract']
+    assert geo._parse_stage_arg('group') == ['group']
+    assert geo._parse_stage_arg('geotag-write') == ['geotag-write']
+
+def test_parse_stage_arg_all():
+    assert geo._parse_stage_arg('all') == ['extract', 'group', 'resolve', 'export']
+
+def test_parse_stage_arg_single_number():
+    assert geo._parse_stage_arg('1') == ['extract']
+    assert geo._parse_stage_arg('4') == ['export']
+    assert geo._parse_stage_arg('6') == ['geotag-write']
+
+def test_parse_stage_arg_range():
+    assert geo._parse_stage_arg('1-3') == ['extract', 'group', 'resolve']
+    assert geo._parse_stage_arg('2-4') == ['group', 'resolve', 'export']
+    assert geo._parse_stage_arg('5-6') == ['geotag-preview', 'geotag-write']
+
+def test_parse_stage_arg_invalid_raises():
+    with pytest.raises(argparse.ArgumentTypeError):
+        geo._parse_stage_arg('7')
+    with pytest.raises(argparse.ArgumentTypeError):
+        geo._parse_stage_arg('0')
+    with pytest.raises(argparse.ArgumentTypeError):
+        geo._parse_stage_arg('2-7')
+    with pytest.raises(argparse.ArgumentTypeError):
+        geo._parse_stage_arg('banana')

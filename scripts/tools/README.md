@@ -161,7 +161,7 @@ python extract_geo_loc.py --stage <stage> [options]
 
 | Flag | Description |
 |------|-------------|
-| `--stage` | `extract`, `group`, `resolve`, `export`, or `all` |
+| `--stage` | Stage name (`extract`, `group`, `resolve`, `export`, `geotag-preview`, `geotag-write`, `all`) or numeric range (`1`–`6`, e.g. `1-3`) |
 | `--working-folder` | Folder for intermediate CSVs and cache file. Created if absent. |
 
 ### Conditional
@@ -196,6 +196,8 @@ python extract_geo_loc.py --stage all `
 ```
 
 ### Stage by stage (useful for large libraries or re-running Resolve with a different provider)
+
+You can also pass a numeric range: `--stage 1-3` runs Extract → Group → Resolve.
 
 ```powershell
 # Stage 1: scan all files (slow — reads ~13k files in parallel)
