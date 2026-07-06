@@ -10,6 +10,10 @@ import jwt from 'jsonwebtoken';
 const ADMIN_SECRET   = 'test-admin-secret-32-chars-minimum!';
 const SERVICE_SECRET = 'test-service-secret-32-chars-minimum';
 
+// ── Environment (hoisted — clears DEPLOY_ENV so DEPLOY_BRANCH is deterministic) ──
+
+vi.hoisted(() => { process.env.DEPLOY_ENV = 'dev'; });
+
 // ── Mocks (hoisted — must precede createApp/module imports) ──────────────────
 
 vi.mock('../../db/pool.js', () => ({
