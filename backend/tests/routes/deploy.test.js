@@ -237,8 +237,8 @@ describe('GET /deploy/history', () => {
       ([cmd, args]) => cmd === 'git' && args.includes('--format=%H|%h|%s|%ci')
     );
     expect(gitLogCall).toBeDefined();
-    // DEPLOY_ENV is not set in tests so DEPLOY_BRANCH defaults to 'dev'
-    expect(gitLogCall[1]).toContain('origin/dev');
+    const expectedBranch = process.env.DEPLOY_ENV === 'prod' ? 'main' : 'dev';
+    expect(gitLogCall[1]).toContain(`origin/${expectedBranch}`);
   });
 
   it('returns 200 and uses supplied branch when ?branch= is a valid branch name', async () => {
