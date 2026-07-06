@@ -167,7 +167,13 @@ Once implementation is complete:
 3. Include a clear summary of what changed and why
 4. Fill in the PR template at `.github/pull_request_template.md` in full — summary, changes, test plan, smoke test checkbox, and documentation checklist
 5. Update the linked issue's state label to `awaiting review` (if not already set)
-6. Wait for review, testing, and approval before merging
+6. Subscribe to the PR's notification thread so the owner receives review activity:
+   ```bash
+   PR_NUMBER=<number>
+   THREAD_ID=$(gh api /notifications --jq ".[] | select(.subject.url | test(\"/pulls/$PR_NUMBER$\")) | .id" | head -1)
+   [ -n "$THREAD_ID" ] && echo '{"subscribed":true,"ignored":false}' | gh api -X PUT /notifications/threads/$THREAD_ID/subscription --input -
+   ```
+7. Wait for review, testing, and approval before merging
 
 The AI does not merge PRs — you will review, test locally, and merge when ready.
 
