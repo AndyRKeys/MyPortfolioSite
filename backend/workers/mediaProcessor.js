@@ -104,6 +104,7 @@ export async function processJob(job) {
 // ── Worker registration ───────────────────────────────────────────────────────
 
 export async function registerMediaWorker(boss) {
+  await boss.createQueue(MEDIA_JOB_NAME);
   await boss.work(MEDIA_JOB_NAME, { teamSize: 1, teamConcurrency: 1 }, processJob);
   logger.info('[mediaProcessor] worker registered');
 }

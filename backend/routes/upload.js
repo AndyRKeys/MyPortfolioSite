@@ -60,8 +60,12 @@ router.post('/', uploadRateLimit, authenticate, wrapMulter(upload.single('file')
   try {
     const boss = getBoss();
     if (boss) {
-      await boss.send(MEDIA_JOB_NAME, { filePath: req.file.path, mimeType: req.file.mimetype }, { retryLimit: 3, retryDelay: 0, retryBackoff: true });
-      logger.info({ file: req.file.filename, mime: req.file.mimetype }, '[upload] job enqueued');
+      const jobId = await boss.send(MEDIA_JOB_NAME, { filePath: req.file.path, mimeType: req.file.mimetype }, { retryLimit: 3, retryDelay: 0, retryBackoff: true });
+      if (jobId) {
+        logger.info({ file: req.file.filename, mime: req.file.mimetype, jobId }, '[upload] job enqueued');
+      } else {
+        logger.warn({ file: req.file.filename }, '[upload] boss.send returned null — queue may not exist yet');
+      }
     } else {
       logger.warn({ file: req.file.filename }, '[upload] boss not ready — skipping job enqueue');
     }
