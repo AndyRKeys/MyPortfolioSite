@@ -6,6 +6,9 @@ import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
 import { validateEnvOrExit } from './utils/validateEnv.js';
 import { pruneAuditLog } from './utils/auditLog.js';
 import { runMigrations } from './db/migrate.js';
+import { initBoss }            from './utils/boss.js';
+import { registerMediaWorker } from './workers/mediaProcessor.js';
+import { ensureUploadDirs }    from './utils/paths.js';
 
 // Fail fast if any required env var is missing/empty — catches vars defined in
 // .env but not bridged into the container's compose `environment` block (#357).
@@ -22,6 +25,19 @@ try {
   await runMigrations(pool);
 } catch (err) {
   logger.fatal({ err: err.message }, '[startup] migration failed — aborting boot');
+  process.exit(1);
+}
+
+// Ensure upload subdirectories exist before the server accepts traffic.
+ensureUploadDirs();
+
+// Start pg-boss and register the media processing worker (#174).
+let boss;
+try {
+  boss = await initBoss();
+  await registerMediaWorker(boss);
+} catch (err) {
+  logger.fatal({ err: err.message }, '[startup] pg-boss failed to start — aborting boot');
   process.exit(1);
 }
 
@@ -69,8 +85,9 @@ async function runStartupPreflight() {
 // Graceful shutdown on SIGTERM (Docker stop, Kubernetes termination, etc)
 process.on('SIGTERM', () => {
   logger.info('[shutdown] SIGTERM received, closing connections');
-  server.close(() => {
+  server.close(async () => {
     logger.info('[shutdown] Server closed, exiting');
+    if (boss) await boss.stop().catch(() => {});
     process.exit(0);
   });
   // Force exit after 10s if connections don't close

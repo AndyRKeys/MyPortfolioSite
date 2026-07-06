@@ -37,12 +37,13 @@ const travelRateLimit = rateLimit({
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, p.lat, p.lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, p.lat, p.lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -54,12 +55,13 @@ const TRAVEL_COLS = `
 const TRAVEL_COLS_PUBLIC = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -68,23 +70,47 @@ const TRAVEL_COLS_PUBLIC = `
 `;
 
 async function replaceMedia(client, postId, mediaItems) {
-  await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
-  if (!mediaItems || !mediaItems.length) {
-    await client.query(
-      'UPDATE posts SET media_url = NULL, media_type = NULL WHERE id = $1',
-      [postId]
-    );
-    return;
-  }
-  const vals   = mediaItems.map((m, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, ${i})`).join(', ');
-  const params = [postId, ...mediaItems.flatMap(m => [m.url, m.type || null])];
-  await client.query(
-    `INSERT INTO post_media (post_id, media_url, media_type, order_index) VALUES ${vals}`,
-    params
+  // Fetch existing media to preserve processed derivatives
+  const existing = await client.query(
+    'SELECT media_url, full_url, thumb_url, media_status FROM post_media WHERE post_id = $1',
+    [postId],
   );
+  const processedByUrl = {};
+  for (const row of existing.rows) {
+    if (row.media_status === 'ready') {
+      processedByUrl[row.media_url] = {
+        full_url: row.full_url,
+        thumb_url: row.thumb_url,
+        media_status: row.media_status,
+      };
+    }
+  }
+
+  await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
+
+  if (!mediaItems || !mediaItems.length) return;
+
+  // Build VALUES placeholders: each row = (post_id, media_url, media_type, media_status, order_index, full_url, thumb_url)
+  const values = [];
+  const params = [];
+  mediaItems.forEach((m, i) => {
+    const base = i * 7;
+    const alreadyProcessed = processedByUrl[m.url];
+    const isNewUpload = m.url && m.url.startsWith('/uploads/original/');
+    const mediaStatus = alreadyProcessed
+      ? alreadyProcessed.media_status
+      : (isNewUpload ? 'pending' : null);
+    const fullUrl  = alreadyProcessed ? alreadyProcessed.full_url  : null;
+    const thumbUrl = alreadyProcessed ? alreadyProcessed.thumb_url : null;
+
+    values.push(`($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7})`);
+    params.push(postId, m.url, m.type, mediaStatus, i, fullUrl, thumbUrl);
+  });
+
   await client.query(
-    'UPDATE posts SET media_url = $1, media_type = $2 WHERE id = $3',
-    [mediaItems[0].url, mediaItems[0].type || null, postId]
+    `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index, full_url, thumb_url)
+     VALUES ${values.join(', ')}`,
+    params,
   );
 }
 

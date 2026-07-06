@@ -66,6 +66,55 @@ describe('PUT /travel/:id', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/YYYY-MM-DD/i);
   });
+
+  it('preserves full_url and thumb_url for already-processed media on edit', async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    const mockClient = { query: vi.fn(), release: vi.fn() };
+    pool.connect.mockResolvedValue(mockClient);
+
+    // client.query call sequence inside PUT /:id handler:
+    // 1. BEGIN
+    // 2. SELECT existing post
+    // 3. UPDATE posts
+    // 4. replaceMedia — SELECT post_media (return ready row)
+    // 5. replaceMedia — DELETE post_media
+    // 6. replaceMedia — INSERT post_media
+    // 7. COMMIT
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })                                          // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 'post-1', published_at: null }] })      // SELECT post
+      .mockResolvedValueOnce({ rows: [] })                                          // UPDATE posts
+      .mockResolvedValueOnce({ rows: [{                                             // SELECT post_media
+        media_url:    '/uploads/original/photo.jpg',
+        full_url:     '/uploads/full/photo.webp',
+        thumb_url:    '/uploads/thumb/photo.webp',
+        media_status: 'ready',
+      }] })
+      .mockResolvedValueOnce({ rows: [] })  // DELETE
+      .mockResolvedValueOnce({ rows: [] })  // INSERT
+      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 'post-1', title: 'Test' }] }); // post-save SELECT
+
+    await request(app)
+      .put('/travel/post-1')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({
+        title:       'Test',
+        post_date:   '2026-07-04',
+        media_items: [{ url: '/uploads/original/photo.jpg', type: 'image/jpeg' }],
+      });
+
+    const insertCall = mockClient.query.mock.calls.find(
+      ([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO post_media'),
+    );
+    expect(insertCall).toBeDefined();
+    const params = insertCall[1];
+    expect(params).toContain('/uploads/full/photo.webp');   // full_url carried forward
+    expect(params).toContain('/uploads/thumb/photo.webp');  // thumb_url carried forward
+    expect(params).toContain('ready');                      // status carried forward
+  });
 });
 
 // ── POST /travel/import ───────────────────────────────────────────────────────
