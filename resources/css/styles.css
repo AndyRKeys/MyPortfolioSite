@@ -2207,6 +2207,7 @@ details.deploy-run + details.deploy-run {
 }
 
 .travel-map {
+    position: relative;
     height: 400px;
     width: 100%;
     max-width: 1100px;
@@ -2214,6 +2215,53 @@ details.deploy-run + details.deploy-run {
     border-radius: 10px;
     box-shadow: 0 2px 12px var(--color-shadow);
     z-index: 1;
+    transition: height 0.2s ease;
+}
+
+.travel-map.expanded {
+    height: 700px;
+}
+
+.travel-map:fullscreen,
+.travel-map:-webkit-full-screen {
+    height: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    transition: none;
+}
+
+.map-size-controls {
+    position: absolute;
+    bottom: 30px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+
+.map-ctrl-btn {
+    pointer-events: all;
+    background: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: #333;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+}
+
+.map-ctrl-btn:hover {
+    background: #f4f4f4;
 }
 
 .travel-map.hidden,
