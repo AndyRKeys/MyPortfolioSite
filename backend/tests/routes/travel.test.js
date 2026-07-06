@@ -71,7 +71,7 @@ describe('PUT /travel/:id', () => {
     const { pool } = await import('../../db/pool.js');
 
     const mockClient = { query: vi.fn(), release: vi.fn() };
-    pool.connect.mockResolvedValue(mockClient);
+    pool.connect.mockResolvedValueOnce(mockClient);
 
     // client.query call sequence inside PUT /:id handler:
     // 1. BEGIN
