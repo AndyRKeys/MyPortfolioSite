@@ -780,7 +780,7 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
                 'title':     config.get('title_prefix', 'Trip'),
                 'location':  row['resolved_location'],
                 'notes':     config.get('notes', ''),
-                'post_date': row['post_date'],
+                'post_date': _parse_exif_date_str(row['post_date']) or row['post_date'],
                 'lat':       round(float(row['export_lat']), cp),
                 'lng':       round(float(row['export_lng']), cp),
                 'publish':   str(config.get('publish', False)).lower(),
