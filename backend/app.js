@@ -24,8 +24,11 @@ import deployRoutes  from './routes/deploy.js';
 import debugRoutes   from './routes/debug.js';
 import auditRoutes   from './routes/audit.js';
 import searchRoutes  from './routes/search.js';
+import githubRoutes  from './routes/github.js';
+import aiBlogRoutes  from './routes/ai-blog.js';
 import { healthRouter } from './routes/health.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import { errorHandler }     from './middleware/errorHandler.js';
+import { metricsCollector } from './middleware/metricsCollector.js';
 
 export function createApp() {
   const app = express();
@@ -51,6 +54,8 @@ export function createApp() {
     res.setHeader('X-Request-Id', req.id);
     next();
   });
+
+  app.use(metricsCollector);
 
   const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5500';
   // SITE_HOST covers requests where the browser omits the non-standard port
@@ -89,6 +94,8 @@ export function createApp() {
   app.use('/debug',   debugRoutes);
   app.use('/audit',   auditRoutes);
   app.use('/search',  searchRoutes);
+  app.use('/github',  githubRoutes);
+  app.use('/ai-blog', aiBlogRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
   app.get('/health', healthRouter);

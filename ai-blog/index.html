@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Global error logger (load first to catch all errors) -->
+    <script type="module" src="/resources/js/error-logger.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Dev Blog | AK Portfolio</title>
+    <link rel="shortcut icon" href="/resources/img/AK.jpg" type="image/x-icon">
+    <link rel="stylesheet" href="/resources/css/reset.css" />
+    <link rel="stylesheet" href="/resources/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header id="home">
+        <h1>A|K</h1>
+        <h2>Andy | Keys</h2>
+        <h2>AI Dev Blog</h2>
+    </header>
+    <nav>
+        <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="nav-toggle-label">A|K</span>
+            <span class="nav-toggle-icon">☰</span>
+        </button>
+        <ul class="nav"></ul>
+    </nav>
+
+    <main>
+        <section class="sec-cont" id="ai-blog">
+            <h2>AI Dev Blog</h2>
+            <p class="hint">Daily summaries of the AI pair-programming build process — what we built, what broke, and what we learned.</p>
+
+            <div id="ai-blog-timeline" class="timeline"></div>
+            <div id="ai-blog-empty" class="posts-empty hidden">
+                <p>No entries yet &mdash; check back soon.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <section class="sec-cont" id="contact">
+            <div class="footer-bottom">
+                <p>&copy; 2026 Andrew Keys. All Rights Reserved.</p>
+            </div>
+        </section>
+    </footer>
+
+    <script src="/resources/js/dev-env.js"></script>
+    <script src="/resources/js/darkmode.js"></script>
+    <script src="/resources/js/nav.js"></script>
+    <script type="module" src="/resources/js/ai-blog.js"></script>
+</body>
+</html>

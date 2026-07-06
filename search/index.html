@@ -24,20 +24,11 @@
             <span class="nav-toggle-label">A|K</span>
             <span class="nav-toggle-icon">☰</span>
         </button>
-        <ul class="nav">
-            <li><a href="/">🏠 Home</a></li>
-            <li><a href="/#about">👤 About</a></li>
-            <li><a href="/blog/">✏ Blog</a></li>
-            <li><a href="/travel/">✈ Travel</a></li>
-            <li><a href="/login/">🔒 Admin</a></li>
-            <li><button id="dark-mode-toggle" type="button" aria-label="Switch to dark mode">☾</button></li>
-        </ul>
+        <ul class="nav"></ul>
     </nav>
 
     <main>
         <section class="sec-cont" id="search">
-            <h2>Search</h2>
-
             <form id="search-form" class="search-form" role="search">
                 <div class="search-input-wrap">
                     <input
@@ -51,15 +42,18 @@
                     <button type="submit" class="btn-primary search-submit">Search</button>
                 </div>
 
-                <div class="search-filters" role="group" aria-label="Filter by type">
-                    <label class="search-filter-label">
-                        <input type="radio" name="type" value="all" checked /> All
+                <div class="search-filters" role="group" aria-label="Filter results">
+                    <label class="filter-pill">
+                        <input type="radio" name="type" value="all" checked hidden>
+                        <span>All</span>
                     </label>
-                    <label class="search-filter-label">
-                        <input type="radio" name="type" value="blog" /> Blog
+                    <label class="filter-pill">
+                        <input type="radio" name="type" value="blog" hidden>
+                        <span>Blog</span>
                     </label>
-                    <label class="search-filter-label">
-                        <input type="radio" name="type" value="travel" /> Travel
+                    <label class="filter-pill">
+                        <input type="radio" name="type" value="travel" hidden>
+                        <span>Travel</span>
                     </label>
                 </div>
             </form>

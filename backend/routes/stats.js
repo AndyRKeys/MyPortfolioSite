@@ -1,8 +1,24 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { getMetrics } from '../utils/metrics.js';
 
 const router = Router();
+
+const statsRateLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           60,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'stats' }),
+});
 
 // Page names are whitelisted to prevent arbitrary values being written to the DB
 const ALLOWED_PAGES = new Set(['home', 'blog', 'travel']);
@@ -32,7 +48,7 @@ router.post('/visit', async (req, res, next) => {
 });
 
 // Admin: return all page visit counts
-router.get('/visits', authenticate, async (_req, res, next) => {
+router.get('/visits', statsRateLimit, authenticate, async (_req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT page, count, last_visited_at FROM page_visits ORDER BY count DESC'
@@ -41,6 +57,11 @@ router.get('/visits', authenticate, async (_req, res, next) => {
   } catch (err) {
     next(Object.assign(new Error('Database error'), { status: 500, cause: err }));
   }
+});
+
+// Admin: return rolling per-minute metrics for the last hour
+router.get('/metrics', statsRateLimit, authenticate, (_req, res) => {
+  res.json(getMetrics());
 });
 
 export default router;

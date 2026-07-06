@@ -40,7 +40,9 @@ function initTravelMap(memories) {
         return;
     }
 
-    travelMap = L.map('travel-map', { scrollWheelZoom: false }).setView([20, 0], 2);
+    travelMap = L.map('travel-map', { scrollWheelZoom: false, worldCopyJump: false, maxBounds: [[-90, -180], [90, 180]], maxBoundsViscosity: 1.0 }).setView([20, 0], 2);
+    travelMap.getContainer().addEventListener('mouseenter', function () { travelMap.scrollWheelZoom.enable(); });
+    travelMap.getContainer().addEventListener('mouseleave', function () { travelMap.scrollWheelZoom.disable(); });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
@@ -62,6 +64,49 @@ function initTravelMap(memories) {
         var group = L.featureGroup(markers);
         travelMap.fitBounds(group.getBounds().pad(0.2));
     }
+
+    // ── Map size controls (expand + fullscreen) ───────────────────────────────
+    var controls = document.createElement('div');
+    controls.className = 'map-size-controls';
+
+    var expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'map-ctrl-btn';
+    expandBtn.textContent = '⤢'; // ⤢ resize arrows
+    expandBtn.title = 'Expand map';
+    expandBtn.setAttribute('aria-label', 'Expand map');
+    expandBtn.addEventListener('click', function () {
+        var expanded = mapEl.classList.toggle('expanded');
+        expandBtn.title = expanded ? 'Collapse map' : 'Expand map';
+        expandBtn.setAttribute('aria-label', expanded ? 'Collapse map' : 'Expand map');
+        travelMap.invalidateSize();
+    });
+
+    var fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'map-ctrl-btn';
+    fsBtn.textContent = '⛶'; // ⛶ four corners
+    fsBtn.title = 'Fullscreen';
+    fsBtn.setAttribute('aria-label', 'Enter fullscreen');
+    fsBtn.addEventListener('click', function () {
+        if (!document.fullscreenElement) {
+            mapEl.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    });
+
+    document.addEventListener('fullscreenchange', function () {
+        var inFs = !!document.fullscreenElement;
+        fsBtn.textContent = inFs ? '✕' : '⛶'; // ✕ or ⛶
+        fsBtn.title = inFs ? 'Exit fullscreen' : 'Fullscreen';
+        fsBtn.setAttribute('aria-label', inFs ? 'Exit fullscreen' : 'Enter fullscreen');
+        setTimeout(function () { travelMap.invalidateSize(); }, 100);
+    });
+
+    controls.appendChild(expandBtn);
+    controls.appendChild(fsBtn);
+    mapEl.appendChild(controls);
 }
 
 function applyTravelView(view) {
@@ -141,20 +186,22 @@ function loadPublicTravelPosts() {
             });
             var timelineEl = document.getElementById('travel-timeline');
             sorted.forEach(function (travel) {
-                var allMedia = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
+                var allMedia  = Array.isArray(travel.media) && travel.media.length ? travel.media : null;
                 var firstMedia = allMedia ? allMedia[0] : null;
-                var mediaUrl = (firstMedia && firstMedia.url) || travel.media_url || travel.mediaUrl;
-                var mediaType = (firstMedia && firstMedia.type) || travel.media_type || travel.mediaType;
+                var mediaUrl  = (firstMedia && firstMedia.url)       || travel.media_url  || travel.mediaUrl;
+                var thumbUrl  = (firstMedia && firstMedia.thumb_url) || travel.thumb_url  || null;
+                var mediaType = (firstMedia && firstMedia.type)      || travel.media_type || travel.mediaType;
 
                 var item = buildTimelineItem({
-                    dateStr: formatVisitDate(travel.post_date),
-                    title: travel.title,
-                    location: travel.location,
-                    notes: travel.notes,
-                    mediaUrl: mediaUrl,
-                    mediaType: mediaType,
+                    dateStr:    formatVisitDate(travel.post_date),
+                    title:      travel.title,
+                    location:   travel.location,
+                    notes:      travel.notes,
+                    mediaUrl:   mediaUrl,
+                    thumbUrl:   thumbUrl,
+                    mediaType:  mediaType,
                     mediaCount: allMedia ? allMedia.length : 0,
-                    linkHref: '/travel/post/?id=' + encodeURIComponent(travel.id),
+                    linkHref:   '/travel/post/?id=' + encodeURIComponent(travel.id),
                 });
 
                 var thumb = item.querySelector('.media-thumb-wrap');

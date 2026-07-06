@@ -29,8 +29,8 @@ server {
     root ${REPO_DIR};
     index index.html;
 
-    # Allow larger file uploads (matches multer 20 MB limit + headroom)
-    client_max_body_size 25M;
+    # Allow larger file uploads (raised to 1 GB for DJI Osmo 4K footage, #174)
+    client_max_body_size 1g;
 
     # ── Security headers (consolidated in nginx-security-headers.conf)
     include /etc/nginx/snippets/security-headers.conf;
@@ -47,6 +47,7 @@ server {
         rewrite ^/api/(.*)$ /$1 break;
         proxy_pass http://$backend:${APP_PORT};
         proxy_http_version 1.1;
+        proxy_buffering off;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;

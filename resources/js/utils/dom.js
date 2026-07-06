@@ -29,7 +29,7 @@ function el(tag, attrs) {
 
 /**
  * Builds a timeline item element.
- * opts: { dateStr, title, location, notes, mediaUrl, mediaType, mediaCount, linkHref }
+ * opts: { dateStr, title, location, notes, mediaUrl, thumbUrl, mediaType, mediaCount, linkHref }
  * Returns a DOM element.
  */
 export function buildTimelineItem(opts) {
@@ -67,9 +67,11 @@ export function buildTimelineItem(opts) {
         content.appendChild(notes);
     }
 
-    if (opts.mediaUrl && opts.mediaType && opts.mediaType.indexOf('image') === 0) {
+    if (opts.mediaUrl && opts.mediaType && (opts.mediaType.indexOf('image') === 0 || opts.mediaType.indexOf('video') === 0)) {
         var mediaWrap = el('div', { className: 'media-thumb-wrap' });
-        var img = el('img', { className: 'timeline-thumb', alt: '', src: opts.mediaUrl });
+        var displaySrc = opts.thumbUrl || opts.mediaUrl;
+
+        var img = el('img', { className: 'timeline-thumb', alt: '', src: displaySrc });
         img.addEventListener('error', function () { img.remove(); });
         mediaWrap.appendChild(img);
 
@@ -173,6 +175,7 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
         : (travel.media_url ? [{ url: travel.media_url, type: travel.media_type }] : null);
     var firstMedia = allMedia ? allMedia[0] : null;
     var mediaUrl = firstMedia ? firstMedia.url : null;
+    var thumbUrl = firstMedia ? (firstMedia.thumb_url || null) : (travel.thumb_url || null);
     var mediaType = firstMedia ? firstMedia.type : null;
     var extraCount = allMedia ? allMedia.length - 1 : 0;
 
@@ -184,9 +187,16 @@ export function buildPublicTravelCard(travel, formatVisitDateFn) {
     if (mediaUrl) {
         var mediaWrap = el('div', { className: 'media-thumb-wrap' });
         if (mediaType && mediaType.indexOf('video') === 0) {
-            mediaWrap.appendChild(el('video', { muted: '', src: mediaUrl }));
+            // Use thumb (ffmpeg poster frame) when available; fall back to raw video.
+            if (thumbUrl) {
+                var vThumb = el('img', { alt: 'Travel snapshot', src: thumbUrl });
+                vThumb.addEventListener('error', function () { vThumb.setAttribute('src', placeholder); });
+                mediaWrap.appendChild(vThumb);
+            } else {
+                mediaWrap.appendChild(el('video', { muted: '', src: mediaUrl }));
+            }
         } else {
-            var mImg = el('img', { alt: 'Travel snapshot', src: mediaUrl });
+            var mImg = el('img', { alt: 'Travel snapshot', src: thumbUrl || mediaUrl });
             mImg.addEventListener('error', function () { mImg.setAttribute('src', placeholder); });
             mediaWrap.appendChild(mImg);
         }

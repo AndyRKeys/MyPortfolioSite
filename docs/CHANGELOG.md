@@ -8,9 +8,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## Unreleased (dev)
 
+### Added
+
+- Lightweight SQL migration runner (`backend/db/migrate.js`) — tracks applied migrations in `schema_migrations` table, applies numbered files from `backend/db/migrations/` on startup; no new npm packages (#169)
+- CSV bulk import for travel memories — `POST /travel/import` (auth-gated, 1 MB cap, per-row error tracking) with admin UI in the Travel page (#245)
+- Image & video optimisation pipeline (#174): new uploaded images are automatically resized (≤2400px) and converted to WebP (quality 85) with a 400px square thumbnail generated alongside; video uploads (MP4, WebM, QuickTime) get a JPEG thumbnail extracted from the first frame via ffmpeg. Processing runs as a background pg-boss job — upload responses are immediate regardless of file size. File size limit raised from 20 MB to 1 GB to support DJI Osmo 4K footage. Three new DB columns (`full_url`, `thumb_url`, `media_status`) on `posts` and `post_media` tables; existing entries unaffected (columns nullable, frontend falls back to `media_url`). Admin travel section shows a processing queue panel with per-job status, age, and a Retry button for failed jobs. Public travel page uses `thumb_url` for cards/timeline and `full_url` for lightbox, falling back to `media_url`.
+
+---
+
+## Release 2026-06-15
+
+### Added
+
+- Audit log table, activity dashboard in admin stats, full-text search route, CV version history, dev seed script, compose file deduplication (#464)
+- Embedded search input on public blog and travel listing pages (#469)
+- Upload button to trigger GPS extraction on mobile (#466)
+- Audit log UI improvements — status badges, scrollable feed, colour-coded event types (#468)
+- Location field normalised to "City, Country" on geocode (#248)
+- `docs/TECH_DEBT.md` — full codebase tech debt audit (#379)
+
+### Fixed
+
+- `ERR_ERL_INVALID_HITS` suppressed in test output (#465)
+- Error alert cooldown persisted in DB across container restarts — was reset on every container cycle, allowing repeated alert storms (#371)
+- CV download filename aligned to `Andy_Keys_CV.pdf` (#426)
+- `isAdminSession()` removed from `config.js` (#424)
+- Backup schedule check tightened to prevent false positives (#447)
+- `JWT_EXPIRY` env var now wired through in `auth.js` — was ignored, causing tokens to use the hardcoded default (#425)
+- Contact form now sends to `ADMIN_EMAIL` with structured delivery logging (#420)
+- `docker.sock` privilege escalation risk documented (#450)
+- Daily backup cron documented in `docs/BACKUP.md`; stale references corrected (#185)
+
+### Security
+
+- nginx `X-Forwarded-For` header stripped at proxy boundary to prevent IP spoofing; search query length capped at 200 chars (#475)
+- Hand-rolled HTML sanitizer replaced with DOMPurify — eliminates entire class of XSS bypass risk (#427)
+- Rate limit counters isolated per endpoint via `key_type` column — prevents one endpoint's burst from consuming another's quota (#445)
+- `next(err)` used in all DB-error catch blocks; rate limiting added to posts, travel, and account routes (#453)
+- Authenticated sessions exempted from rate limiting (#418)
+
 ### Changed
 
-- Daily backup cron installed on `ak-home-server` and docs aligned (#185): `scripts/backup/db-backup.sh` now runs at 02:00 daily (`pg_dump` of `portfolio_prod` + tar of `uploads/`, 7-day rotation, log to `~/backup.log`). `docs/BACKUP.md` rewritten to lead with the automated flow, document verification + ad-hoc usage, and reflect the actual restore path (`db-restore.sh` uses `gunzip | psql`, not `pg_restore`). Offsite sync (rclone → B2) remains scaffolded but deliberately unconfigured — local-only is sufficient for now. `CLAUDE.md` fragile-areas list corrected from "No backups" to the actual state.
+- `admin/travel.js` split into focused sub-modules (#438)
+- `dc()` wrapper added; 37 raw `docker compose` invocations in deploy scripts replaced (#455)
+- `UPLOADS_DIR`, `wrapMulter`, `findUniqueSlug` extracted as shared backend utilities (#429)
+- `recordVisit()` extracted with admin-session guard (#432)
+- Lightbox extracted to `utils/lightbox.js` — shared across blog and travel pages (#430)
+- `createMessenger` factory extracted for admin modules (#431)
+- Batch refactors: #433, #434, #150, #376, #111, #158
+- Deprecated deploy files deleted; rollback hardened; `server-setup.sh` improved (#435)
 
 ---
 

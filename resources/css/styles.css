@@ -1046,6 +1046,14 @@ footer {
 
 /* ── Deployment panel (#98 / #117) ─────────────────────────────────────────── */
 
+#branch-selector-group {
+    margin-top: 1rem;
+}
+
+#branch-selector-group #deploy-branch-input {
+    margin-top: 0.5rem;
+}
+
 .deploy-status-row {
     padding: 0.6rem 0.75rem;
     background: var(--color-bg-alt);
@@ -1063,7 +1071,9 @@ footer {
     font-size: 0.8rem;
     line-height: 1.5;
     border-radius: var(--radius-md);
-    max-height: 320px;
+    min-height: 300px;
+    max-height: 60vh;
+    resize: vertical;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -1072,6 +1082,101 @@ footer {
 [data-theme="dark"] .deploy-output {
     background: #010409;
     color: #c9d1d9;
+}
+
+/* ── Deploy commit browser (#377) ──────────────────────────────────────────── */
+.commit-browser {
+    margin-top: 1rem;
+}
+
+.commit-browser h3 {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.commit-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.commit-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.commit-row:last-child {
+    border-bottom: none;
+}
+
+.commit-row:nth-child(even) {
+    background: var(--color-bg-alt);
+}
+
+.commit-sha {
+    font-family: monospace;
+    color: var(--color-text-muted);
+    min-width: 5rem;
+    flex-shrink: 0;
+}
+
+.commit-message {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.commit-date {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.commit-current {
+    font-size: 0.75rem;
+    color: var(--color-success);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+/* ── Deploy output controls (#377) ──────────────────────────────────────────── */
+.deploy-output-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.deploy-output-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ── Deploy history runs (#377) ──────────────────────────────────────────────── */
+.deploy-run-summary {
+    font-size: 0.85rem;
+    font-family: monospace;
+    cursor: pointer;
+    padding: 0.4rem 0;
+}
+
+details.deploy-run + details.deploy-run {
+    margin-top: 0.5rem;
 }
 
 /* Travel empty state */
@@ -2102,6 +2207,7 @@ footer {
 }
 
 .travel-map {
+    position: relative;
     height: 400px;
     width: 100%;
     max-width: 1100px;
@@ -2109,6 +2215,53 @@ footer {
     border-radius: 10px;
     box-shadow: 0 2px 12px var(--color-shadow);
     z-index: 1;
+    transition: height 0.2s ease;
+}
+
+.travel-map.expanded {
+    height: 700px;
+}
+
+.travel-map:fullscreen,
+.travel-map:-webkit-full-screen {
+    height: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    transition: none;
+}
+
+.map-size-controls {
+    position: absolute;
+    bottom: 30px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+
+.map-ctrl-btn {
+    pointer-events: all;
+    background: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: #333;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+}
+
+.map-ctrl-btn:hover {
+    background: #f4f4f4;
 }
 
 .travel-map.hidden,
@@ -2265,7 +2418,8 @@ footer {
 .admin-card input[type="number"],
 .admin-card input[type="date"],
 .admin-card textarea,
-.admin-card input[type="file"] {
+.admin-card input[type="file"],
+.admin-card select {
     width: 100%;
     padding: 0.65rem 0.85rem;
     margin-top: 0.35rem;
@@ -2282,9 +2436,24 @@ footer {
 .admin-card input[type="text"]:focus,
 .admin-card input[type="email"]:focus,
 .admin-card input[type="number"]:focus,
-.admin-card input[type="date"]:focus {
+.admin-card input[type="date"]:focus,
+.admin-card select:focus {
     outline: none;
     border-color: var(--color-accent);
+}
+
+/* Custom chevron replaces the browser-native dropdown arrow */
+.admin-card select {
+    appearance: none;
+    padding-right: 2.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    cursor: pointer;
+}
+
+[data-theme="dark"] .admin-card select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 /* Suppress WebKit's native calendar icon so the field looks clean */
@@ -2341,7 +2510,8 @@ footer {
     .admin-card input[type="number"],
     .admin-card input[type="date"],
     .admin-card input[type="password"],
-    .admin-card textarea {
+    .admin-card textarea,
+    .admin-card select {
         font-size: 16px;
         padding: 0.75rem 0.85rem;
     }
@@ -2756,15 +2926,34 @@ a.travel-card:visited {
 
 .search-filters {
     display: flex;
-    gap: 1rem;
-    font-size: var(--text-sm);
+    gap: 0.5rem;
+    margin: 1rem 0;
+    flex-wrap: wrap;
 }
 
-.search-filter-label {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
+.filter-pill span {
+    display: inline-block;
+    padding: 0.3rem 0.9rem;
+    border-radius: 1rem;
+    border: 1px solid var(--color-border);
     cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+    color: var(--color-text-secondary);
+}
+
+.filter-pill input:checked + span {
+    background: var(--color-accent);
+    color: var(--color-nav-text, #fff);
+    border-color: transparent;
+}
+
+.filter-pill:hover span { opacity: 0.85; }
+
+[data-theme="dark"] .filter-pill span {
+    border-color: var(--color-border);
+    color: var(--color-text-secondary);
 }
 
 .search-summary {
@@ -2789,12 +2978,24 @@ a.travel-card:visited {
 }
 
 .search-result-item {
-    border-bottom: 1px solid var(--color-border);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    margin-bottom: 0.6rem;
+    transition: box-shadow 0.15s;
+}
+
+.search-result-item:hover {
+    box-shadow: 0 2px 8px var(--color-shadow, rgba(0,0,0,0.08));
+}
+
+[data-theme="dark"] .search-result-item:hover {
+    box-shadow: 0 2px 8px var(--color-shadow-hover, rgba(0,0,0,0.4));
 }
 
 .search-result-link {
     display: block;
-    padding: 0.75rem 0;
     text-decoration: none;
     color: inherit;
 }
@@ -2855,7 +3056,37 @@ a.travel-card:visited {
 .search-empty {
     color: var(--color-text-muted);
     text-align: center;
-    padding: 2rem 0;
+    padding: 2.5rem 1rem;
+}
+
+.search-empty strong { color: inherit; }
+
+.search-empty-hint {
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    opacity: 0.75;
+}
+
+/* Skeleton loading state */
+
+.skeleton-item {
+    pointer-events: none;
+}
+
+.skeleton-line {
+    background: linear-gradient(90deg, var(--color-border) 25%, var(--color-surface-alt) 50%, var(--color-border) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+    border-radius: 3px;
+    display: block;
+}
+
+.skeleton-line--title { width: 55%; height: 1rem; margin-bottom: 0.5rem; }
+.skeleton-line--body  { width: 85%; height: 0.75rem; }
+
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 /* ── CV version history table (#109) ────────────────────────────────────────── */
@@ -2889,4 +3120,228 @@ a.travel-card:visited {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
+}
+
+/* ── GitHub project history page (#105) ──────────────────────────────────── */
+
+.gh-stats-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.gh-stat-card {
+    background: var(--color-card-bg, #fff);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 8px;
+    padding: 1.2rem 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1 0 120px;
+    max-width: 180px;
+}
+
+.gh-stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-accent, #0ea5e9);
+    line-height: 1;
+}
+
+.gh-stat-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #718096);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Bar chart */
+
+.gh-activity-chart {
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
+.gh-chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 100px;
+    min-width: 600px;
+    padding-bottom: 1.4rem; /* room for day labels */
+    position: relative;
+}
+
+.gh-chart-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    cursor: default;
+}
+
+.gh-chart-bar {
+    width: 100%;
+    background: var(--color-accent, #0ea5e9);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    opacity: 0.75;
+    transition: opacity 0.15s;
+}
+
+.gh-chart-bar-wrap:hover .gh-chart-bar {
+    opacity: 1;
+}
+
+.gh-chart-bar[data-count]::after {
+    content: attr(data-count);
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.gh-chart-day-label {
+    position: absolute;
+    bottom: 0;
+    font-size: 0.6rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+    transform: rotate(-45deg);
+    transform-origin: top left;
+    margin-top: 2px;
+    /* Show every 5th label to avoid crowding */
+}
+
+/* Only show day labels for every 5th bar via :nth-child */
+.gh-chart-bar-wrap:not(:nth-child(5n)) .gh-chart-day-label {
+    visibility: hidden;
+}
+
+/* Commit timeline items — reuse site's .timeline classes */
+
+.gh-commit-message {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin: 0.1rem 0;
+    word-break: break-word;
+}
+
+.gh-commit-meta {
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #718096);
+    margin-top: 0.2rem;
+}
+
+.gh-commit-sha {
+    font-family: monospace;
+    background: var(--color-code-bg, #f1f5f9);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.85em;
+}
+
+/* PR list */
+
+.gh-pr-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gh-pr-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 6px;
+    background: var(--color-card-bg, #fff);
+    flex-wrap: wrap;
+}
+
+.gh-pr-state {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 0.15em 0.5em;
+    border-radius: 12px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.gh-pr-state--open {
+    background: color-mix(in srgb, #22c55e 15%, transparent);
+    color: #16a34a;
+}
+
+.gh-pr-state--merged {
+    background: color-mix(in srgb, #8b5cf6 15%, transparent);
+    color: #7c3aed;
+}
+
+.gh-pr-state--closed {
+    background: color-mix(in srgb, #ef4444 15%, transparent);
+    color: #dc2626;
+}
+
+.gh-pr-number {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #718096);
+    flex-shrink: 0;
+}
+
+.gh-pr-title {
+    flex: 1;
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.gh-pr-date {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #718096);
+    white-space: nowrap;
+}
+
+/* Dark mode adjustments */
+
+@media (prefers-color-scheme: dark) {
+    .gh-stat-card {
+        background: var(--color-card-bg);
+        border-color: var(--color-border);
+    }
+
+    .gh-commit-sha {
+        background: var(--color-code-bg, #1e293b);
+    }
+
+    .gh-pr-item {
+        background: var(--color-card-bg);
+        border-color: var(--color-border);
+    }
+}
+
+[data-theme="dark"] .gh-stat-card,
+[data-theme="dark"] .gh-pr-item {
+    background: var(--color-card-bg);
+    border-color: var(--color-border);
+}
+
+[data-theme="dark"] .gh-commit-sha {
+    background: var(--color-code-bg, #1e293b);
 }

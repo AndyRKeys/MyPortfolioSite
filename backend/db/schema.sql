@@ -1,3 +1,6 @@
+-- This file is the canonical schema reference. Incremental changes go in db/migrations/.
+-- For fresh installs, the migration runner in db/migrate.js applies db/migrations/ in order.
+
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS users (
@@ -227,7 +230,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
 -- ── Audit log (#154) ─────────────────────────────────────────────────────────
 -- Records admin actions with user, timestamp, action type, and structured detail.
 -- Provides a security trail and powers the admin activity dashboard (#155).
--- Retention: rows are never auto-pruned — low volume expected for a single-admin site.
+-- Retention: rows older than 90 days are pruned at server startup via pruneAuditLog() (#467).
+-- IPs from unauthenticated events (e.g. auth.login_failed) are subject to this policy.
 CREATE TABLE IF NOT EXISTS audit_log (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,

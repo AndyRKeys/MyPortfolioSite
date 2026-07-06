@@ -23,11 +23,9 @@ set -euo pipefail
 # ── Sudo guard (#351) ─────────────────────────────────────────────────────────
 # Running as root via sudo sets $HOME=/root, so REPO_DIR resolves to
 # /root/MyPortfolioSite* — a fresh clone with a template .env — instead of
-# the real user's configured repo. Block it unconditionally, except when
-# invoked from the backend container (DEPLOY_FROM_CONTAINER=1): the container
-# intentionally runs as root, DEPLOY_REPO_DIR overrides the HOME-derived path,
-# and the Docker socket gives access to the host daemon without sudo escalation.
-if [ "${EUID:-$(id -u)}" -eq 0 ] && [ "${DEPLOY_FROM_CONTAINER:-0}" != "1" ]; then
+# the real user's configured repo. Block it unconditionally — deploy.sh is
+# only ever called from the host now (via deploy-daemon.sh).
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
   echo ""
   echo "ERROR: do not run deploy.sh with sudo." >&2
   echo "" >&2
@@ -114,7 +112,7 @@ case "$DEPLOY_ENV" in
     BRANCH="${BRANCH:-dev}"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
-    LOG_FILE="${HOME}/dev-deploy.log"
+    LOG_FILE="${HOME}/logs/dev-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-dev"
     REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" LAN_IP)
     PLACEHOLDER_PATTERNS=("192.168.x.x" "change-me" "your-" "xxx" "dev.example.com")
@@ -134,7 +132,7 @@ case "$DEPLOY_ENV" in
     BRANCH="${BRANCH:-main}"
     ENV_FILE="${REPO_DIR}/.env"
     ENV_TEMPLATE="${REPO_DIR}/.env.example"
-    LOG_FILE="${HOME}/prod-deploy.log"
+    LOG_FILE="${HOME}/logs/prod-deploy.log"
     LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-prod"
     REQUIRED_VARS=("${REQUIRED_VARS_COMMON[@]}" DOMAIN)
     PLACEHOLDER_PATTERNS=("change-me" "your-" "example.com" "xxx" "replace_")
@@ -155,26 +153,8 @@ case "$DEPLOY_ENV" in
     ;;
 esac
 
-# ── Container execution path override ────────────────────────────────────────
-# When invoked from the backend container (DEPLOY_FROM_CONTAINER=1), the repo
-# is bind-mounted at /repo and .env lives there — not at $HOME/MyPortfolioSite*.
-# DEPLOY_REPO_DIR must be set to /repo in docker-compose.yml.
-# LOG_FILE stays HOME-derived: $HOME=/root inside the container, which matches
-# where the backend route reads it from, so both sides see the same file.
-if [ "${DEPLOY_FROM_CONTAINER:-0}" = "1" ]; then
-  if [ -z "${DEPLOY_REPO_DIR:-}" ]; then
-    echo "[ERROR] DEPLOY_FROM_CONTAINER=1 requires DEPLOY_REPO_DIR to be set" >&2
-    exit 1
-  fi
-  REPO_DIR="$DEPLOY_REPO_DIR"
-  ENV_FILE="${REPO_DIR}/.env"
-  if [ "$DEPLOY_ENV" = "prod" ]; then
-    ENV_TEMPLATE="${REPO_DIR}/.env.example"
-  else
-    ENV_TEMPLATE="${REPO_DIR}/.env.dev-server.example"
-  fi
-  LAST_GOOD_STATE_FILE="${HOME}/.last-good-deploy-${DEPLOY_ENV}"
-fi
+# Ensure log directory exists before any tee-a writes
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # Single unified compose file — env-specific behaviour comes from .env, not
 # from selecting a different compose file.
@@ -330,6 +310,7 @@ if [ -n "$ROLLBACK_SHA" ]; then
   dinfo "Current commit: $PRE_SHA"
   dinfo "Rolling back to $ROLLBACK_SHA"
   git reset --hard "$ROLLBACK_SHA" 2>&1 | tee -a "$LOG_FILE" || ddie "git reset to rollback SHA failed"
+
   compose_up_with_rollback "$BACKEND_SERVICE"
   POST_SHA=$(git rev-parse HEAD)
   dlog "$(date -u +'%Y-%m-%dT%H:%M:%SZ') rollback $PRE_SHA → $POST_SHA" >> "$LOG_FILE"

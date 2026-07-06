@@ -15,6 +15,8 @@
 // Vars the app genuinely reads at runtime. Keep in sync with usage in
 // app.js (CORS/FRONTEND_URL/SITE_HOST), db/pool.js (DB_*), auth.js
 // (JWT_SECRET, WEBAUTHN_*, ADMIN_EMAIL), server.js (PORT), routes/deploy.js (DEPLOY_ENV, REPO_DIR).
+// NOTE: SERVICE_JWT_SECRET is intentionally omitted — deploy routes work for admin
+// users without it; service token auth simply fails gracefully when unset.
 export const REQUIRED_ENV = [
   'PORT',
   'DEPLOY_ENV',

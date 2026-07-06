@@ -1,5 +1,121 @@
 # Release Notes
 
+## Release 2026-07-06
+
+**Released:** 2026-07-06
+**Branch:** release/2026-07-06
+**PR:** [#TBD](https://github.com/AndyRKeys/MyPortfolioSite/pull/TBD)
+**Closes:** #105, #106, #156, #169, #174, #245, #275, #338, #377, #436, #467, #470, #487, #497, #503, #504, #505
+
+### Summary
+
+Major feature release: nine new user-facing features shipped alongside significant ops infrastructure work. Highlights include an AI dev blog, GitHub project history page, travel CSV bulk import, image/video optimisation pipeline, deploy management suite, request metrics, error webhook alerting, a search UI overhaul, and scoped service-account JWTs. Backed by a host-level deploy daemon, deploy-lib refactor, and lightweight schema migration versioning. 26 PRs merged since the 2026-06-15 release.
+
+### Features
+
+- **feat(#106):** AI development blog page — displays AI pair-programming session summaries; admin can generate drafts with one click and publish manually
+- **feat(#105):** GitHub project history page — lists repos, recent commits, and contribution activity pulled live from the GitHub API
+- **feat(#245):** CSV bulk import for travel memories — upload a CSV of visited locations, auto-geocode missing coordinates via Nominatim, preview before confirming, import as drafts or published
+- **feat(#174):** Image and video optimisation pipeline — server-side compression, resizing, and format conversion for uploaded travel media
+- **feat(#377):** Deploy management suite — commit browser, deploy log history viewer, and enhanced output controls in the admin deploy panel
+- **feat(#338):** Request metrics — error-rate counters and latency percentiles per endpoint, surfaced in the admin stats panel
+- **feat(#156):** Error webhook notifications — unhandled 5xx errors trigger a configurable outbound webhook so incidents are caught without polling the admin panel
+- **feat(#497):** Deploy page branch selector — drop-down of recent branches with a branch-aware commit browser for selecting what to deploy
+- **feat(#470):** Search UI overhaul — pill-style type filters, result cards with post metadata, skeleton loader while searching
+
+### Security
+
+- **security(#275):** Scoped service-account JWTs for deploy routes — deploy endpoints now require a dedicated short-lived token rather than a user JWT, reducing blast radius if a session token is compromised
+
+### Bug Fixes
+
+- **fix(#467):** Audit log rows older than 90 days pruned at startup — prevents unbounded table growth
+- **fix(#503, #505):** Deploy page auto-selects the first branch on load; `OLLAMA_MODEL` default aligned between `.env.example` and the backend default
+- **fix(#504):** AI blog generate button shows live elapsed time during generation — previously the button appeared frozen for the ~30 s API call
+
+### Ops / Infra
+
+- **ops(#487):** Host-level deploy daemon — a lightweight systemd service that runs outside Docker and can restart the stack if containers go down, closing the gap where Docker itself was healthy but the app was unreachable
+- **ops(#436):** `deploy-lib.sh` split into six focused sub-libraries (`deploy-lib-env.sh`, `deploy-lib-docker.sh`, `deploy-lib-health.sh`, `deploy-lib-tests.sh`, `deploy-lib-checks.sh`, `deploy-lib-report.sh`) — easier to navigate and extend
+- **chore(#169):** Lightweight SQL migration versioning — numbered migration files in `backend/db/migrations/` applied at startup and tracked in `schema_migrations`; new DB changes go in a new file instead of editing the schema directly
+
+### Deps / Docs
+
+- **chore(deps):** Vite bumped to 8.1.0; four npm workspace dependencies updated
+- **docs(#173):** GTX 970 GPU and Ollama installation on `ak-home-server` documented
+- **docs(#174):** Image/video optimisation pipeline design spec added to `docs/superpowers/specs/`
+
+### Deployment Notes
+
+- **`ERROR_WEBHOOK_URL`** (optional) — add to `.env` to enable 5xx error webhook delivery (#156); omitting it disables webhooks silently
+- **`schema_migrations` table** — created automatically at startup by the migration runner (#169); safe on an existing DB
+- **Host-level deploy daemon (#487)** — the systemd service is configured on `ak-home-server` outside this repo; no compose or `.env` change required for the application itself
+- No other new required env vars; startup env validation will warn on first boot if anything is missing
+
+---
+
+## Release 2026-06-15
+
+**Released:** 2026-06-15
+**Branch:** release/2026-06-15
+**PR:** [#477](https://github.com/AndyRKeys/MyPortfolioSite/pull/477)
+**Closes:** #475, #469, #466, #468, #465, #464, #438, #371, #429, #432, #435, #185, #455, #453, #450, #426, #430, #424, #447, #425, #445, #427, #431, #379, #248, #418, #420, #433, #434, #150, #376, #111, #158
+
+### Summary
+
+Security hardening, new features, and a large batch of code quality refactors. 29 commits bundled from `dev` since the 2026-05-31-3 release. Highlights: nginx `X-Forwarded-For` spoofing closed (#475), DOMPurify replaces hand-rolled XSS sanitizer (#427), rate-limit counter isolation (#445), embedded search on public pages (#469), audit log UI overhaul (#464, #468), mobile GPS upload button (#466), and a comprehensive code quality sweep.
+
+### Features
+
+- **feat(#469):** Embed search input on blog and travel listing pages — users can filter posts without navigating away
+- **feat(#466):** Upload button to trigger GPS coordinate extraction on mobile — restores one-tap GPS import when drag-and-drop is unavailable
+- **feat(#468):** Audit log UI improvements — status badges, scrollable feed, colour-coded event types
+- **feat(#464):** Audit log table, activity dashboard in admin stats, full-text search route, CV version history, dev seed script, compose file deduplication
+- **feat(#248):** Location field normalised to "City, Country" format on geocode — consistent presentation across all travel memories
+- **feat(#418):** Authenticated sessions exempted from rate limiting — admin workflows no longer blocked by rate limits
+- **fix(#420):** Contact form now delivers to `ADMIN_EMAIL` with structured delivery logging — was silently sending to a hardcoded address
+
+### Security
+
+- **fix(#475):** nginx `X-Forwarded-For` header stripped at the proxy boundary to prevent IP spoofing; search query length capped at 200 chars
+- **fix(#427):** Hand-rolled HTML sanitizer replaced with DOMPurify — eliminates entire class of XSS bypass risk
+- **fix(#445):** Rate limit counters isolated per endpoint via `key_type` column — prevents one endpoint's burst from consuming another's quota
+- **refactor+security(#453):** `next(err)` used in all DB-error catch blocks; rate limiting added to posts, travel, and account management routes
+
+### Bug Fixes
+
+- **fix(#465):** `ERR_ERL_INVALID_HITS` suppressed in test output
+- **fix(#371):** Error alert cooldown persisted in DB across container restarts — was reset on every container cycle, allowing repeated alert storms
+- **fix(#426):** CV download filename aligned to `Andy_Keys_CV.pdf`
+- **fix(#424):** `isAdminSession()` removed from `config.js`
+- **fix(#447):** Backup schedule check tightened to prevent false positives
+- **fix(#425):** `JWT_EXPIRY` env var now wired through in `auth.js` — was ignored, causing tokens to use the hardcoded default
+- **fix(#450):** `docker.sock` privilege escalation risk documented
+
+### Refactoring
+
+- **refactor(#438):** `admin/travel.js` split into focused sub-modules
+- **refactor(#455):** `dc()` wrapper added; 37 raw `docker compose` invocations in deploy scripts replaced
+- **refactor(#429):** `UPLOADS_DIR`, `wrapMulter`, `findUniqueSlug` extracted as shared backend utilities
+- **refactor(#432):** `recordVisit()` extracted with admin-session guard
+- **refactor(#430):** Lightbox extracted to `utils/lightbox.js` — shared across blog and travel pages
+- **refactor(#431):** `createMessenger` factory extracted for admin modules
+- **refactor:** Batch refactors closing #433, #434, #150, #376, #111, #158
+
+### Ops / Docs
+
+- **ops(#435):** Deprecated deploy files deleted; `|| true` on rollback fixed; `server-setup.sh` hardened
+- **docs(#185):** Daily backup cron documented in `docs/BACKUP.md`; stale references corrected
+- **docs(#379):** `docs/TECH_DEBT.md` added — full codebase tech debt audit
+
+### Deployment Notes
+
+- No breaking changes
+- DB schema: `audit_log` table added (`CREATE TABLE IF NOT EXISTS` — safe on existing DB, no data at risk)
+- No new required env vars
+
+---
+
 ## Release 2026-05-31-3
 
 **Released:** 2026-05-31

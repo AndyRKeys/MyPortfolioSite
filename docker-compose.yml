@@ -53,8 +53,7 @@ services:
       PORT: ${PORT}
       DEPLOY_ENV: ${DEPLOY_ENV}
       REPO_DIR: /repo
-      DEPLOY_FROM_CONTAINER: "1"
-      DEPLOY_REPO_DIR: /repo
+      DEPLOY_QUEUE_DIR: /deploy-queue
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME}
@@ -79,6 +78,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_KEY: ${SERVICE_KEY:-}
       UPLOADS_DIR: /app/uploads
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
     volumes:
       - uploads_data:/app/uploads
       - .:/repo  # repo root — needed by deploy route for git commands and deploy script
@@ -88,6 +90,10 @@ services:
       # but represents a significant privilege escalation surface — any RCE in the backend
       # container could escape to the host. Revisit with a dedicated deploy agent: #450.
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/logs:/app/logs:ro   # deploy logs readable by history endpoint
+      - ${HOME}/deploy-queue:/deploy-queue
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

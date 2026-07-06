@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
@@ -11,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
+import { wrapMulter } from '../utils/wrapMulter.js';
 
 const router = Router();
 
@@ -34,12 +37,13 @@ const travelRateLimit = rateLimit({
 const TRAVEL_COLS = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, p.lat, p.lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, p.lat, p.lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -51,12 +55,13 @@ const TRAVEL_COLS = `
 const TRAVEL_COLS_PUBLIC = `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
     (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type)
+       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
+         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
        ORDER BY pm.order_index, pm.created_at
      )
      FROM post_media pm WHERE pm.post_id = p.id
@@ -65,23 +70,47 @@ const TRAVEL_COLS_PUBLIC = `
 `;
 
 async function replaceMedia(client, postId, mediaItems) {
-  await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
-  if (!mediaItems || !mediaItems.length) {
-    await client.query(
-      'UPDATE posts SET media_url = NULL, media_type = NULL WHERE id = $1',
-      [postId]
-    );
-    return;
-  }
-  const vals   = mediaItems.map((m, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, ${i})`).join(', ');
-  const params = [postId, ...mediaItems.flatMap(m => [m.url, m.type || null])];
-  await client.query(
-    `INSERT INTO post_media (post_id, media_url, media_type, order_index) VALUES ${vals}`,
-    params
+  // Fetch existing media to preserve processed derivatives
+  const existing = await client.query(
+    'SELECT media_url, full_url, thumb_url, media_status FROM post_media WHERE post_id = $1',
+    [postId],
   );
+  const processedByUrl = {};
+  for (const row of existing.rows) {
+    if (row.media_status === 'ready') {
+      processedByUrl[row.media_url] = {
+        full_url: row.full_url,
+        thumb_url: row.thumb_url,
+        media_status: row.media_status,
+      };
+    }
+  }
+
+  await client.query('DELETE FROM post_media WHERE post_id = $1', [postId]);
+
+  if (!mediaItems || !mediaItems.length) return;
+
+  // Build VALUES placeholders: each row = (post_id, media_url, media_type, media_status, order_index, full_url, thumb_url)
+  const values = [];
+  const params = [];
+  mediaItems.forEach((m, i) => {
+    const base = i * 7;
+    const alreadyProcessed = processedByUrl[m.url];
+    const isNewUpload = m.url && m.url.startsWith('/uploads/original/');
+    const mediaStatus = alreadyProcessed
+      ? alreadyProcessed.media_status
+      : (isNewUpload ? 'pending' : null);
+    const fullUrl  = alreadyProcessed ? alreadyProcessed.full_url  : null;
+    const thumbUrl = alreadyProcessed ? alreadyProcessed.thumb_url : null;
+
+    values.push(`($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7})`);
+    params.push(postId, m.url, m.type, mediaStatus, i, fullUrl, thumbUrl);
+  });
+
   await client.query(
-    'UPDATE posts SET media_url = $1, media_type = $2 WHERE id = $3',
-    [mediaItems[0].url, mediaItems[0].type || null, postId]
+    `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index, full_url, thumb_url)
+     VALUES ${values.join(', ')}`,
+    params,
   );
 }
 
@@ -272,6 +301,162 @@ router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, re
     logger.error({ err }, '[travel] Request failed');
     next(err);
   }
+});
+
+// ── CSV import ────────────────────────────────────────────────────────────────
+
+const CSV_MAX_BYTES = 1 * 1024 * 1024; // 1 MB
+
+// Memory-only multer — CSV content is parsed in-process, no file written to disk.
+// Extension check is the authoritative gate: browsers are inconsistent with MIME
+// types for .csv files (text/csv, text/plain, application/vnd.ms-excel all occur).
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: CSV_MAX_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.csv') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .csv files are accepted — file must have a .csv extension'));
+    }
+  },
+});
+
+// Parse a single CSV line, handling double-quoted fields and escaped quotes ("").
+function parseCSVLine(line) {
+  // Type guard (CodeQL js/loop-bound-injection): a non-string value with a
+  // crafted .length property would make the loop below effectively unbounded.
+  if (typeof line !== 'string') return [];
+  const fields = [];
+  let current  = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped quote inside a quoted field
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current.trim());
+  return fields;
+}
+
+// Parse CSV text into { headers: string[], rows: object[] }.
+// Each row is a plain object keyed by lowercase header name.
+// Empty lines and CRLF are handled; the header row is normalised to lowercase.
+function parseCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+  const rows    = lines.slice(1).map(line => {
+    const values = parseCSVLine(line);
+    const obj    = {};
+    headers.forEach((h, i) => { obj[h] = values[i] ?? ''; });
+    return obj;
+  });
+  return { headers, rows };
+}
+
+const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish';
+
+// Admin: bulk-import travel entries from a CSV file.
+// Accepts multipart/form-data with a single "file" field (must be .csv, max 1 MB).
+// Response: { imported: N, skipped: N, errors: [{ row: N, reason: string }] }
+router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(csvUpload.single('file')), async (req, res, next) => {
+  if (!req.file) return res.status(400).json({ error: 'No CSV file received' });
+
+  const csvText = req.file.buffer.toString('utf8');
+  const { headers, rows } = parseCSV(csvText);
+
+  if (!headers.includes('title')) {
+    logger.warn({ headers }, '[travel/import] CSV missing required title column');
+    return res.status(400).json({
+      error: 'Invalid CSV format — required "title" column not found in header row',
+      expected: CSV_TEMPLATE_HEADERS,
+    });
+  }
+
+  logger.info({ rowCount: rows.length }, '[travel/import] Starting CSV import');
+
+  let imported = 0;
+  let skipped  = 0;
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row    = rows[i];
+    const rowNum = i + 2; // header is row 1; data starts at row 2
+
+    const title = (row.title ?? '').trim();
+    if (!title) {
+      skipped++;
+      errors.push({ row: rowNum, reason: 'title is required' });
+      continue;
+    }
+
+    let postDate = (row.post_date ?? '').trim() || null;
+    if (postDate) {
+      // Accept DD/MM/YYYY (Excel default) and normalise to YYYY-MM-DD
+      const dmyMatch = postDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (dmyMatch) postDate = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(postDate)) {
+        skipped++;
+        errors.push({ row: rowNum, reason: `post_date "${row.post_date}" must be YYYY-MM-DD or DD/MM/YYYY` });
+        continue;
+      }
+    }
+
+    const latRaw = (row.lat ?? '').trim();
+    const lngRaw = (row.lng ?? '').trim();
+    const lat    = latRaw ? parseFloat(latRaw) : null;
+    const lng    = lngRaw ? parseFloat(lngRaw) : null;
+    if ((latRaw && isNaN(lat)) || (lngRaw && isNaN(lng))) {
+      skipped++;
+      errors.push({ row: rowNum, reason: 'lat and lng must be valid decimal numbers' });
+      continue;
+    }
+
+    const location    = (row.location ?? '').trim() || null;
+    const notes       = (row.notes ?? '').trim() || '';
+    const publishRaw  = (row.publish ?? '').trim().toLowerCase();
+    const publishedAt = publishRaw === 'true' ? new Date() : null;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const slug = await findUniqueSlug(client, slugify(title, 'travel'));
+      await client.query(
+        `INSERT INTO posts
+           (post_type, title, slug, body_markdown, post_date, published_at, location, lat, lng)
+         VALUES ('travel', $1, $2, $3, $4, $5, $6, $7, $8)`,
+        [title, slug, notes, postDate, publishedAt, location, lat, lng]
+      );
+      await client.query('COMMIT');
+      imported++;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      skipped++;
+      logger.warn({ err, rowNum, title }, '[travel/import] Row insert failed');
+      errors.push({ row: rowNum, reason: err.message });
+    } finally {
+      client.release();
+    }
+  }
+
+  await logAudit(req, 'travel.import', 'travel', null, { imported, skipped, total: rows.length });
+  logger.info({ imported, skipped, total: rows.length }, '[travel/import] CSV import complete');
+
+  res.json({ imported, skipped, errors });
 });
 
 // Admin: delete a single media item from post_media

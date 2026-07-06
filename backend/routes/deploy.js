@@ -1,35 +1,72 @@
 import { Router }        from 'express';
-import path              from 'path';
-import { fileURLToPath } from 'url';
 import fs                from 'fs/promises';
-import { authenticate }  from '../middleware/authenticate.js';
+import { rateLimit }     from 'express-rate-limit';
+import { authenticateDeploy } from '../middleware/authenticateDeploy.js';
+import { PostgresStore } from '../middleware/postgresStore.js';
+import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
+import { parseDeployRuns } from '../utils/deployLogParser.js';
 import { logger }        from '../utils/logger.js';
-import { logAudit }     from '../utils/audit.js';
+import { logAudit }      from '../utils/audit.js';
+import { writeQueueTrigger, tailLogFile } from '../utils/deployQueue.js';
 
 const router   = Router();
-// /repo is the repo root mounted via docker-compose — the backend image only
-// contains /app (backend code), so relative path resolution gives / not the repo root.
-const REPO_DIR = process.env.REPO_DIR || '/repo';
-const DEPLOY_SCRIPT = path.join(REPO_DIR, 'scripts/deploy/deploy.sh');
-// DEPLOY_ENV ('dev'|'prod') is required — validated at startup by validateEnv.js
-const DEPLOY_ENV = process.env.DEPLOY_ENV;
-// deploy.sh writes to $HOME/<env>-deploy.log
-const DEPLOY_LOG = path.join(process.env.HOME || REPO_DIR, `${DEPLOY_ENV}-deploy.log`);
+
+// ── Branch list cache ─────────────────────────────────────────────────────────
+// Avoids shelling out on every click; TTL matches typical git fetch cadence.
+let branchCache = null; // { data: { branches: string[] }, expiresAt: number }
+
+// Limiter precedes authenticateDeploy on every route so CodeQL's
+// js/missing-rate-limiting detector sees it before the authorization step.
+const deployReadLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           60,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-read' }),
+});
+
+const deployWriteLimit = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           10,
+  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+  skip:            exemptIfTrusted,
+  message:         { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  validate:        { positiveHits: false },
+  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-write' }),
+});
+
+const REPO_DIR        = process.env.REPO_DIR || '/repo';
+const DEPLOY_ENV      = process.env.DEPLOY_ENV;
+const DEPLOY_LOG      = `/app/logs/${DEPLOY_ENV}-deploy.log`;
+const DEPLOY_BRANCH   = DEPLOY_ENV === 'prod' ? 'main' : 'dev';
 
 // 7–40 hex chars — covers both short and full SHAs
-const SHA_RE = /^[0-9a-f]{7,40}$/i;
+const SHA_RE    = /^[0-9a-f]{7,40}$/i;
+const BRANCH_RE = /^[\w./-]+$/;
 
-async function scriptExists() {
-  return fs.access(DEPLOY_SCRIPT).then(() => true).catch(() => false);
+// Byte offset at which the current (or most recent) deploy started in DEPLOY_LOG.
+// Used by GET /stream so the frontend can resume after a container restart.
+let currentDeployFromByte = 0;
+
+async function queueDirExists() {
+  // Read env var at call time so tests can override it without module reload
+  const dir = process.env.DEPLOY_QUEUE_DIR || '/deploy-queue';
+  return fs.access(dir).then(() => true).catch(() => false);
 }
 
 async function recentSHAs() {
-  const out = await spawnPromise('git', ['log', '--format=%H', '-20', 'origin/main'], { cwd: REPO_DIR });
+  const out = await spawnPromise('git', ['log', '--format=%H', '-20', `origin/${DEPLOY_BRANCH}`], { cwd: REPO_DIR });
   return out.trim().split('\n').filter(Boolean);
 }
 
-// Sends SSE lines from an async iterable, then closes the response
+// Generic SSE streamer for async iterables (used by /fetch)
 async function streamToSSE(res, iter) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -49,19 +86,92 @@ async function streamToSSE(res, iter) {
   res.end();
 }
 
-// ── GET /api/deploy/status ────────────────────────────────────────────────────────────
+// Writes a queue trigger and streams the deploy log file as SSE.
+// The host daemon picks up the trigger within ~2s and writes to DEPLOY_LOG.
+async function streamQueuedDeploy(res, env, rollbackSha = null) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
 
-router.get('/status', authenticate, async (req, res) => {
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  // Snapshot log size before triggering so tail starts from this run's output only
+  let fromByte = 0;
   try {
-    // Fetch silently — ignore errors (offline / no remote access in dev)
-    await spawnPromise('git', ['fetch', 'origin', 'main'], { cwd: REPO_DIR }).catch(() => {});
+    fromByte = (await fs.stat(DEPLOY_LOG)).size;
+  } catch { /* log may not exist yet — tail from 0 */ }
+  currentDeployFromByte = fromByte;
+
+  await writeQueueTrigger(env, rollbackSha);
+  send({ type: 'started', fromByte });
+  // 'info' (not 'line'): this message is synthetic — not in the log file — so
+  // the frontend must not count it when computing how many lines to skip on
+  // resume after a container restart.
+  send({ type: 'info', text: '[admin] Deploy queued — daemon will pick it up within ~2s…' });
+
+  const ac = new AbortController();
+  res.on('close', () => ac.abort());
+
+  // SSE comment heartbeat: keeps intermediaries (nginx proxy_read_timeout,
+  // default 60s) from dropping the connection during quiet log periods —
+  // e.g. while the daemon has not yet picked up the trigger. Comment lines
+  // (leading ':') are ignored by SSE clients and our frontend parser.
+  const heartbeat = setInterval(() => res.write(': hb\n\n'), 15_000);
+
+  try {
+    for await (const line of tailLogFile(DEPLOY_LOG, fromByte, ac.signal)) {
+      send({ type: 'line', text: line });
+    }
+    send({ type: 'done' });
+  } catch (err) {
+    send({ type: 'error', text: err.message });
+  } finally {
+    clearInterval(heartbeat);
+  }
+  res.end();
+}
+
+// ── GET /api/deploy/branches ──────────────────────────────────────────────────
+
+router.get('/branches', deployReadLimit, authenticateDeploy, async (req, res) => {
+  const now = Date.now();
+  if (branchCache && branchCache.expiresAt > now) {
+    logger.info('[deploy-branches] cache hit');
+    return res.json(branchCache.data);
+  }
+
+  logger.info('[deploy-branches] fetching remote branch list');
+  try {
+    const out = await spawnPromise(
+      'git', ['branch', '-r', '--sort=-committerdate'],
+      { cwd: REPO_DIR }
+    );
+    const branches = out.trim().split('\n')
+      .map(b => b.trim().replace(/^origin\//, ''))
+      .filter(b => b && b !== 'HEAD' && b !== 'main')
+      .slice(0, 20);
+
+    const data = { branches };
+    branchCache = { data, expiresAt: now + 60_000 };
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list branches', detail: err.message });
+  }
+});
+
+// ── GET /api/deploy/status ────────────────────────────────────────────────────
+
+router.get('/status', deployReadLimit, authenticateDeploy, async (req, res) => {
+  try {
+    await spawnPromise('git', ['fetch', 'origin', DEPLOY_BRANCH], { cwd: REPO_DIR }).catch(() => {});
 
     const [branch, fullSha, message, date, behindRaw] = await Promise.all([
-      spawnPromise('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: REPO_DIR }),
-      spawnPromise('git', ['rev-parse', 'HEAD'],                 { cwd: REPO_DIR }),
-      spawnPromise('git', ['log', '-1', '--format=%s', 'HEAD'],  { cwd: REPO_DIR }),
-      spawnPromise('git', ['log', '-1', '--format=%ci', 'HEAD'], { cwd: REPO_DIR }),
-      spawnPromise('git', ['rev-list', '--count', 'HEAD..origin/main'], { cwd: REPO_DIR }).catch(() => '0'),
+      spawnPromise('git', ['rev-parse', '--abbrev-ref', 'HEAD'],                { cwd: REPO_DIR }),
+      spawnPromise('git', ['rev-parse', 'HEAD'],                                { cwd: REPO_DIR }),
+      spawnPromise('git', ['log', '-1', '--format=%s', 'HEAD'],                 { cwd: REPO_DIR }),
+      spawnPromise('git', ['log', '-1', '--format=%ci', 'HEAD'],                { cwd: REPO_DIR }),
+      spawnPromise('git', ['rev-list', '--count', `HEAD..origin/${DEPLOY_BRANCH}`], { cwd: REPO_DIR }).catch(() => '0'),
     ]);
 
     const behind = parseInt(behindRaw.trim(), 10) || 0;
@@ -71,27 +181,65 @@ router.get('/status', authenticate, async (req, res) => {
       head:       { sha: fullSha.trim().slice(0, 7), full_sha: fullSha.trim(), message: message.trim(), date: date.trim() },
       behind,
       up_to_date: behind === 0,
-      can_deploy: await scriptExists(),
+      can_deploy: await queueDirExists(),
     });
   } catch (err) {
-    // Git commands failing in dev is expected — return read-only status
     res.status(200).json({
-      branch:     'unknown',
-      head:       { sha: '?', full_sha: '?', message: 'Git unavailable', date: '' },
-      behind:     0,
+      branch:    'unknown',
+      head:      { sha: '?', full_sha: '?', message: 'Git unavailable', date: '' },
+      behind:    0,
       up_to_date: false,
       can_deploy: false,
-      git_error:  err.message,
+      git_error: err.message,
     });
   }
 });
 
-// ── GET /api/deploy/history ───────────────────────────────────────────────────────────
+// ── GET /api/deploy/stream ────────────────────────────────────────────────────
+// Resume streaming the in-progress deploy log after a container restart.
+// Tails from currentDeployFromByte — set when the deploy was triggered —
+// so the frontend reconnects to exactly this run without passing a byte offset.
 
-router.get('/history', authenticate, async (req, res) => {
+router.get('/stream', deployReadLimit, authenticateDeploy, async (req, res) => {
+  const fromByte = Math.max(0, parseInt(req.query.fromByte) || 0);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const ac   = new AbortController();
+  res.on('close', () => ac.abort());
+
+  const heartbeat = setInterval(() => res.write(': hb\n\n'), 15_000);
   try {
+    for await (const line of tailLogFile(DEPLOY_LOG, fromByte, ac.signal)) {
+      send({ type: 'line', text: line });
+    }
+    send({ type: 'done' });
+  } catch (err) {
+    send({ type: 'error', text: err.message });
+  } finally {
+    clearInterval(heartbeat);
+  }
+  res.end();
+});
+
+// ── GET /api/deploy/history ───────────────────────────────────────────────────
+
+router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => {
+  try {
+    const branchParam = typeof req.query.branch === 'string' ? req.query.branch : undefined;
+
+    if (branchParam !== undefined && (!BRANCH_RE.test(branchParam) || branchParam.includes('..'))) {
+      return res.status(400).json({ error: 'Invalid branch name' });
+    }
+
+    const resolvedBranch = branchParam || DEPLOY_BRANCH;
+
     const gitOut = await spawnPromise(
-      'git', ['log', '--format=%H|%h|%s|%ci', '-10', 'origin/main'],
+      'git', ['log', '--format=%H|%h|%s|%ci', '-20', `origin/${resolvedBranch}`],
       { cwd: REPO_DIR }
     ).catch(() => '');
 
@@ -100,68 +248,56 @@ router.get('/history', authenticate, async (req, res) => {
       return { sha, short_sha, message, date };
     });
 
-    let deployLog = [];
+    let deploy_runs = [];
     try {
       const raw = await fs.readFile(DEPLOY_LOG, 'utf8');
-      // Strip ANSI escape codes, then parse [YYYY-MM-DD HH:MM:SS] <message>
-      // eslint-disable-next-line no-control-regex
-      const stripAnsi = s => s.replace(/\x1b\[[0-9;]*m/g, '');
-      deployLog = raw.trim().split('\n').filter(Boolean)
-        .slice(-20).reverse()
-        .map(l => {
-          const clean = stripAnsi(l).trim();
-          const m = clean.match(/^\[([^\]]+)\]\s*(.*)$/);
-          return m ? { ts: m[1], detail: m[2] } : { ts: '', detail: clean };
-        })
-        .filter(e => e.detail); // skip blank separator lines
+      deploy_runs = parseDeployRuns(raw);
     } catch { /* log file may not exist yet */ }
 
-    res.json({ commits, deploy_log: deployLog });
-  } catch (err) {
-    // Git not available in dev — return empty history gracefully
-    res.json({ commits: [], deploy_log: [] });
+    res.json({ commits, deploy_runs, branch: resolvedBranch });
+  } catch {
+    res.json({ commits: [], deploy_runs: [] });
   }
 });
 
-// ── POST /api/deploy/fetch ───────────────────────────────────────────────────────────
+// ── POST /api/deploy/fetch ────────────────────────────────────────────────────
 
-router.post('/fetch', authenticate, async (req, res) => {
+router.post('/fetch', deployWriteLimit, authenticateDeploy, async (req, res) => {
   await logAudit(req, 'deploy.fetch', 'deploy', null, { env: DEPLOY_ENV });
   await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
 });
 
-// ── POST /api/deploy ─────────────────────────────────────────────────────────────────────
+// ── POST /api/deploy ──────────────────────────────────────────────────────────
 
-router.post('/', authenticate, async (req, res) => {
-  if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
+router.post('/', deployWriteLimit, authenticateDeploy, async (req, res) => {
+  if (!await queueDirExists()) {
+    return res.status(400).json({ error: 'Deploy queue not mounted — check DEPLOY_QUEUE_DIR and docker-compose.yml' });
   }
   await logAudit(req, 'deploy.start', 'deploy', null, { env: DEPLOY_ENV });
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV], { cwd: REPO_DIR }));
+  await streamQueuedDeploy(res, DEPLOY_ENV);
 });
 
-// ── POST /api/deploy/rollback ────────────────────────────────────────────────────────────
+// ── POST /api/deploy/rollback ─────────────────────────────────────────────────
 
-router.post('/rollback', authenticate, async (req, res) => {
+router.post('/rollback', deployWriteLimit, authenticateDeploy, async (req, res) => {
   const { sha } = req.body || {};
 
   if (!sha || !SHA_RE.test(sha)) {
     return res.status(400).json({ error: 'Invalid SHA format' });
   }
 
-  // Validate SHA exists in recent history before touching anything
   const known = await recentSHAs().catch(() => []);
   const valid = known.some(s => s === sha || s.startsWith(sha) || sha === s.slice(0, sha.length));
   if (!valid) {
     return res.status(400).json({ error: 'SHA not found in recent commit history — rollback rejected' });
   }
 
-  if (!await scriptExists()) {
-    return res.status(400).json({ error: 'Deploy script not found — check DEPLOY_ENV and that deploy.sh is present' });
+  if (!await queueDirExists()) {
+    return res.status(400).json({ error: 'Deploy queue not mounted — check DEPLOY_QUEUE_DIR and docker-compose.yml' });
   }
 
   await logAudit(req, 'deploy.rollback', 'deploy', null, { env: DEPLOY_ENV, sha });
-  await streamToSSE(res, spawnStream('bash', [DEPLOY_SCRIPT, '--env', DEPLOY_ENV, '--rollback', sha], { cwd: REPO_DIR }));
+  await streamQueuedDeploy(res, DEPLOY_ENV, sha);
 });
 
 export default router;
