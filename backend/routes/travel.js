@@ -378,11 +378,16 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       continue;
     }
 
-    const postDate = (row.post_date ?? '').trim() || null;
-    if (postDate && !/^\d{4}-\d{2}-\d{2}$/.test(postDate)) {
-      skipped++;
-      errors.push({ row: rowNum, reason: `post_date "${postDate}" must be YYYY-MM-DD` });
-      continue;
+    let postDate = (row.post_date ?? '').trim() || null;
+    if (postDate) {
+      // Accept DD/MM/YYYY (Excel default) and normalise to YYYY-MM-DD
+      const dmyMatch = postDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (dmyMatch) postDate = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(postDate)) {
+        skipped++;
+        errors.push({ row: rowNum, reason: `post_date "${row.post_date}" must be YYYY-MM-DD or DD/MM/YYYY` });
+        continue;
+      }
     }
 
     const latRaw = (row.lat ?? '').trim();
