@@ -11,11 +11,66 @@
  * Log prefix: [scheduler/ai-blog]
  */
 
+import { execFileSync }        from 'child_process';
 import cron from 'node-cron';
 import { pool }                from './db/pool.js';
 import { logger }              from './utils/logger.js';
 import { generateAiBlogPost }  from './utils/aiGenerate.js';
 import { slugify, findUniqueSlug } from './utils/slugify.js';
+
+// ── Activity context ──────────────────────────────────────────────────────────
+
+/**
+ * Collect today's git commits and merged GitHub PRs.
+ * Returns a formatted context string, or null if there was no activity.
+ * Failures are non-fatal: log a warning and return null so generation still
+ * has the option to fall back to a generic draft.
+ */
+async function buildDailyContext() {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  // Today's commits (since midnight UTC)
+  let commits = '';
+  try {
+    commits = execFileSync('git', ['log', '--oneline', '--since=midnight', '--format=%h %s'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    }).trim();
+  } catch (err) {
+    logger.warn({ err: err.message }, '[scheduler/ai-blog] git log failed — skipping commit context');
+  }
+
+  // PRs merged today via GitHub API
+  let mergedPrs = [];
+  try {
+    const token   = process.env.GITHUB_TOKEN;
+    const headers = { 'User-Agent': 'MyPortfolioSite-scheduler', Accept: 'application/vnd.github+json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const url  = 'https://api.github.com/repos/AndyRKeys/MyPortfolioSite/pulls?state=closed&sort=updated&direction=desc&per_page=30';
+    const res  = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+    if (res.ok) {
+      const prs = await res.json();
+      mergedPrs = prs.filter(pr => pr.merged_at && pr.merged_at.startsWith(today))
+                     .map(pr => `#${pr.number}: ${pr.title}`);
+    } else {
+      logger.warn({ status: res.status }, '[scheduler/ai-blog] GitHub API non-OK — skipping PR context');
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, '[scheduler/ai-blog] GitHub API call failed — skipping PR context');
+  }
+
+  const commitCount = commits ? commits.split('\n').length : 0;
+  const prCount     = mergedPrs.length;
+
+  logger.debug({ commitCount, prCount, today }, '[scheduler/ai-blog] Daily activity context built');
+
+  if (!commits && prCount === 0) return null;
+
+  const parts = [];
+  if (commits)      parts.push(`Today's commits:\n${commits}`);
+  if (prCount > 0)  parts.push(`Merged PRs today:\n${mergedPrs.join('\n')}`);
+  return parts.join('\n\n');
+}
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 
@@ -65,7 +120,12 @@ export function startScheduler() {
   return cron.schedule(schedule.trim(), async () => {
     logger.info({ schedule }, '[scheduler/ai-blog] Scheduled generation tick fired');
     try {
-      const { title, body_markdown } = await generateAiBlogPost(null, 'scheduler');
+      const context = await buildDailyContext();
+      if (!context) {
+        logger.info('[scheduler/ai-blog] No git or PR activity today — skipping draft generation');
+        return;
+      }
+      const { title, body_markdown } = await generateAiBlogPost(context, 'scheduler');
       const draft = await saveDraft(title, body_markdown);
       logger.info(
         { draftId: draft.id, title: draft.title, slug: draft.slug },
