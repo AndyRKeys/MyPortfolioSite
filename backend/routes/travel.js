@@ -395,7 +395,12 @@ function removeUploadedFiles(files, reason) {
 // Response: { uploaded: [{ url, type, status }], errors: [{ file, error }] }
 router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrapMulter(mediaUpload.array('photos', MAX_BULK_FILES)), async (req, res, next) => {
   const { id } = req.params;
-  const files  = req.files || [];
+  const rawFiles = req.files;
+  if (rawFiles != null && !Array.isArray(rawFiles)) {
+    logger.warn({ postId: id, filesType: typeof rawFiles }, '[travel/bulk-upload] Invalid files payload type');
+    return res.status(400).json({ error: 'Invalid files payload' });
+  }
+  const files = Array.isArray(rawFiles) ? rawFiles : [];
 
   logger.info({ postId: id, fileCount: files.length }, '[travel/bulk-upload] Received bulk upload request');
 
