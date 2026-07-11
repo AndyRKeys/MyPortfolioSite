@@ -18,7 +18,7 @@
  *   [public-pages] status=OK|FAIL passed=N failed=N total=N
  */
 
-import { test, expect, chromium } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 // ── Static pages ──────────────────────────────────────────────────────────────
 
