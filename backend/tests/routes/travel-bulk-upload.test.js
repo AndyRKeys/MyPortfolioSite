@@ -61,7 +61,9 @@ const smallJpeg = Buffer.from(
   'base64',
 );
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { pool } = await import('../../db/pool.js');
+  pool.query.mockReset().mockResolvedValue({ rows: [] });
   mockClient.query.mockReset().mockResolvedValue({ rows: [] });
   mockClient.release.mockReset();
 });
@@ -175,5 +177,33 @@ describe('POST /travel/:id/photos/bulk — happy path', () => {
     expect(res.status).toBe(200);
     expect(res.body.uploaded).toHaveLength(2);
     expect(res.body.errors).toHaveLength(0);
+  });
+});
+
+// ── Partial success (DB-layer failure) ───────────────────────────────────────
+
+describe("POST /travel/:id/photos/bulk — partial success", () => {
+  it("returns partial success when one file inserts and one fails at the DB layer", async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    // Call sequence: memory check → order_index → INSERT #1 (ok) → INSERT #2 (fail) → UPDATE posts primary media → logAudit
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 'post-3' }] })  // memory exists
+      .mockResolvedValueOnce({ rows: [{ max_idx: 0 }] })     // order_index
+      .mockResolvedValueOnce({ rows: [] })                    // INSERT #1 succeeds
+      .mockRejectedValueOnce(new Error('DB error'))           // INSERT #2 fails
+      .mockResolvedValueOnce({ rows: [] })                    // UPDATE posts primary media
+      .mockResolvedValueOnce({ rows: [] });                   // logAudit
+
+    const res = await request(app)
+      .post('/travel/post-3/photos/bulk')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('photos', smallJpeg, { filename: 'photo1.jpg', contentType: 'image/jpeg' })
+      .attach('photos', smallJpeg, { filename: 'photo2.jpg', contentType: 'image/jpeg' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.uploaded).toHaveLength(1);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].error).toMatch(/DB error/i);
   });
 });

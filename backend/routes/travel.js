@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { pool } from '../db/pool.js';
@@ -470,6 +471,9 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
       uploaded.push({ url, type: file.mimetype, status: 'pending' });
     } catch (err) {
       logger.error({ err: err.message, file: file.filename, postId: id }, '[travel/bulk-upload] failed to insert media row');
+      if (file.path) fs.unlink(file.path, unlinkErr => {
+        if (unlinkErr) logger.warn({ err: unlinkErr.message, file: file.filename }, '[travel/bulk-upload] failed to remove orphaned file after insert error');
+      });
       errors.push({ file: file.originalname, error: err.message });
     }
   }
