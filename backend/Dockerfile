@@ -1,42 +1,54 @@
-# Single unified image — includes devDependencies (vitest, puppeteer) so that
-# `docker compose exec backend npm test` and post-deploy error-logger checks
+# Single unified image — includes devDependencies (vitest, puppeteer, playwright) so that
+# `docker compose exec backend npm test` and post-deploy browser checks
 # work in all environments. Not resource-constrained; image size is acceptable.
-FROM node:20-alpine
+#
+# Debian bookworm-slim base: Alpine (musl libc) cannot run Playwright's patched
+# Firefox build, which is compiled for glibc. Switched in #527.
+FROM node:20-bookworm-slim
 
-# Install system dependencies for Puppeteer/Playwright (headless browser testing)
-RUN apk add --no-cache \
-  ca-certificates \
-  chromium \
-  firefox-esr \
-  nss \
-  freetype \
-  harfbuzz \
-  ttf-freefont \
-  libstdc++ \
-  git \
-  docker-cli \
-  docker-compose \
-  ffmpeg \
-  vips
+# System tools + system Chromium (for Puppeteer's five legacy scripts)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    chromium \
+    git \
+    ffmpeg \
+    libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Docker CLI + Compose plugin (official Docker apt repo)
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
 
 # /repo is a bind-mount owned by the host user; container runs as root.
 # Git 2.35+ (CVE-2022-24765) rejects git commands in directories not owned
 # by the current user unless explicitly allowed.
 RUN git config --global --add safe.directory /repo
 
-# Tell Puppeteer to use system Chromium instead of downloading its own
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+# Puppeteer: use system Chromium (at /usr/bin/chromium on Debian)
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Tell Playwright to use system browsers instead of downloading its own bundles
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH=/usr/bin/firefox-esr
+# Playwright: skip auto-download during npm install (explicit install below)
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+WORKDIR /app
 
 COPY package*.json ./
 RUN npm install --silent
+
+# Install Playwright's managed Chromium + Firefox (patched builds) with all
+# required system libraries. --with-deps runs apt to satisfy browser deps.
+RUN npx playwright install --with-deps chromium firefox
 
 COPY . .
 
