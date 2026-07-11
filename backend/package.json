@@ -11,12 +11,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:error-logger": "node ./scripts/tests/test-error-logger.js",
-    "test:error-logger:all-pages": "playwright test tests/e2e/error-logger-all-pages.spec.js --project=chromium --project=firefox",
+    "test:error-logger:all-pages": "node ./scripts/tests/run-e2e.js tests/e2e/error-logger-all-pages.spec.js --project=chromium --project=firefox",
     "test:error-logger:browser": "node ./scripts/tests/test-error-logger-browser.js",
     "test:csp-violations": "node ./scripts/tests/test-csp-violations.js",
     "test:admin-e2e": "node ./scripts/tests/test-admin-e2e.js",
     "test:admin-e2e-csp": "node ./scripts/tests/test-admin-e2e-csp.js",
-    "test:public-pages": "playwright test tests/e2e/public-pages.spec.js --project=chromium --project=firefox",
+    "test:public-pages": "node ./scripts/tests/run-e2e.js tests/e2e/public-pages.spec.js --project=chromium --project=firefox",
     "test:e2e": "playwright test"
   },
   "dependencies": {
