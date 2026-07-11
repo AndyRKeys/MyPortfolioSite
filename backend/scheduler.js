@@ -35,6 +35,7 @@ async function buildDailyContext() {
     commits = execFileSync('git', ['log', '--oneline', '--since=midnight', '--format=%h %s'], {
       encoding: 'utf8',
       timeout: 10_000,
+      cwd: process.env.REPO_DIR || '/repo',
     }).trim();
   } catch (err) {
     logger.warn({ err: err.message }, '[scheduler/ai-blog] git log failed — skipping commit context');

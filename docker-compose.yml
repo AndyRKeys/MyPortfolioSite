@@ -81,6 +81,12 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      AI_BLOG_SCHEDULE: ${AI_BLOG_SCHEDULE:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ERROR_ALERT_THRESHOLD: ${ERROR_ALERT_THRESHOLD:-20}
+      ERROR_ALERT_WINDOW_MS: ${ERROR_ALERT_WINDOW_MS:-900000}
+      ERROR_WEBHOOK_URL: ${ERROR_WEBHOOK_URL:-}
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:-}
     volumes:
       - uploads_data:/app/uploads
       - .:/repo  # repo root — needed by deploy route for git commands and deploy script
