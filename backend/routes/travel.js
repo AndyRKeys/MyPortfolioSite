@@ -397,14 +397,14 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
     const row    = rows[i];
     const rowNum = i + 2; // header is row 1; data starts at row 2
 
-    const title = (row.title ?? '').trim();
+    const title = String(row.title ?? '').trim();
     if (!title) {
       skipped++;
       errors.push({ row: rowNum, reason: 'title is required' });
       continue;
     }
 
-    let postDate = (row.post_date ?? '').trim() || null;
+    let postDate = String(row.post_date ?? '').trim() || null;
     if (postDate) {
       // Accept DD/MM/YYYY (Excel default) and normalise to YYYY-MM-DD
       const dmyMatch = postDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -416,8 +416,8 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       }
     }
 
-    const latRaw = (row.lat ?? '').trim();
-    const lngRaw = (row.lng ?? '').trim();
+    const latRaw = String(row.lat ?? '').trim();
+    const lngRaw = String(row.lng ?? '').trim();
     const lat    = latRaw ? parseFloat(latRaw) : null;
     const lng    = lngRaw ? parseFloat(lngRaw) : null;
     if ((latRaw && isNaN(lat)) || (lngRaw && isNaN(lng))) {
@@ -426,9 +426,9 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       continue;
     }
 
-    const location    = (row.location ?? '').trim() || null;
-    const notes       = (row.notes ?? '').trim() || '';
-    const publishRaw  = (row.publish ?? '').trim().toLowerCase();
+    const location    = String(row.location ?? '').trim() || null;
+    const notes       = String(row.notes ?? '').trim() || '';
+    const publishRaw  = String(row.publish ?? '').trim().toLowerCase();
     const publishedAt = publishRaw === 'true' ? new Date() : null;
 
     const client = await pool.connect();
