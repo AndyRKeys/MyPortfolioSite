@@ -126,7 +126,18 @@ export function startScheduler() {
         logger.info('[scheduler/ai-blog] No git or PR activity today — skipping draft generation');
         return;
       }
-      const { title, body_markdown } = await generateAiBlogPost(context, 'scheduler');
+      let { title, body_markdown } = await generateAiBlogPost(context, 'scheduler');
+      if (!title) {
+        // Model didn't return a TITLE: line — derive from first commit subject.
+        const firstCommit = context.match(/^[a-f0-9]+ (.+)$/m);
+        const subject     = firstCommit
+          ? firstCommit[1].replace(/^(feat|fix|refactor|chore|docs|test|style)(\([^)]+\))?:\s*/i, '')
+          : null;
+        title = subject
+          ? `Dev Session — ${subject.slice(0, 60)}`
+          : `Dev Session — ${new Date().toISOString().split('T')[0]}`;
+        logger.info({ title }, '[scheduler/ai-blog] Model did not return a title — derived fallback from commit context');
+      }
       const draft = await saveDraft(title, body_markdown);
       logger.info(
         { draftId: draft.id, title: draft.title, slug: draft.slug },

@@ -49,23 +49,55 @@ Keep it concise and honest. No marketing language. Write as if explaining to a f
 
 /**
  * Parse the raw LLM response into a title and body_markdown.
- * Expects the model to return:
- *   TITLE: <title>
- *   ---
- *   <body starting with _italic summary_>
  *
- * Tolerates missing separator — returns empty title and full text as body.
+ * Strategy 1 (preferred): TITLE: <title>\n---\n<body>
+ * Strategy 2 (fallback):  # Markdown heading on the first non-empty line
+ * Strategy 3 (fallback):  body returned as-is, title empty
+ *
+ * Caller is responsible for substituting a sensible default title when empty.
  */
 export function parseAiResponse(raw) {
-  const separatorIdx = raw.indexOf('\n---\n');
-  let title         = '';
-  let body_markdown = raw.trim();
+  const text = raw.trim();
+
+  // Strategy 1: TITLE: ... \n---\n separator (case-insensitive; first line only)
+  const separatorIdx = text.indexOf('\n---\n');
   if (separatorIdx !== -1) {
-    const titleLine = raw.slice(0, separatorIdx).trim();
-    title           = titleLine.startsWith('TITLE:') ? titleLine.slice(6).trim() : titleLine;
-    body_markdown   = raw.slice(separatorIdx + 5).trim();
+    const beforeSep  = text.slice(0, separatorIdx);
+    const firstLine  = beforeSep.split('\n').map(l => l.trim()).find(l => l.length > 0) || '';
+    const titleMatch = firstLine.match(/^title:\s*(.+)/i);
+    const title      = titleMatch ? titleMatch[1].trim() : firstLine;
+    if (title) {
+      return { title, body_markdown: text.slice(separatorIdx + 5).trim() };
+    }
   }
-  return { title, body_markdown };
+
+  // Strategy 2: # Markdown heading at the top
+  const headingMatch = text.match(/^#\s+(.+)/m);
+  if (headingMatch && text.indexOf(headingMatch[0]) < 120) {
+    const title         = headingMatch[1].trim();
+    const body_markdown = text.slice(text.indexOf(headingMatch[0]) + headingMatch[0].length).trim();
+    return { title, body_markdown };
+  }
+
+  // Strategy 3: response starts with --- (model inverted the format)
+  // Find the first non-empty, non-italic line before the first ## section heading
+  if (text.startsWith('---')) {
+    const afterSep = text.replace(/^---\s*\n/, '').trim();
+    const firstSectionIdx = afterSep.search(/^##\s/m);
+    const preamble = firstSectionIdx !== -1 ? afterSep.slice(0, firstSectionIdx) : afterSep.slice(0, 200);
+    const titleCandidate = preamble.split('\n')
+      .map(l => l.trim())
+      .find(l => l.length > 0 && !l.startsWith('_') && !l.startsWith('#'));
+    if (titleCandidate) {
+      const body_markdown = firstSectionIdx !== -1
+        ? afterSep.slice(firstSectionIdx).trim()
+        : afterSep.replace(titleCandidate, '').trim();
+      return { title: titleCandidate, body_markdown };
+    }
+  }
+
+  // Strategy 4: no title found — return full text as body
+  return { title: '', body_markdown: text };
 }
 
 /**
@@ -73,16 +105,36 @@ export function parseAiResponse(raw) {
  */
 export function buildUserMessage(context = null) {
   return `Write an AI dev blog post about today's session.
-${context ? `Context from the developer: ${context}` : 'No specific context provided — generate a plausible draft based on common portfolio site development tasks.'}
+${context ? `Context from the developer:\n${context}` : 'No specific context provided — generate a plausible draft based on common portfolio site development tasks.'}
 
-Return ONLY the blog post content — start with the italic one-line summary, then the sections. Do not include a title heading like "# Title" at the top. The first line is the italicized summary.
+Your response MUST follow this exact format — the TITLE line and --- separator are required:
 
-For the post title (a separate field in the form), suggest: "Day N — [short description]" where N is a reasonable session number.
-
-Format your response as:
-TITLE: <suggested title here>
+TITLE: Day N — [short description]
 ---
-<blog post body starting with _italic summary_>`;
+_One-line italic summary of the session._
+
+## What we worked on
+
+Brief description of the issue or feature tackled.
+
+## What we built
+
+- Key change one
+- Key change two
+
+## What we broke / what was tricky
+
+Honest note about obstacles. If nothing broke, write "Smooth session — no major obstacles."
+
+## What we learned
+
+One insight worth capturing.
+
+## Next up
+
+What is logically next based on what was built.
+
+Output ONLY the formatted response above. No preamble, no explanation.`;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
