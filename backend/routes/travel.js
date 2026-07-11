@@ -11,15 +11,12 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
-import {
-  TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT,
-  MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME, MEDIA_JOB_NAME,
-} from '../utils/constants.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
 import { wrapMulter } from '../utils/wrapMulter.js';
 import { getBoss } from '../utils/boss.js';
-import { UPLOADS_ORIGINAL_DIR } from '../utils/paths.js';
+import { mediaUpload } from '../utils/mediaUpload.js';
 
 const router = Router();
 
@@ -380,35 +377,39 @@ const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish';
 
 const MAX_BULK_FILES = 20; // reasonable per-request cap
 
-const bulkPhotoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_ORIGINAL_DIR),
-  filename:    (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
-  },
-});
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const bulkPhotoUpload = multer({
-  storage:    bulkPhotoStorage,
-  limits:     { fileSize: MEDIA_MAX_FILE_SIZE },
-  fileFilter: (_req, file, cb) => {
-    MEDIA_ALLOWED_MIME.has(file.mimetype)
-      ? cb(null, true)
-      : cb(new Error('File type not allowed'));
-  },
-});
+// Remove files multer already wrote to disk when the request is rejected
+// after upload (unknown memory, DB failure). Non-fatal: failures are logged.
+function removeUploadedFiles(files, reason) {
+  for (const file of files) {
+    if (!file.path) continue;
+    fs.unlink(file.path, unlinkErr => {
+      if (unlinkErr) logger.warn({ err: unlinkErr.message, file: file.filename, reason }, '[travel/bulk-upload] failed to remove orphaned file');
+    });
+  }
+}
 
 // Admin: bulk upload photos/videos to an existing travel memory.
 // Accepts multipart/form-data with a "photos" field (up to MAX_BULK_FILES files).
 // Response: { uploaded: [{ url, type, status }], errors: [{ file, error }] }
-router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrapMulter(bulkPhotoUpload.array('photos', MAX_BULK_FILES)), async (req, res, next) => {
+router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrapMulter(mediaUpload.array('photos', MAX_BULK_FILES)), async (req, res, next) => {
   const { id } = req.params;
-  const files   = req.files || [];
+  const files  = req.files || [];
 
   logger.info({ postId: id, fileCount: files.length }, '[travel/bulk-upload] Received bulk upload request');
 
   if (!files.length) {
     return res.status(400).json({ error: 'No files received' });
+  }
+
+  // Reject malformed ids up front — posts.id is a UUID, so passing a
+  // non-UUID string straight to Postgres would raise 22P02 and surface
+  // as a 500 instead of a clean 404.
+  if (!UUID_RE.test(id)) {
+    logger.warn({ postId: id }, '[travel/bulk-upload] Invalid memory id — not a UUID');
+    removeUploadedFiles(files, 'invalid id');
+    return res.status(404).json({ error: 'Memory not found' });
   }
 
   // Verify the travel memory exists before writing any rows
@@ -419,10 +420,12 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
     );
     if (!check.rows.length) {
       logger.warn({ postId: id }, '[travel/bulk-upload] Travel memory not found');
+      removeUploadedFiles(files, 'memory not found');
       return res.status(404).json({ error: 'Memory not found' });
     }
   } catch (err) {
     logger.error({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to verify travel memory');
+    removeUploadedFiles(files, 'memory check failed');
     return next(err);
   }
 
@@ -460,7 +463,11 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
             { filePath: file.path, mimeType: file.mimetype },
             { retryLimit: 3, retryDelay: 0, retryBackoff: true },
           );
-          logger.info({ file: file.filename, mime: file.mimetype, jobId, postId: id }, '[travel/bulk-upload] job enqueued');
+          if (jobId) {
+            logger.info({ file: file.filename, mime: file.mimetype, jobId, postId: id }, '[travel/bulk-upload] job enqueued');
+          } else {
+            logger.warn({ file: file.filename }, '[travel/bulk-upload] boss.send returned null — queue may not exist yet');
+          }
         } else {
           logger.warn({ file: file.filename }, '[travel/bulk-upload] boss not ready — skipping job enqueue');
         }
@@ -471,10 +478,10 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
       uploaded.push({ url, type: file.mimetype, status: 'pending' });
     } catch (err) {
       logger.error({ err: err.message, file: file.filename, postId: id }, '[travel/bulk-upload] failed to insert media row');
-      if (file.path) fs.unlink(file.path, unlinkErr => {
-        if (unlinkErr) logger.warn({ err: unlinkErr.message, file: file.filename }, '[travel/bulk-upload] failed to remove orphaned file after insert error');
-      });
-      errors.push({ file: file.originalname, error: err.message });
+      removeUploadedFiles([file], 'insert failed');
+      // Generic client message — raw DB error details stay in logs only,
+      // matching the errorHandler policy for 5xx responses.
+      errors.push({ file: file.originalname, error: 'Failed to save file — see server logs' });
     }
   }
 

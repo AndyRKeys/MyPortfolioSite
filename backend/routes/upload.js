@@ -1,5 +1,4 @@
 import { Router }   from 'express';
-import multer       from 'multer';
 import path         from 'path';
 import { rateLimit } from 'express-rate-limit';
 import { authenticate }   from '../middleware/authenticate.js';
@@ -10,9 +9,9 @@ import { getBoss }        from '../utils/boss.js';
 import { logger }         from '../utils/logger.js';
 import { UPLOADS_ORIGINAL_DIR } from '../utils/paths.js';
 import { wrapMulter }           from '../utils/wrapMulter.js';
+import { mediaUpload }          from '../utils/mediaUpload.js';
 import {
   UPLOAD_RATE_WINDOW_MS, UPLOAD_RATE_LIMIT,
-  MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME,
   MEDIA_JOB_NAME,
 } from '../utils/constants.js';
 
@@ -30,29 +29,11 @@ const uploadRateLimit = rateLimit({
   store:           new PostgresStore({ windowMs: UPLOAD_RATE_WINDOW_MS, keyType: 'upload' }),
 });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_ORIGINAL_DIR),
-  filename:    (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits:     { fileSize: MEDIA_MAX_FILE_SIZE },
-  fileFilter: (_req, file, cb) => {
-    MEDIA_ALLOWED_MIME.has(file.mimetype)
-      ? cb(null, true)
-      : cb(new Error('File type not allowed'));
-  },
-});
-
 const router = Router();
 
 // ── POST / ────────────────────────────────────────────────────────────────────
 
-router.post('/', uploadRateLimit, authenticate, wrapMulter(upload.single('file')), async (req, res) => {
+router.post('/', uploadRateLimit, authenticate, wrapMulter(mediaUpload.single('file')), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file received' });
 
   const url = `/uploads/original/${req.file.filename}`;

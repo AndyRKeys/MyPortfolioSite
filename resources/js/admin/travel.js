@@ -100,14 +100,7 @@ function clearForm() {
     if (uploadStatus) uploadStatus.textContent = '';
 
     // Hide bulk upload section and reset its state
-    bulkFiles = [];
-    const bulkSection = document.getElementById('travel-bulk-upload-section');
-    if (bulkSection) bulkSection.classList.add('hidden');
-    const bulkLabel = document.getElementById('bulk-file-label');
-    if (bulkLabel) bulkLabel.textContent = 'No files chosen';
-    const bulkStatus = document.getElementById('travel-bulk-status');
-    if (bulkStatus) bulkStatus.textContent = '';
-    syncBulkUploadBtn();
+    resetBulkUploadSection(false);
 }
 
 // ── Saved memories list ───────────────────────────────────────────────────────
@@ -202,14 +195,7 @@ async function loadForEdit(memory) {
         if (uploadStatus) uploadStatus.textContent = '';
 
         // Show bulk upload section (only meaningful when editing a saved memory)
-        bulkFiles = [];
-        const bulkSection = document.getElementById('travel-bulk-upload-section');
-        if (bulkSection) bulkSection.classList.remove('hidden');
-        const bulkLabel = document.getElementById('bulk-file-label');
-        if (bulkLabel) bulkLabel.textContent = 'No files chosen';
-        const bulkStatusEl = document.getElementById('travel-bulk-status');
-        if (bulkStatusEl) bulkStatusEl.textContent = '';
-        syncBulkUploadBtn();
+        resetBulkUploadSection(true);
 
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
@@ -547,6 +533,19 @@ function syncBulkUploadBtn() {
     if (btn) btn.disabled = bulkFiles.length === 0;
 }
 
+// Reset the bulk upload section state and show/hide it. Hidden when creating
+// a new memory (no id to upload against); shown when editing a saved one.
+function resetBulkUploadSection(visible) {
+    bulkFiles = [];
+    const bulkSection = document.getElementById('travel-bulk-upload-section');
+    if (bulkSection) bulkSection.classList.toggle('hidden', !visible);
+    const bulkLabel = document.getElementById('travel-bulk-file-label');
+    if (bulkLabel) bulkLabel.textContent = 'No files chosen';
+    const bulkStatus = document.getElementById('travel-bulk-status');
+    if (bulkStatus) bulkStatus.textContent = '';
+    syncBulkUploadBtn();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initTravel() {
@@ -771,9 +770,9 @@ export function initTravel() {
     // ── Bulk photo/video upload (edit mode) ───────────────────────────────────
 
     const bulkFileInput = document.getElementById('travel-bulk-file');
-    const bulkFileBtn   = document.getElementById('bulk-file-btn');
+    const bulkFileBtn   = document.getElementById('travel-bulk-file-btn');
     const bulkUploadBtn = document.getElementById('travel-bulk-upload-btn');
-    const bulkFileLabel = document.getElementById('bulk-file-label');
+    const bulkFileLabel = document.getElementById('travel-bulk-file-label');
     const bulkStatusEl  = document.getElementById('travel-bulk-status');
 
     function setBulkStatus(text, isError = false) {

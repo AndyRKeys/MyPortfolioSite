@@ -1,6 +1,7 @@
 /**
  * Tests for POST /travel/:id/photos/bulk (#511)
- * Covers auth gate, file validation, happy path, and 404 for unknown memory.
+ * Covers auth gate, file validation (MIME, per-request cap), 404 for unknown
+ * or malformed memory ids, happy path, and partial success on DB failure.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
@@ -61,6 +62,11 @@ const smallJpeg = Buffer.from(
   'base64',
 );
 
+// Valid UUIDs — the route rejects malformed ids before any DB query
+const UUID_A = '11111111-1111-4111-8111-111111111111';
+const UUID_B = '22222222-2222-4222-8222-222222222222';
+const UUID_C = '33333333-3333-4333-8333-333333333333';
+
 beforeEach(async () => {
   const { pool } = await import('../../db/pool.js');
   pool.query.mockReset().mockResolvedValue({ rows: [] });
@@ -110,6 +116,17 @@ describe('POST /travel/:id/photos/bulk — file validation', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/not allowed/i);
   });
+
+  it('returns 400 when more than the per-request file cap is sent', async () => {
+    let req = request(app)
+      .post(`/travel/${UUID_A}/photos/bulk`)
+      .set('Authorization', `Bearer ${makeToken()}`);
+    for (let i = 0; i < 21; i++) {
+      req = req.attach('photos', smallJpeg, { filename: `photo${i}.jpg`, contentType: 'image/jpeg' });
+    }
+    const res = await req;
+    expect(res.status).toBe(400); // multer LIMIT_UNEXPECTED_FILE via wrapMulter
+  });
 });
 
 // ── 404 for unknown memory ────────────────────────────────────────────────────
@@ -120,11 +137,27 @@ describe('POST /travel/:id/photos/bulk — memory not found', () => {
     pool.query.mockResolvedValueOnce({ rows: [] }); // memory check returns nothing
 
     const res = await request(app)
-      .post('/travel/nonexistent/photos/bulk')
+      .post(`/travel/${UUID_A}/photos/bulk`)
       .set('Authorization', `Bearer ${makeToken()}`)
       .attach('photos', smallJpeg, { filename: 'photo.jpg', contentType: 'image/jpeg' });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/memory not found/i);
+  });
+
+  it('returns 404 for a malformed (non-UUID) id without querying the DB', async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    const res = await request(app)
+      .post('/travel/nonexistent-id-99999/photos/bulk')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('photos', smallJpeg, { filename: 'photo.jpg', contentType: 'image/jpeg' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/memory not found/i);
+    // Guard runs before any posts lookup — a raw non-UUID reaching Postgres
+    // would raise 22P02 and surface as a 500. (pool.query is still used by
+    // the rate-limit store, so filter for the posts query specifically.)
+    const postsQueries = pool.query.mock.calls.filter(([sql]) => /FROM posts/i.test(sql));
+    expect(postsQueries).toHaveLength(0);
   });
 });
 
@@ -136,14 +169,14 @@ describe('POST /travel/:id/photos/bulk — happy path', () => {
 
     // Call sequence: memory check → order_index query → INSERT post_media → UPDATE posts primary media → logAudit pool.query
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 'post-1' }] })      // memory exists
+      .mockResolvedValueOnce({ rows: [{ id: UUID_A }] })      // memory exists
       .mockResolvedValueOnce({ rows: [{ max_idx: -1 }] })        // order_index
       .mockResolvedValueOnce({ rows: [] })                        // INSERT post_media
       .mockResolvedValueOnce({ rows: [] })                        // UPDATE posts primary media
       .mockResolvedValueOnce({ rows: [] });                       // logAudit INSERT
 
     const res = await request(app)
-      .post('/travel/post-1/photos/bulk')
+      .post(`/travel/${UUID_A}/photos/bulk`)
       .set('Authorization', `Bearer ${makeToken()}`)
       .attach('photos', smallJpeg, { filename: 'photo.jpg', contentType: 'image/jpeg' });
 
@@ -161,7 +194,7 @@ describe('POST /travel/:id/photos/bulk — happy path', () => {
 
     // Two files: memory check, order_index, two INSERTs, UPDATE posts, logAudit
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 'post-2' }] })  // memory exists
+      .mockResolvedValueOnce({ rows: [{ id: UUID_B }] })  // memory exists
       .mockResolvedValueOnce({ rows: [{ max_idx: 0 }] })     // order_index
       .mockResolvedValueOnce({ rows: [] })                    // INSERT #1
       .mockResolvedValueOnce({ rows: [] })                    // INSERT #2
@@ -169,7 +202,7 @@ describe('POST /travel/:id/photos/bulk — happy path', () => {
       .mockResolvedValueOnce({ rows: [] });                   // logAudit
 
     const res = await request(app)
-      .post('/travel/post-2/photos/bulk')
+      .post(`/travel/${UUID_B}/photos/bulk`)
       .set('Authorization', `Bearer ${makeToken()}`)
       .attach('photos', smallJpeg, { filename: 'photo1.jpg', contentType: 'image/jpeg' })
       .attach('photos', smallJpeg, { filename: 'photo2.jpg', contentType: 'image/jpeg' });
@@ -188,7 +221,7 @@ describe("POST /travel/:id/photos/bulk — partial success", () => {
 
     // Call sequence: memory check → order_index → INSERT #1 (ok) → INSERT #2 (fail) → UPDATE posts primary media → logAudit
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 'post-3' }] })  // memory exists
+      .mockResolvedValueOnce({ rows: [{ id: UUID_C }] })  // memory exists
       .mockResolvedValueOnce({ rows: [{ max_idx: 0 }] })     // order_index
       .mockResolvedValueOnce({ rows: [] })                    // INSERT #1 succeeds
       .mockRejectedValueOnce(new Error('DB error'))           // INSERT #2 fails
@@ -196,7 +229,7 @@ describe("POST /travel/:id/photos/bulk — partial success", () => {
       .mockResolvedValueOnce({ rows: [] });                   // logAudit
 
     const res = await request(app)
-      .post('/travel/post-3/photos/bulk')
+      .post(`/travel/${UUID_C}/photos/bulk`)
       .set('Authorization', `Bearer ${makeToken()}`)
       .attach('photos', smallJpeg, { filename: 'photo1.jpg', contentType: 'image/jpeg' })
       .attach('photos', smallJpeg, { filename: 'photo2.jpg', contentType: 'image/jpeg' });
@@ -204,6 +237,6 @@ describe("POST /travel/:id/photos/bulk — partial success", () => {
     expect(res.status).toBe(200);
     expect(res.body.uploaded).toHaveLength(1);
     expect(res.body.errors).toHaveLength(1);
-    expect(res.body.errors[0].error).toMatch(/DB error/i);
+    expect(res.body.errors[0].error).toMatch(/failed to save/i); // generic message — raw DB error stays in logs
   });
 });

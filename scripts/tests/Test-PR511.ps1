@@ -35,30 +35,6 @@ if (-not $Token) {
 $headers = @{ Authorization = "Bearer $Token" }
 $skipCert = $Insecure.IsPresent
 
-function Invoke-Api {
-    param($Method, $Path, [hashtable]$ExtraHeaders = @{}, $Form = $null)
-    $uri = "$BaseUrl/api$Path"
-    $allHeaders = $headers.Clone()
-    foreach ($k in $ExtraHeaders.Keys) { $allHeaders[$k] = $ExtraHeaders[$k] }
-    try {
-        if ($Form) {
-            if ($skipCert) {
-                return Invoke-WebRequest -Method $Method -Uri $uri -Headers $allHeaders -Form $Form -SkipCertificateCheck
-            } else {
-                return Invoke-WebRequest -Method $Method -Uri $uri -Headers $allHeaders -Form $Form
-            }
-        } else {
-            if ($skipCert) {
-                return Invoke-RestMethod -Method $Method -Uri $uri -Headers $allHeaders -SkipCertificateCheck
-            } else {
-                return Invoke-RestMethod -Method $Method -Uri $uri -Headers $allHeaders
-            }
-        }
-    } catch {
-        return $_.Exception.Response
-    }
-}
-
 $passed = 0
 $failed = 0
 
