@@ -9,6 +9,7 @@ import { runMigrations } from './db/migrate.js';
 import { initBoss }            from './utils/boss.js';
 import { registerMediaWorker } from './workers/mediaProcessor.js';
 import { ensureUploadDirs }    from './utils/paths.js';
+import { startScheduler }      from './scheduler.js';
 
 // Fail fast if any required env var is missing/empty — catches vars defined in
 // .env but not bridged into the container's compose `environment` block (#357).
@@ -40,6 +41,10 @@ try {
   logger.fatal({ err: err.message }, '[startup] pg-boss failed to start — aborting boot');
   process.exit(1);
 }
+
+// Register the AI blog draft generation cron job (#500).
+// No-op when AI_BLOG_SCHEDULE is unset or invalid — never crashes startup.
+startScheduler();
 
 server = app.listen(PORT, () => {
   logger.info({ port: PORT }, `[startup] Backend listening on http://localhost:${PORT}`);
