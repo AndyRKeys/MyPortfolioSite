@@ -44,11 +44,18 @@ vi.mock('../../utils/slugify.js', () => ({
 
 vi.mock('../../utils/logger.js', () => ({
   logger: {
+    debug: vi.fn(),
     info:  vi.fn(),
     warn:  vi.fn(),
     error: vi.fn(),
     fatal: vi.fn(),
   },
+}));
+
+// execFileSync is used by buildDailyContext() to collect today's git commits.
+// Default: return a fake commit line so context is non-null in tick tests.
+vi.mock('child_process', () => ({
+  execFileSync: vi.fn(() => 'abc1234 feat: test commit'),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,6 +75,10 @@ describe('startScheduler', () => {
     originalEnv      = process.env.AI_BLOG_SCHEDULE;
     capturedCallback = null;
     vi.clearAllMocks();
+    // Stub global fetch so GitHub API calls don't hit the network in tests.
+    // Returns a non-ok response → PR context is skipped; git commits still
+    // populate the context string via the execFileSync mock above.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
   });
 
   afterEach(() => {
@@ -76,6 +87,7 @@ describe('startScheduler', () => {
     } else {
       process.env.AI_BLOG_SCHEDULE = originalEnv;
     }
+    vi.unstubAllGlobals();
     vi.resetModules();
   });
 
@@ -169,7 +181,11 @@ describe('startScheduler', () => {
 
     await capturedCallback();
 
-    expect(generateAiBlogPost).toHaveBeenCalledWith(null, 'scheduler');
+    // Context is built from mocked execFileSync output — not null.
+    expect(generateAiBlogPost).toHaveBeenCalledWith(
+      expect.stringContaining("Today's commits:"),
+      'scheduler',
+    );
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO posts'),
       expect.arrayContaining(['ai-blog', 'Day 42 — Scheduler wiring', expect.any(String)]),
@@ -199,6 +215,29 @@ describe('startScheduler', () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({ err: 'No AI provider available' }),
       expect.stringContaining('[scheduler/ai-blog]'),
+    );
+  });
+
+  // ── Tick: no activity ────────────────────────────────────────────────────────
+
+  it('skips generation and logs info when there is no git or PR activity today', async () => {
+    process.env.AI_BLOG_SCHEDULE = '0 2 * * 1';
+    const startScheduler = await importFresh();
+    const { execFileSync } = await import('child_process');
+    const { generateAiBlogPost } = await import('../../utils/aiGenerate.js');
+    const { logger } = await import('../../utils/logger.js');
+
+    // No commits today, no PRs (fetch already returns non-ok in beforeEach)
+    execFileSync.mockReturnValueOnce('');
+
+    startScheduler();
+    expect(capturedCallback).toBeTypeOf('function');
+
+    await capturedCallback();
+
+    expect(generateAiBlogPost).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('No git or PR activity today'),
     );
   });
 });
