@@ -3,10 +3,11 @@
 # work in all environments. Not resource-constrained; image size is acceptable.
 FROM node:20-alpine
 
-# Install system dependencies for Puppeteer (headless browser testing)
+# Install system dependencies for Puppeteer/Playwright (headless browser testing)
 RUN apk add --no-cache \
   ca-certificates \
   chromium \
+  firefox-esr \
   nss \
   freetype \
   harfbuzz \
@@ -28,6 +29,11 @@ RUN git config --global --add safe.directory /repo
 # Tell Puppeteer to use system Chromium instead of downloading its own
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Tell Playwright to use system browsers instead of downloading its own bundles
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH=/usr/bin/firefox-esr
 
 COPY package*.json ./
 RUN npm install --silent
