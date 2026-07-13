@@ -112,7 +112,8 @@ section "4. Dropbear (remote LUKS unlock on boot)"
 if ! dpkg -l dropbear-initramfs &>/dev/null; then
   log "Installing dropbear-initramfs..."
   sudo apt-get update -qq
-  sudo apt-get install -y dropbear-initramfs
+  # noninteractive: avoids a debconf/whiptail wizard stalling the script (see #529 PR discussion)
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dropbear-initramfs
   sudo mkdir -p /etc/dropbear/initramfs
 
   # Old system used either the current path or the legacy pre-24.04 path.
@@ -152,7 +153,7 @@ section "5. Glances monitoring"
 
 if ! command -v glances &>/dev/null; then
   log "Installing glances..."
-  sudo apt-get install -y glances
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y glances
 fi
 sudo bash "$DEV_REPO_DIR/scripts/ops/setup-glances-monitoring.sh"
 
