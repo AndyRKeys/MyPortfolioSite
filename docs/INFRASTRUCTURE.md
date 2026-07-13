@@ -1,6 +1,6 @@
 # Infrastructure Overview
 
-_Last updated: 2026-07-03 — GPU confirmed, Ollama running_
+_Last updated: 2026-07-13 — GPU driver reinstalled post-SSD-migration, Ollama running with GPU passthrough_
 
 This document describes the host-level infrastructure for MyPortfolioSite on Ubuntu Server and points to environment-specific guides.
 
@@ -23,7 +23,7 @@ A separate Raspberry Pi running Home Assistant OS (HAOS) provides host-level **h
 - **User:** `<username>` (non-root user with sudo access)
 - **Storage:** 1 TB internal SSD (migrated from a 37.3 GB SSD in 2026-07; see `docs/superpowers/specs/2026-07-12-ssd-migration-design.md`)
 - **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
-- **GPU:** NVIDIA GeForce GTX 970, 4 GB VRAM, driver 535.309.01, CUDA 12.2
+- **GPU:** NVIDIA GeForce GTX 970, 4 GB VRAM, driver 580.159.03 (`nvidia-driver-580-server`), CUDA 13.0 (driver-reported; Ollama's bundled `cuda_v13` libs don't include this card's compute capability 5.2, so it auto-selects its `cuda_v12`-compatible libraries instead — this is expected, not an error, see `docker logs ollama`)
 
 ---
 
@@ -38,7 +38,51 @@ docker ps --filter name=ollama
 # ollama   ollama/ollama:latest   Up X days   0.0.0.0:11434->11434/tcp
 ```
 
-GPU access is granted via Docker device requests (`--gpus all` or equivalent). Confirmed working: VRAM usage rises from ~1 MB idle to ~1 GB when tinyllama is loaded.
+GPU access is granted via Docker device requests (`--gpus all` or equivalent). Confirmed working: `ollama ps` reports `100% GPU` for a loaded model, and `nvidia-smi` shows utilization/VRAM rise during inference.
+
+### GPU driver + Docker passthrough setup (from scratch)
+
+This is the full sequence needed on a fresh install (e.g. after the 2026-07 SSD migration, where the driver had to be reinstalled) to get `--gpus all` working. `nvidia-smi` existing is **not** sufficient on its own — Docker also needs the container toolkit wired in separately, and each step fails in a way that doesn't obviously point at the next one.
+
+```bash
+# 1. Driver + DKMS + utils (nvidia-smi comes from nvidia-utils, not the headless/no-dkms package)
+sudo apt install dkms nvidia-driver-580-server nvidia-utils-580-server
+
+# 2. Reboot — required for the kernel module to load. If Secure Boot is enabled,
+#    this triggers an MOK enrollment screen at boot (accept it, set a temp
+#    password, confirm again on the *next* boot) or the signed module won't load.
+sudo reboot
+
+# 3. Verify the driver loaded
+nvidia-smi   # should list the card; if "command not found" or no devices, the DKMS
+             # build or MOK enrollment didn't complete — check `dkms status`
+
+# 4. nvidia-container-toolkit is NOT in Ubuntu's default apt repos — add NVIDIA's own repo first,
+#    or `apt install nvidia-container-toolkit` fails with "Unable to locate package"
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update
+sudo apt install nvidia-container-toolkit
+
+# 5. Register the nvidia runtime with Docker and restart the daemon — without this,
+#    `docker run --gpus all` fails with a misleading "AMD CDI spec not found" error
+#    even on an NVIDIA-only box, because Docker falls through to a CDI code path
+#    with no vendor spec registered at all.
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker   # existing --restart always containers resume automatically
+
+# 6. Confirm the runtime registered
+docker info | grep -i runtime   # should list "nvidia" alongside "runc"
+
+# 7. (Re)start Ollama with GPU access
+docker rm -f ollama 2>/dev/null
+docker run -d --name ollama --restart always --gpus all \
+  -p 11434:11434 -v ollama:/root/.ollama ollama/ollama:latest
+docker exec ollama ollama ps   # PROCESSOR column should show "100% GPU" once a model is loaded
+```
 
 ### Installed models
 
