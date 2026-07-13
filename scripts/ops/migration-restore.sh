@@ -231,13 +231,16 @@ fi
 # ── 10. Ollama container ───────────────────────────────────────────────────────
 section "10. Ollama"
 
-if ! docker inspect ollama &>/dev/null; then
+if ! docker inspect --type container ollama &>/dev/null; then
   log "Starting Ollama container..."
   if ! docker run -d --name ollama --restart always --gpus all \
       -p 11434:11434 -v ollama:/root/.ollama ollama/ollama:latest 2>/dev/null; then
     log "WARN: --gpus all failed (NVIDIA driver/container-toolkit not installed yet)."
     log "Starting Ollama on CPU for now — restart it with --gpus all after GPU setup:"
     log "  docs/INFRASTRUCTURE.md has the confirmed driver version (535.309.01) for the GTX 970."
+    # The failed --gpus all attempt above can leave a stopped/created "ollama"
+    # container behind, which would block this run from reusing the name.
+    docker rm -f ollama &>/dev/null || true
     docker run -d --name ollama --restart always \
       -p 11434:11434 -v ollama:/root/.ollama ollama/ollama:latest
   fi
