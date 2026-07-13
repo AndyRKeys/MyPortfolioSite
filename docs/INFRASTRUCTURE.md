@@ -21,7 +21,7 @@ A separate Raspberry Pi running Home Assistant OS (HAOS) provides host-level **h
 - **OS:** Ubuntu 24.04.4 LTS (kernel 6.8.0-111-generic)
 - **Hostname:** `<server-hostname>`
 - **User:** `<username>` (non-root user with sudo access)
-- **Storage:** Internal SSD
+- **Storage:** 1 TB internal SSD (migrated from a 37.3 GB SSD in 2026-07; see `docs/superpowers/specs/2026-07-12-ssd-migration-design.md`)
 - **Network:** Dynamic IP with DDNS (ddclient updates DNS every 5 minutes)
 - **GPU:** NVIDIA GeForce GTX 970, 4 GB VRAM, driver 535.309.01, CUDA 12.2
 
@@ -152,8 +152,8 @@ Backups are managed via scripts under `scripts/backup/` and cron.
 ### Local backups
 
 - **Script:** `scripts/backup/db-backup.sh`
-- **Cron:** `0 2 * * * ~/MyPortfolioSite/scripts/backup/db-backup.sh >> ~/backup.log 2>&1`
-- **Runs as:** root (via `sudo crontab -e`).
+- **Cron:** `0 2 * * * /home/<username>/MyPortfolioSite/scripts/backup/db-backup.sh >> /home/<username>/backup.log 2>&1`
+- **Runs as:** the deploy user, not root (via `crontab -e`, no sudo). An earlier root crontab entry used `~/MyPortfolioSite/...`, which resolves to `/root/MyPortfolioSite` for root's own crontab — that path never existed, so the entry was silently dead. Use an absolute path under the deploy user's crontab instead.
 
 Each run:
 
@@ -321,5 +321,6 @@ For more detailed, environment-specific troubleshooting, see:
 - `DEV_ENVIRONMENT.md` — dev environment setup and operations.
 - `PROD_ENVIRONMENT.md` — production environment setup and operations.
 - `DOCKER_MIGRATION.md` — migrating from snap-based Docker to Docker CE.
+- `docs/superpowers/specs/2026-07-12-ssd-migration-design.md` — 2026-07 OS migration to the 1 TB SSD; `scripts/ops/migration-capture.sh`, `migration-backup.sh`, and `migration-restore.sh` cover pre-migration snapshotting and post-install restore.
 - `DEPLOYMENT_LESSONS_LEARNED.md` — lessons from the first production deployment (pre-flight checks, phase-based deploy, troubleshooting patterns).
 - `MONITORING.md` (future) — optional dedicated doc for monitoring and alerting patterns once more checks are added.
