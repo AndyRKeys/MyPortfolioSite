@@ -187,8 +187,16 @@ Using `~/migration-manifest.txt` as reference:
 
 ---
 
+## Post-migration findings (discovered during actual Phase 4 execution)
+
+- **Root LV sizing:** the Ubuntu installer's custom storage layout allocated only ~98 GB to `ubuntu-vg/ubuntu-lv`, leaving ~830 GB unallocated in the VG rather than using the full 929 GB. Not caught by this design doc. `migration-restore.sh` section 1 extends the LV with `lvextend -l +100%FREE` + `resize2fs` — run this before starting any Compose stacks.
+- **GPU driver not covered:** this doc's "reinstalled fresh on `sdb`" list omitted the NVIDIA driver + `nvidia-container-toolkit` needed for Ollama's `--gpus all`. These require an interactive, hardware-specific install (driver version, secure boot MOK enrollment) and are not scripted; `migration-restore.sh` starts Ollama CPU-only as a fallback and flags the driver install as a manual follow-up. See `docs/INFRASTRUCTURE.md` for the confirmed driver version (535.309.01) for the GTX 970. Two more manual steps surfaced when actually completing the GPU setup post-migration, neither obvious from `apt`'s error output alone: (1) `nvidia-container-toolkit` isn't in Ubuntu's default repos — it requires adding NVIDIA's own apt repo (`curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`, then the matching `.list` file under `/etc/apt/sources.list.d/`) before `apt install nvidia-container-toolkit` will resolve; (2) even with the toolkit installed, Docker won't see the GPU until `sudo nvidia-ctk runtime configure --runtime=docker` registers the `nvidia` runtime in `/etc/docker/daemon.json`, followed by `sudo systemctl restart docker` — skipping this step produces a misleading `AMD CDI spec not found` error from `docker run --gpus all` on an NVIDIA-only box.
+- **`docker inspect` false-positive on container existence:** `migration-restore.sh` section 10 originally checked `docker inspect ollama` to decide whether the container already existed, but `docker inspect` matches any Docker object by that name — including the `ollama` *volume* created by the same section. Once the volume existed from an earlier attempt, the script always concluded the container was already running and silently skipped starting it, even though no container existed. Fixed to `docker inspect --type container ollama`. The failed `--gpus all` attempt can also leave a stopped/created container behind that blocks the CPU-only fallback from reusing the name; the fallback path now removes it first.
+- **Dead root crontab entry:** the captured manifest showed a root crontab line using `~/MyPortfolioSite/...`, which resolves to `/root/MyPortfolioSite` under root's own crontab — a path that never existed. This entry was already non-functional on the old system; the real daily backup ran from the deploy user's own crontab (absolute path). `migration-restore.sh` restores only the working entry. `docs/INFRASTRUCTURE.md`'s backup section has been corrected to match.
+
 ## Files Changed
 
 - `scripts/ops/migration-capture.sh` — new
 - `scripts/ops/migration-backup.sh` — new
-- `docs/INFRASTRUCTURE.md` — add section documenting the new disk layout and migration scripts
+- `scripts/ops/migration-restore.sh` — new; scripted Phase 3/4 completion (LV extend, Docker CE, UFW, Dropbear, Glances, ddclient, crontabs, SSL cert + Docker volume rsync, Compose stack startup)
+- `docs/INFRASTRUCTURE.md` — documented the new disk layout, migration scripts, and corrected the backup cron entry

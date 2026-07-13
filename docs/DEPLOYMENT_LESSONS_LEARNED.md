@@ -842,3 +842,89 @@ Several issues above (port conflicts, unhealthy containers, unbound variables) c
 These are captured in issue #298.
 
 Key takeaway: **Start simple (HTTP), validate each phase, then add complexity (SSL, backups, monitoring).**
+
+---
+
+## 1 TB SSD Migration — 2026-07-13
+
+### Executive Summary
+
+Migrated `ak-home-server` from a 37.3 GB SSD to a 1 TB SSD (#529). `scripts/ops/migration-restore.sh` (#533) scripted Phase 3/4 (OS baseline + data restore) to remove typo risk on a one-shot, hard-to-reverse disk operation. The design doc (written before touching real hardware) missed several gaps that only surfaced by running the migration and independently verifying the live box afterward rather than trusting the script's own "done" output.
+
+**Outcome:** Successful — all Compose stacks, backups, and GPU-accelerated Ollama confirmed healthy on the new disk. ~2 hours from design doc to fully verified, most of it spent on the GPU passthrough gaps below.
+
+---
+
+### Issue 1: Root LV Only Allocated ~98 GB of the 929 GB Disk
+
+**Symptom:** `df -h /` showed the root filesystem far smaller than the physical disk after the initial OS install.
+
+**Root Cause:** Ubuntu's guided/custom storage layout during install didn't allocate the full VG to `ubuntu-vg/ubuntu-lv`, leaving ~830 GB unallocated. Not caught by the design doc, which assumed the installer would use the whole disk.
+
+**Resolution:** `migration-restore.sh` section 1 runs `sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv && sudo resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv` before anything else starts.
+
+**Lesson Learned:** Never assume an OS installer used the full disk — verify `df -h /` against the physical disk size as an explicit Phase 3 step, not an afterthought.
+
+---
+
+### Issue 2: Dead Root Crontab Entry Would Have Been Silently Carried Over
+
+**Symptom:** The captured manifest showed a root crontab line using `~/MyPortfolioSite/scripts/backup/db-backup.sh`.
+
+**Root Cause:** `~` in root's own crontab resolves to `/root`, which never had this repo checked out — the path never existed. This entry was already non-functional on the old system; the real daily backup ran from the deploy user's own crontab with an absolute path. A verbatim restore would have carried the dead entry forward without anyone noticing (cron doesn't alert on a nonexistent script path by default).
+
+**Resolution:** `migration-restore.sh` filters out any crontab line containing a literal `~` before restoring root's crontab; the working, absolute-path entry in the deploy user's crontab is restored unmodified.
+
+**Lesson Learned:** Restoring configuration "verbatim from the old system" isn't automatically correct — verify each entry still resolves to something real in the new context, especially path expansions that differ by user.
+
+---
+
+### Issue 3: Ollama Container Detection Silently Skipped Starting It
+
+**Symptom:** Everything else in the migration checked out — Compose stacks healthy, backups running — but `docker ps -a` showed no `ollama` container at all, and port 11434 was unreachable. The script itself reported no errors.
+
+**Root Cause:** Section 10's existence check was `docker inspect ollama`, which matches *any* Docker object by that name, not just containers. An `ollama` volume already existed (from an earlier partial attempt), so the check always succeeded and the script concluded the container was already running — even though it never existed. This was invisible from the script's own log output; it only surfaced by independently checking `docker ps -a` against the live box.
+
+**Resolution:** Narrowed the check to `docker inspect --type container ollama` (fixed in #533's follow-up commit). Also hardened the CPU-only fallback to `docker rm -f ollama` first, since a failed `--gpus all` attempt leaves a stopped/created container behind that blocks the fallback from reusing the name.
+
+**Lesson Learned:** `docker inspect <name>` is not a reliable existence check for a specific resource type — it silently matches volumes, networks, and images sharing the name. Idempotency checks in ops scripts need to name the resource type explicitly (`--type container`), and a script reporting no errors is not the same as verifying the end state actually matches what it claims to have done.
+
+---
+
+### Issue 4: GPU Driver Partially Installed, Nothing Actually Working
+
+**Symptom:** `nvidia-smi` returned "command not found"; `docker run --gpus all` failed with "failed to discover GPU vendor from CDI: no known GPU vendor found".
+
+**Root Cause:** Some NVIDIA library packages (`libnvidia-cfg1-580-server`, `libnvidia-compute-580-server`, `nvidia-headless-no-dkms-580-server`) were present from an earlier, incomplete attempt, but `dkms` itself wasn't installed, so no kernel module was ever built (`lsmod` showed nothing), and `nvidia-utils-580-server` (which provides `nvidia-smi`) was missing entirely. The design doc had flagged GPU setup as an unscripted manual follow-up but didn't capture what "complete" actually required.
+
+**Resolution:** `sudo apt install dkms nvidia-driver-580-server nvidia-utils-580-server`, then reboot for the kernel module to load.
+
+**Lesson Learned:** A partially-installed driver stack gives no obvious signal that it's incomplete — `dpkg -l | grep nvidia` showing packages doesn't mean the GPU is usable. Verify with `nvidia-smi` directly, not package presence.
+
+---
+
+### Issue 5: `nvidia-container-toolkit` Not in Default Repos
+
+**Symptom:** `sudo apt install nvidia-container-toolkit` failed with `E: Unable to locate package nvidia-container-toolkit`.
+
+**Root Cause:** The container toolkit isn't part of Ubuntu's default apt sources — it's only distributed via NVIDIA's own repo, which has to be added explicitly (signing key + `.list` file).
+
+**Resolution:** Added the repo per NVIDIA's documented steps, then `apt update && apt install nvidia-container-toolkit` resolved cleanly. Full commands now in `docs/INFRASTRUCTURE.md`.
+
+**Lesson Learned:** `apt`'s "unable to locate package" gives no hint that the fix is "add a different repo" versus "package renamed" versus "typo" — worth documenting the exact repo-add commands anywhere GPU setup is described, rather than relying on the error message to point the way.
+
+---
+
+### Issue 6: Docker Didn't See the GPU Even With the Toolkit Installed
+
+**Symptom:** With the driver working (`nvidia-smi` confirmed) and the toolkit installed, `docker run --gpus all` still failed — this time with `AMD CDI spec not found`, on a box with no AMD hardware at all.
+
+**Root Cause:** Installing `nvidia-container-toolkit` doesn't automatically register a runtime with Docker. `sudo nvidia-ctk runtime configure --runtime=docker` has to be run explicitly to write the `nvidia` runtime into `/etc/docker/daemon.json`, followed by a Docker daemon restart to pick it up. Without that, Docker falls through to CDI-based GPU resolution with no vendor spec registered for either vendor, producing the (misleading, vendor-mismatched) AMD error.
+
+**Resolution:** `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`. All existing `--restart always` containers (both prod and dev Compose stacks) resumed automatically post-restart with no manual intervention.
+
+**Lesson Learned:** The `AMD CDI spec not found` error is a red herring on NVIDIA-only hardware — it means "no CDI vendor spec is registered at all," not "wrong vendor detected." Confirm `docker info | grep -i runtime` lists `nvidia` before assuming the toolkit install alone was sufficient.
+
+---
+
+Key takeaway: **A script or driver install reporting success is not verification — for hardware-adjacent changes (GPU passthrough, disk migrations), independently check the actual live end state (`docker ps -a`, `nvidia-smi`, `docker info`) rather than trusting exit codes and log output alone.**

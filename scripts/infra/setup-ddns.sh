@@ -39,7 +39,11 @@ fi
 
 info "Installing ddclient..."
 apt-get update -qq
-apt-get install -y ddclient > /dev/null
+# Non-interactive: on a fresh install the ddclient postinst script otherwise
+# pops up a debconf/whiptail wizard asking for IP-discovery method, hosts,
+# protocol, etc. — all of which get overwritten by the config we write below,
+# so there's no reason to make this an interactive install.
+DEBIAN_FRONTEND=noninteractive apt-get install -y ddclient > /dev/null
 ok "ddclient installed"
 
 # ── Prompt for credentials ────────────────────────────────────────────────────
