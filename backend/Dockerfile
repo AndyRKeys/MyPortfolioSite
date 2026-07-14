@@ -7,9 +7,13 @@
 FROM node:20-bookworm-slim
 
 # System tools + system Chromium (for Puppeteer's five legacy scripts)
+# wget: relied on by docker-compose.yml/.local.yml healthchecks and the
+# migration-restore.sh / server-setup.sh readiness polls — Debian's slim
+# base doesn't ship it the way Alpine's busybox did.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    wget \
     gnupg \
     chromium \
     git \
