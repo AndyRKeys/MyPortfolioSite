@@ -67,10 +67,10 @@ run_deploy_tests() {
 }
 
 test_error_logger_all_pages() {
-  dsection "Frontend tests — error-logger present on all pages (browser)"
+  dsection "Frontend tests — error-logger present on all pages (Playwright: Chromium + Firefox)"
 
   # NGINX_URL must be the docker-internal nginx address (e.g. https://nginx:3001)
-  # so that puppeteer, running inside the backend container, can reach nginx.
+  # so that Playwright, running inside the backend container, can reach nginx.
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping error logger test"
@@ -78,7 +78,7 @@ test_error_logger_all_pages() {
     return
   fi
 
-  dinfo "Running comprehensive page coverage test..."
+  dinfo "Running comprehensive page coverage test (Playwright, Chromium + Firefox)..."
   dinfo "  Testing all pages for error-logger deployment"
 
   local passed failed total
@@ -132,7 +132,7 @@ test_error_logger_contracts() {
 # (jQuery removal), where page JS errors weren't surfaced until a browser ran.
 # Warn-only — surfaces loudly but does not roll back the deploy.
 check_public_page_js() {
-  dsection "Frontend tests — public pages JS runtime errors (#390)"
+  dsection "Frontend tests — public pages JS runtime errors (#390) (Playwright: Chromium + Firefox)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
@@ -141,7 +141,7 @@ check_public_page_js() {
     return
   fi
 
-  dinfo "Loading public pages in headless browser to check for unhandled JS errors..."
+  dinfo "Loading public pages in Playwright (Chromium + Firefox) to check for unhandled JS errors..."
 
   local passed failed total
   _run_browser_test "test:public-pages" "public-pages" || true
