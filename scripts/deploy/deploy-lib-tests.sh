@@ -56,10 +56,10 @@ run_deploy_tests() {
   total=${total:-0}; passed=${passed:-0}; failed=${failed:-0}
 
   if [ "$rc" -eq 0 ]; then
-    dstatus vitest suite=backend status=ok tests="$total" passed="$passed" failed="$failed"
+    dstatus vitest suite=backend engine=vitest status=ok tests="$total" passed="$passed" failed="$failed"
     dok "Backend tests passed — ${passed}/${total} ✓"
   else
-    dstatus vitest suite=backend status=failed tests="$total" passed="$passed" failed="$failed"
+    dstatus vitest suite=backend engine=vitest status=failed tests="$total" passed="$passed" failed="$failed"
     dfail "Backend tests failed (${failed} failed of ${total}) — initiating rollback"
     _do_rollback "test suite failed post-deploy"
     ddie "Deploy failed: tests did not pass. See log at $LOG_FILE"
@@ -102,12 +102,12 @@ test_error_logger_all_pages() {
 # Warn-only (matches test_error_logger_all_pages) — a frontend contract
 # regression is surfaced loudly inline but does not roll back the deploy.
 test_error_logger_contracts() {
-  dsection "Frontend tests — error-logger behavioural contracts (browser)"
+  dsection "Frontend tests — error-logger behavioural contracts (Puppeteer)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping error logger contract test"
-    dstatus error-logger-contracts suite=frontend status=skipped reason=no-nginx-url
+    dstatus error-logger-contracts suite=frontend engine=puppeteer status=skipped reason=no-nginx-url
     return
   fi
 
@@ -118,10 +118,10 @@ test_error_logger_contracts() {
   passed=$(_kv_num "$BROWSER_TEST_SLINE" passed); failed=$(_kv_num "$BROWSER_TEST_SLINE" failed)
   total=$(( ${passed:-0} + ${failed:-0} ))
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus error-logger-contracts suite=frontend status=ok tests="$total" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus error-logger-contracts suite=frontend engine=puppeteer status=ok tests="$total" passed="${passed:-0}" failed="${failed:-0}"
     dok "Frontend error-logger contracts passed — ${passed:-0}/${total} ✓"
   else
-    dstatus error-logger-contracts suite=frontend status=failed tests="$total" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus error-logger-contracts suite=frontend engine=puppeteer status=failed tests="$total" passed="${passed:-0}" failed="${failed:-0}"
     dwarn "Frontend error-logger contracts failed — output above"
   fi
 }
@@ -162,12 +162,12 @@ check_public_page_js() {
 # Puppeteer can reach nginx directly.
 # Warn-only — violations are surfaced loudly but do not roll back the deploy.
 check_csp_violations() {
-  dsection "Frontend scans — CSP violations across pages (#341)"
+  dsection "Frontend scans — CSP violations across pages (#341) (Puppeteer)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping CSP violation scan"
-    dstatus csp-violations suite=frontend status=skipped reason=no-nginx-url
+    dstatus csp-violations suite=frontend engine=puppeteer status=skipped reason=no-nginx-url
     return
   fi
 
@@ -179,10 +179,10 @@ check_csp_violations() {
   _run_browser_test "test:csp-violations" "csp-violations" || true
   pages=$(_kv_num "$BROWSER_TEST_SLINE" pages); violations=$(_kv_num "$BROWSER_TEST_SLINE" violations)
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus csp-violations suite=frontend status=ok pages="${pages:-0}" violations="${violations:-0}"
+    dstatus csp-violations suite=frontend engine=puppeteer status=ok pages="${pages:-0}" violations="${violations:-0}"
     dok "CSP scan passed — ${pages:-0} pages, no first-party violations ✓"
   else
-    dstatus csp-violations suite=frontend status=failed pages="${pages:-0}" violations="${violations:-0}"
+    dstatus csp-violations suite=frontend engine=puppeteer status=failed pages="${pages:-0}" violations="${violations:-0}"
     dwarn "CSP violations detected — update nginx-security-headers.conf and re-deploy"
   fi
 }
@@ -195,12 +195,12 @@ check_csp_violations() {
 # fails if any first-party violation fires.
 # Warn-only — a failure is surfaced in the deploy report but does not roll back.
 check_admin_e2e_csp() {
-  dsection "Frontend scans — authenticated admin E2E CSP (#342)"
+  dsection "Frontend scans — authenticated admin E2E CSP (#342) (Puppeteer)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping admin E2E CSP scan"
-    dstatus admin-e2e-csp suite=frontend status=skipped reason=no-nginx-url
+    dstatus admin-e2e-csp suite=frontend engine=puppeteer status=skipped reason=no-nginx-url
     return
   fi
 
@@ -211,22 +211,22 @@ check_admin_e2e_csp() {
   _run_browser_test "test:admin-e2e-csp" "admin-e2e-csp" -e "JWT_SECRET=${JWT_SECRET:-}" || true
   interactions=$(_kv_num "$BROWSER_TEST_SLINE" interactions); violations=$(_kv_num "$BROWSER_TEST_SLINE" violations)
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus admin-e2e-csp suite=frontend status=ok interactions="${interactions:-0}" violations="${violations:-0}"
+    dstatus admin-e2e-csp suite=frontend engine=puppeteer status=ok interactions="${interactions:-0}" violations="${violations:-0}"
     dok "Admin E2E CSP scan passed — ${interactions:-0} interactions, no violations ✓"
   else
-    dstatus admin-e2e-csp suite=frontend status=failed interactions="${interactions:-0}" violations="${violations:-0}"
+    dstatus admin-e2e-csp suite=frontend engine=puppeteer status=failed interactions="${interactions:-0}" violations="${violations:-0}"
     _do_rollback "CSP violations detected in admin interactions"
     ddie "Deploy failed: CSP violations detected — update nginx-security-headers.conf. See log at $LOG_FILE"
   fi
 }
 
 check_admin_e2e() {
-  dsection "Frontend tests — admin E2E smoke + interactions (hard fail)"
+  dsection "Frontend tests — admin E2E smoke + interactions (hard fail) (Puppeteer)"
 
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping admin E2E tests"
-    dstatus admin-e2e suite=frontend status=skipped reason=no-nginx-url
+    dstatus admin-e2e suite=frontend engine=puppeteer status=skipped reason=no-nginx-url
     return
   fi
 
@@ -236,24 +236,24 @@ check_admin_e2e() {
   _run_browser_test "test:admin-e2e" "admin-e2e" -e "JWT_SECRET=${JWT_SECRET:-}" || true
   smoke=$(_kv_str "$BROWSER_TEST_SLINE" smoke); interactions=$(_kv_str "$BROWSER_TEST_SLINE" interactions)
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus admin-e2e suite=frontend status=ok smoke="${smoke:-?}" interactions="${interactions:-?}"
+    dstatus admin-e2e suite=frontend engine=puppeteer status=ok smoke="${smoke:-?}" interactions="${interactions:-?}"
     dok "Admin E2E passed — smoke ${smoke:-?}, interactions ${interactions:-?} ✓"
   else
-    dstatus admin-e2e suite=frontend status=failed smoke="${smoke:-?}" interactions="${interactions:-?}"
+    dstatus admin-e2e suite=frontend engine=puppeteer status=failed smoke="${smoke:-?}" interactions="${interactions:-?}"
     _do_rollback "admin E2E tests failed — admin panel non-functional"
     ddie "Deploy failed: admin E2E tests did not pass. See log at $LOG_FILE"
   fi
 }
 
 test_csp_reporting() {
-  dsection "Testing CSP violation reporting"
+  dsection "Testing CSP violation reporting (curl)"
 
   # SITE_URL must be the external nginx URL (e.g. https://dev.andykeys.me:3001)
   # so curl reaches nginx and checks the real CSP headers.
   local test_url="${SITE_URL:-}"
   if [ -z "$test_url" ]; then
     dwarn "SITE_URL not set — skipping CSP test"
-    dstatus csp status=skipped reason=no-site-url
+    dstatus csp engine=curl status=skipped reason=no-site-url
     return
   fi
 
@@ -280,16 +280,16 @@ test_csp_reporting() {
 
   if [ -n "$csp_header" ]; then
     if echo "$csp_header" | grep -q "report-uri"; then
-      dstatus csp status=ok report-uri=present
+      dstatus csp engine=curl status=ok report-uri=present
       dok "CSP report-uri is configured ✓"
     else
-      dstatus csp status=warn report-uri=missing
+      dstatus csp engine=curl status=warn report-uri=missing
       dwarn "CSP header present but report-uri not found"
       dinfo "  Full CSP header:"
       echo "$csp_header" | _log_cmd | sed 's/^/    /'
     fi
   else
-    dstatus csp status=warn header=missing
+    dstatus csp engine=curl status=warn header=missing
     dwarn "CSP header not found (not being sent by server)"
   fi
 }
@@ -302,12 +302,12 @@ run_regression_tests() {
   REGRESSION_RC=0
 
   if [ "${SKIP_REGRESSION:-0}" = "1" ]; then
-    dstatus regression status=skipped reason=skip-flag
+    dstatus regression engine=curl status=skipped reason=skip-flag
     dinfo "Regression smoke tests skipped (--skip-regression)"
     return 0
   fi
 
-  dsection "Regression tests — HTTP smoke suite (live site)"
+  dsection "Regression tests — HTTP smoke suite (live site) (curl)"
 
   # Capture so we can parse the [regression] summary and emit a normalised
   # suite=regression status line alongside the script's own output.
@@ -336,9 +336,9 @@ run_regression_tests() {
   sline=$(printf '%s\n' "$reg_out" | grep -E '^\[regression\]' | tail -1 || true)
   passed=$(_kv_num "$sline" passed); failed=$(_kv_num "$sline" failed); total=$(_kv_num "$sline" total)
   if [ "$REGRESSION_RC" -eq 0 ]; then
-    dstatus regression suite=regression status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus regression suite=regression engine=curl status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
   else
-    dstatus regression suite=regression status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus regression suite=regression engine=curl status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
   fi
 
   if [ "$REGRESSION_RC" -ne 0 ]; then
