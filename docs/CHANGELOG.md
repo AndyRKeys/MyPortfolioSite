@@ -10,9 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ### Added
 
+- `scripts/ops/migration-restore.sh` — Phase 3/4 completion script for the 1 TB SSD migration (#529): extends the root LV to use the full disk, installs Docker CE/UFW/Dropbear/Glances/ddclient, restores crontabs, rsyncs SSL certs and Docker volumes from the old disk, and starts both Compose stacks. Idempotent — safe to re-run.
 - Lightweight SQL migration runner (`backend/db/migrate.js`) — tracks applied migrations in `schema_migrations` table, applies numbered files from `backend/db/migrations/` on startup; no new npm packages (#169)
 - CSV bulk import for travel memories — `POST /travel/import` (auth-gated, 1 MB cap, per-row error tracking) with admin UI in the Travel page (#245)
 - Image & video optimisation pipeline (#174): new uploaded images are automatically resized (≤2400px) and converted to WebP (quality 85) with a 400px square thumbnail generated alongside; video uploads (MP4, WebM, QuickTime) get a JPEG thumbnail extracted from the first frame via ffmpeg. Processing runs as a background pg-boss job — upload responses are immediate regardless of file size. File size limit raised from 20 MB to 1 GB to support DJI Osmo 4K footage. Three new DB columns (`full_url`, `thumb_url`, `media_status`) on `posts` and `post_media` tables; existing entries unaffected (columns nullable, frontend falls back to `media_url`). Admin travel section shows a processing queue panel with per-job status, age, and a Retry button for failed jobs. Public travel page uses `thumb_url` for cards/timeline and `full_url` for lightbox, falling back to `media_url`.
+
+### Fixed
+
+- `scripts/ops/migration-restore.sh` (#529) — Ollama container existence check used `docker inspect ollama`, which matches any Docker object by that name (including the `ollama` volume left over from an earlier attempt), so it silently skipped starting the container when only the volume existed. Now checks `docker inspect --type container ollama`; the CPU-only fallback also removes any stale container left behind by a failed `--gpus all` attempt before retrying.
 
 ---
 
