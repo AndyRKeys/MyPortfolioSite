@@ -74,7 +74,7 @@ test_error_logger_all_pages() {
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping error logger test"
-    dstatus error-logger suite=frontend status=skipped reason=no-nginx-url
+    dstatus error-logger suite=frontend engine=playwright status=skipped reason=no-nginx-url
     return
   fi
 
@@ -85,10 +85,10 @@ test_error_logger_all_pages() {
   _run_browser_test "test:error-logger:all-pages" "error-logger-all-pages" || true
   passed=$(_kv_num "$BROWSER_TEST_SLINE" passed); failed=$(_kv_num "$BROWSER_TEST_SLINE" failed); total=$(_kv_num "$BROWSER_TEST_SLINE" total)
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus error-logger suite=frontend status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus error-logger suite=frontend engine=playwright status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
     dok "Frontend error-logger pages test passed — ${passed:-0}/${total:-0} ✓"
   else
-    dstatus error-logger suite=frontend status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus error-logger suite=frontend engine=playwright status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
     dwarn "Frontend error-logger pages test failed — output above"
   fi
 }
@@ -137,7 +137,7 @@ check_public_page_js() {
   local base_url="${NGINX_URL:-}"
   if [ -z "$base_url" ]; then
     dwarn "NGINX_URL not set — skipping public page JS runtime check"
-    dstatus public-pages suite=frontend status=skipped reason=no-nginx-url
+    dstatus public-pages suite=frontend engine=playwright status=skipped reason=no-nginx-url
     return
   fi
 
@@ -147,10 +147,10 @@ check_public_page_js() {
   _run_browser_test "test:public-pages" "public-pages" || true
   passed=$(_kv_num "$BROWSER_TEST_SLINE" passed); failed=$(_kv_num "$BROWSER_TEST_SLINE" failed); total=$(_kv_num "$BROWSER_TEST_SLINE" total)
   if [ "$BROWSER_TEST_RC" -eq 0 ]; then
-    dstatus public-pages suite=frontend status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus public-pages suite=frontend engine=playwright status=ok tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
     dok "Public pages JS check passed — ${passed:-0}/${total:-0} ✓"
   else
-    dstatus public-pages suite=frontend status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
+    dstatus public-pages suite=frontend engine=playwright status=failed tests="${total:-0}" passed="${passed:-0}" failed="${failed:-0}"
     dwarn "JS runtime errors detected on public pages — see output above"
   fi
 }
