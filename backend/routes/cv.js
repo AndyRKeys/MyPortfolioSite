@@ -24,7 +24,7 @@ import { logger }        from '../utils/logger.js';
 import { logAudit }      from '../utils/audit.js';
 import { UPLOADS_DIR }   from '../utils/paths.js';
 import { wrapMulter }    from '../utils/wrapMulter.js';
-import { CV_RATE_WINDOW_MS, CV_RATE_LIMIT, CV_MAX_FILE_SIZE } from '../utils/constants.js';
+import { CV_RATE_WINDOW_MS, CV_RATE_LIMIT, CV_MAX_FILE_SIZE, CV_PUBLIC_FILENAME } from '../utils/constants.js';
 import { pool }          from '../db/pool.js';
 
 const router = Router();
@@ -62,9 +62,11 @@ const upload = multer({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Build the filesystem path for a versioned CV file */
+/** Build the filesystem path for a versioned CV file.
+ *  Honours the UPLOADS_DIR env var at call time (falls back to the resolved
+ *  paths.js default) so the directory can be overridden after import. */
 function cvPath(filename) {
-  return path.join(UPLOADS_DIR, filename);
+  return path.join(process.env.UPLOADS_DIR || UPLOADS_DIR, filename);
 }
 
 /** Generate a timestamped CV filename with a random suffix to prevent same-second collisions */
@@ -142,7 +144,7 @@ router.get('/', cvRateLimit, async (req, res, next) => {
     if (!row) return res.status(404).json({ error: 'No CV uploaded yet' });
     const filePath = cvPath(row.filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'No CV uploaded yet' });
-    res.download(filePath, 'Andy_Keys_CV.pdf', (err) => {
+    res.download(filePath, CV_PUBLIC_FILENAME, (err) => {
       if (err && !res.headersSent) {
         res.status(500).json({ error: 'Failed to send CV' });
       }

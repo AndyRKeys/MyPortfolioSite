@@ -10,19 +10,20 @@ import { authenticate }  from '../middleware/authenticate.js';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
+import { AUDIT_RATE_WINDOW_MS, AUDIT_RATE_LIMIT } from '../utils/constants.js';
 
 const router = Router();
 
 const auditRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           120,
+  windowMs:        AUDIT_RATE_WINDOW_MS,
+  limit:           AUDIT_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
   validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'audit' }),
+  store:           new PostgresStore({ windowMs: AUDIT_RATE_WINDOW_MS, keyType: 'audit' }),
 });
 
 // Admin: list recent audit log entries

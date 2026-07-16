@@ -9,6 +9,10 @@ import { parseDeployRuns } from '../utils/deployLogParser.js';
 import { logger }        from '../utils/logger.js';
 import { logAudit }      from '../utils/audit.js';
 import { writeQueueTrigger, tailLogFile } from '../utils/deployQueue.js';
+import {
+  DEPLOY_READ_RATE_WINDOW_MS,  DEPLOY_READ_RATE_LIMIT,
+  DEPLOY_WRITE_RATE_WINDOW_MS, DEPLOY_WRITE_RATE_LIMIT,
+} from '../utils/constants.js';
 
 const router   = Router();
 
@@ -19,27 +23,27 @@ let branchCache = null; // { data: { branches: string[] }, expiresAt: number }
 // Limiter precedes authenticateDeploy on every route so CodeQL's
 // js/missing-rate-limiting detector sees it before the authorization step.
 const deployReadLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
+  windowMs:        DEPLOY_READ_RATE_WINDOW_MS,
+  limit:           DEPLOY_READ_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
   validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-read' }),
+  store:           new PostgresStore({ windowMs: DEPLOY_READ_RATE_WINDOW_MS, keyType: 'deploy-read' }),
 });
 
 const deployWriteLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           10,
+  windowMs:        DEPLOY_WRITE_RATE_WINDOW_MS,
+  limit:           DEPLOY_WRITE_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
   validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-write' }),
+  store:           new PostgresStore({ windowMs: DEPLOY_WRITE_RATE_WINDOW_MS, keyType: 'deploy-write' }),
 });
 
 const REPO_DIR        = process.env.REPO_DIR || '/repo';

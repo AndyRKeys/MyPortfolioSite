@@ -106,4 +106,23 @@ describe('POST /auth/email/send — magic link find-or-create', () => {
     expect(res.body).toEqual({ sent: true });
     expect(pool.query).toHaveBeenCalledTimes(3);
   });
+
+  it('passes MAGIC_LINK_TTL as a bound interval parameter, not a SQL literal (#522 M15)', async () => {
+    const { pool } = vi.mocked(await import('../../db/pool.js'));
+    const { MAGIC_LINK_TTL } = await import('../../utils/constants.js');
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] })                     // rate limiter
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid-1', created: true }] })  // upsert
+      .mockResolvedValueOnce({ rows: [] });                                  // token insert
+    const res = await request(app)
+      .post('/auth/email/send')
+      .send({ email: ADMIN });
+    expect(res.status).toBe(200);
+
+    const [sql, params] = pool.query.mock.calls[2];
+    expect(sql).toContain('INSERT INTO email_tokens');
+    expect(sql).toContain('$3::interval');
+    expect(sql).not.toContain("INTERVAL '");
+    expect(params[2]).toBe(MAGIC_LINK_TTL);
+  });
 });

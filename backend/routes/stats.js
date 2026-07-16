@@ -5,19 +5,20 @@ import { authenticate } from '../middleware/authenticate.js';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { getMetrics } from '../utils/metrics.js';
+import { STATS_RATE_WINDOW_MS, STATS_RATE_LIMIT } from '../utils/constants.js';
 
 const router = Router();
 
 const statsRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
+  windowMs:        STATS_RATE_WINDOW_MS,
+  limit:           STATS_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
   validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'stats' }),
+  store:           new PostgresStore({ windowMs: STATS_RATE_WINDOW_MS, keyType: 'stats' }),
 });
 
 // Page names are whitelisted to prevent arbitrary values being written to the DB

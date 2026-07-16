@@ -163,8 +163,8 @@ router.post('/passkey/register/start', passkeyRateLimit, authenticate, async (re
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, user_id, expires_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
-      [sessionKey, options.challenge, userId]
+       VALUES ($1, $2, $3, NOW() + $4::interval)`,
+      [sessionKey, options.challenge, userId, WEBAUTHN_CHALLENGE_TTL]
     );
 
     res.json({ options, session_key: sessionKey });
@@ -257,8 +257,8 @@ router.post('/passkey/login/start', passkeyRateLimit, async (req, res, next) => 
     const sessionKey = uuidv4();
     await pool.query(
       `INSERT INTO webauthn_challenges (session_key, challenge, expires_at)
-       VALUES ($1, $2, NOW() + INTERVAL '${WEBAUTHN_CHALLENGE_TTL}')`,
-      [sessionKey, options.challenge]
+       VALUES ($1, $2, NOW() + $3::interval)`,
+      [sessionKey, options.challenge, WEBAUTHN_CHALLENGE_TTL]
     );
 
     res.json({ options, session_key: sessionKey });
@@ -375,8 +375,8 @@ router.post('/email/send', emailRateLimit, validate(EmailSendSchema), async (req
     const token = uuidv4();
     await pool.query(
       `INSERT INTO email_tokens (user_id, token, expires_at)
-       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + INTERVAL '${MAGIC_LINK_TTL}')`,
-      [userId, token]
+       VALUES ($1, crypt($2, gen_salt('bf')), NOW() + $3::interval)`,
+      [userId, token, MAGIC_LINK_TTL]
     );
     logger.info('[auth/email/send] Token inserted — attempting email send');
     await sendMagicLink(normalizedEmail, token).catch(err => {

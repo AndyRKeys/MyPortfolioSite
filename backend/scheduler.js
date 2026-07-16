@@ -17,6 +17,7 @@ import { pool }                from './db/pool.js';
 import { logger }              from './utils/logger.js';
 import { generateAiBlogPost }  from './utils/aiGenerate.js';
 import { slugify, findUniqueSlug } from './utils/slugify.js';
+import { GITHUB_REPO }         from './utils/constants.js';
 
 // ── Activity context ──────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ async function buildDailyContext() {
     const token   = process.env.GITHUB_TOKEN;
     const headers = { 'User-Agent': 'MyPortfolioSite-scheduler', Accept: 'application/vnd.github+json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const url  = 'https://api.github.com/repos/AndyRKeys/MyPortfolioSite/pulls?state=closed&sort=updated&direction=desc&per_page=30';
+    const url  = `https://api.github.com/repos/${GITHUB_REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=30`;
     const res  = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
     if (res.ok) {
       const prs = await res.json();
