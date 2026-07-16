@@ -17,9 +17,8 @@ import path              from 'path';
 import fs                from 'fs';
 import { randomBytes }   from 'crypto';
 import { rateLimit }     from 'express-rate-limit';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { authenticate }  from '../middleware/authenticate.js';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 import { logAudit }      from '../utils/audit.js';
 import { UPLOADS_DIR }   from '../utils/paths.js';
@@ -32,17 +31,11 @@ const router = Router();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Per-IP backstop on CV write operations.
-const cvRateLimit = rateLimit({
-  windowMs:        CV_RATE_WINDOW_MS,
-  limit:           CV_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: CV_RATE_WINDOW_MS, keyType: 'cv' }),
-});
+const cvRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: CV_RATE_WINDOW_MS,
+  limit:    CV_RATE_LIMIT,
+  keyType:  'cv',
+}));
 
 // Maximum stored versions before oldest is pruned
 const MAX_CV_VERSIONS = 5;

@@ -1,24 +1,17 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { getMetrics } from '../utils/metrics.js';
 
 const router = Router();
 
-const statsRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'stats' }),
-});
+const statsRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    60,
+  keyType:  'stats',
+}));
 
 // Page names are whitelisted to prevent arbitrary values being written to the DB
 const ALLOWED_PAGES = new Set(['home', 'blog', 'travel']);

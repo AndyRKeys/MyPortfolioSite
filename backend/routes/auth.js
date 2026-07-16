@@ -11,8 +11,8 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfServiceAccount, exemptIfTrusted } from '../utils/serviceKey.js';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
+import { exemptIfServiceAccount } from '../utils/serviceKey.js';
 import { sendMagicLink } from '../utils/email.js';
 import { logger }   from '../utils/logger.js';
 import { logAudit } from '../utils/audit.js';
@@ -39,29 +39,21 @@ const ORIGIN     = process.env.WEBAUTHN_ORIGIN;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 // Rate limiters for sensitive auth endpoints (per IP)
-const emailRateLimit = rateLimit({
-  windowMs:        EMAIL_RATE_WINDOW_MS,
-  limit:           EMAIL_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfServiceAccount,
-  message:         { error: 'Too many login attempts. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: EMAIL_RATE_WINDOW_MS, keyType: 'email' }),
-});
+const emailRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: EMAIL_RATE_WINDOW_MS,
+  limit:    EMAIL_RATE_LIMIT,
+  keyType:  'email',
+  skip:     exemptIfServiceAccount,
+  message:  'Too many login attempts. Please try again later.',
+}));
 
-const passkeyRateLimit = rateLimit({
-  windowMs:        PASSKEY_RATE_WINDOW_MS,
-  limit:           PASSKEY_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfServiceAccount,
-  message:         { error: 'Too many authentication attempts. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: PASSKEY_RATE_WINDOW_MS, keyType: 'passkey' }),
-});
+const passkeyRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: PASSKEY_RATE_WINDOW_MS,
+  limit:    PASSKEY_RATE_LIMIT,
+  keyType:  'passkey',
+  skip:     exemptIfServiceAccount,
+  message:  'Too many authentication attempts. Please try again later.',
+}));
 
 // Account-management surface (/setup/status, /me, /passkeys, /passkeys/:id).
 // Owner is exempt via exemptIfTrusted (which verifies the JWT inline); cap
@@ -69,17 +61,11 @@ const passkeyRateLimit = rateLimit({
 // protected endpoints. Separate keyType from passkey/email (#445).
 // The limiter precedes resolveUser in each route so CodeQL's
 // js/missing-rate-limiting detector sees it before any authorization step.
-const accountRateLimit = rateLimit({
-  windowMs:        ACCOUNT_RATE_WINDOW_MS,
-  limit:           ACCOUNT_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: ACCOUNT_RATE_WINDOW_MS, keyType: 'account' }),
-});
+const accountRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: ACCOUNT_RATE_WINDOW_MS,
+  limit:    ACCOUNT_RATE_LIMIT,
+  keyType:  'account',
+}));
 
 function signJWT(user) {
   return jwt.sign(

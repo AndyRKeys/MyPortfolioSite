@@ -285,6 +285,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## [Unreleased] — on `dev`, not yet in production
 
+### Changed
+
+- Deduplicated ~15 near-identical rate-limiter config blocks into a shared `rateLimiterOptions()` options builder in `backend/middleware/rateLimiter.js` (posts, travel, ai-blog, auth ×3, cv, upload, contact, stats, search, audit, debug, deploy ×2). Preserves the inline `rateLimit(rateLimiterOptions({...}))` call shape at every site so CodeQL's `js/missing-rate-limiting` detector still traces each route correctly (#522)
+- `TRAVEL_COLS`/`TRAVEL_COLS_PUBLIC` in `backend/routes/travel.js` are now generated from a single `travelCols({ publicCoords })` template function instead of two duplicated 20-line SQL fragments (#522)
+
 ### Fixed
 
 - Delete button size/shape inconsistency — add `.btn-danger` variant to button system; `.travel-delete-btn` now composes from it, removing `!important` overrides (#137)

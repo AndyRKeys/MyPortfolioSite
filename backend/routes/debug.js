@@ -4,8 +4,7 @@ import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { isEmailConfigured, sendErrorAlertEmail } from '../utils/email.js';
 
 const router = Router();
@@ -14,17 +13,12 @@ const router = Router();
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-const debugRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           50,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Rate limited' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'debug' }),
-});
+const debugRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    50,
+  keyType:  'debug',
+  message:  'Rate limited',
+}));
 
 // ── Alert threshold ───────────────────────────────────────────────────────────
 // Fire an email when this many errors arrive within the window. Cooldown
