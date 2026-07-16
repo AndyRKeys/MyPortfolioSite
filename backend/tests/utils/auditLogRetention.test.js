@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { pool } from '../../db/pool.js';
-import { pruneAuditLog } from '../../utils/auditLog.js';
+import { pruneAuditLog } from '../../utils/audit.js';
 
 // ── pruneAuditLog ─────────────────────────────────────────────────────────────
 

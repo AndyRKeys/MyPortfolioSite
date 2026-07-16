@@ -26,7 +26,7 @@ import auditRoutes   from './routes/audit.js';
 import searchRoutes  from './routes/search.js';
 import githubRoutes  from './routes/github.js';
 import aiBlogRoutes  from './routes/ai-blog.js';
-import { healthRouter } from './routes/health.js';
+import { healthHandler } from './routes/health.js';
 import { errorHandler }     from './middleware/errorHandler.js';
 import { metricsCollector } from './middleware/metricsCollector.js';
 
@@ -98,8 +98,8 @@ export function createApp() {
   app.use('/ai-blog', aiBlogRoutes);
 
   // Health check — internal only (direct backend port); not proxied by nginx
-  app.get('/health', healthRouter);
-  app.get('/api/health', healthRouter);
+  app.get('/health', healthHandler);
+  app.get('/api/health', healthHandler);
 
   // Centralised error handler — must be last
   app.use(errorHandler);

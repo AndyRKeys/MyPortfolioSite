@@ -10,7 +10,7 @@ function truncate(str, len) {
 }
 
 function buildBlogPostCard(post) {
-    return buildPostCard('blog', {
+    return buildPostCard({
         slug: post.slug,
         title: post.title,
         date: formatPostDate(post),

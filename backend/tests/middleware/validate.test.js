@@ -10,7 +10,6 @@ import {
   UpdatePostSchema,
   CreateTravelSchema,
   UpdateTravelSchema,
-  SetupSchema,
   EmailSendSchema,
   PasskeyRegisterFinishSchema,
   PasskeyLoginFinishSchema,
@@ -161,28 +160,6 @@ describe('CreateTravelSchema', () => {
     const { req, nextCalled } = runValidate(CreateTravelSchema, { title: 'Paris' });
     expect(nextCalled).toBe(true);
     expect(req.body.media_items).toEqual([]);
-  });
-});
-
-// ── SetupSchema ───────────────────────────────────────────────────────────────
-
-describe('SetupSchema', () => {
-  it('accepts valid input', () => {
-    const { nextCalled } = runValidate(SetupSchema, {
-      email: 'admin@example.com', username: 'admin',
-    });
-    expect(nextCalled).toBe(true);
-  });
-
-  it('rejects invalid email', () => {
-    const { res } = runValidate(SetupSchema, { email: 'bad', username: 'admin' });
-    expect(res._status).toBe(400);
-  });
-
-  it('rejects missing username', () => {
-    const { res } = runValidate(SetupSchema, { email: 'admin@example.com' });
-    expect(res._status).toBe(400);
-    expect(res._json.error).toMatch(/username/i);
   });
 });
 

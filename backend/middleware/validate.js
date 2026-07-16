@@ -91,11 +91,6 @@ export const ContactSchema = z.object({
 
 // ── Auth schemas ──────────────────────────────────────────────────────────────
 
-export const SetupSchema = z.object({
-  email:    z.string().email('Valid email required'),
-  username: z.string().min(1, 'Username is required'),
-});
-
 export const EmailSendSchema = z.object({
   email: z.string().email('Valid email required'),
 });

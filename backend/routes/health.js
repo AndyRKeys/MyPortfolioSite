@@ -1,10 +1,10 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 
-export async function healthRouter(req, res) {
+export async function healthHandler(req, res) {
   try {
     // Lightweight health check: verify DB connectivity
-    const result = await pool.query('SELECT NOW()');
+    await pool.query('SELECT NOW()');
 
     res.status(200).json({
       status: 'ok',

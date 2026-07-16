@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech stack:**
 
-- Frontend: vanilla JS/HTML/CSS (no build step), jQuery for legacy compatibility
+- Frontend: vanilla JS/HTML/CSS (no build step); jQuery was fully removed in #389
 - Backend: Node.js/Express (ES modules), WebAuthn + JWT auth
 - Database: PostgreSQL
 - Web server: Nginx (reverse proxy + static files)
@@ -168,7 +168,7 @@ No build step. HTML pages load ES modules directly via `<script type="module">`.
 
 **Frontend JS structure:**
 
-- `resources/js/config.js` — exports `API_BASE` (empty string for same-origin, auto-detects localhost in dev)
+- `resources/js/config.js` — exports `API_BASE` (`'/api'` in all environments; nginx proxies to the backend)
 - `resources/js/script.js` — homepage only: GitHub widget, contact form, home visit counter
 - `resources/js/blog.js` — blog listing page
 - `resources/js/travel.js` — travel listing page (map, cards, timeline, lightbox)
@@ -176,7 +176,7 @@ No build step. HTML pages load ES modules directly via `<script type="module">`.
 - `resources/js/admin/` — modular admin panel: `posts.js`, `travel.js`, `deploy.js`, `cv.js`, `auth.js`, `passkeys.js`, `stats.js`, `notes.js`
 - `resources/js/utils/` — shared utilities (escapeHtml, formatVisitDate, buildTimelineItem, etc.)
 
-**Key pattern:** jQuery used only for legacy compatibility (DOM queries, $.ajax for API calls). New code uses vanilla DOM APIs and fetch.
+**Key pattern:** vanilla DOM APIs and fetch throughout — jQuery was fully removed in #389.
 
 **Shared utilities are intentional tech debt paydown** — they exist because earlier sessions paid down this debt. Reuse them.
 
