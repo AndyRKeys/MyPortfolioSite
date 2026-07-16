@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { resolveUser } from '../middleware/resolveUser.js';
-import { isEmailConfigured, sendContactEmail } from '../utils/email.js';
+import { isEmailConfigured, sendContactEmail, redactEmail } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -33,8 +33,9 @@ router.post('/', contactRateLimit, resolveUser, validate(ContactSchema), async (
     if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({ error: 'Email service is not configured on this server.' });
     }
+    // Never log raw PII — redact the email and log only the message length (#522 M18).
     logger.info(
-      { name, email, message },
+      { email: redactEmail(email), messageLength: message?.length ?? 0 },
       '[contact] DEV: form submission received but email not configured — not sent'
     );
     return res.json({ success: true });
