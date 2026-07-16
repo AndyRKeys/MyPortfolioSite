@@ -287,6 +287,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ### Fixed
 
+- AI Blog page visits were never recorded — `ai-blog` was missing from the stats route's page whitelist (#522)
+- Admin deploy branch selector could show a stale branch list right after a successful fetch — cache is now cleared on `/fetch` (#522)
+- Media upload retry no longer silently burns retries against a deleted original file — returns 404 with a clear message instead (#522)
 - Delete button size/shape inconsistency — add `.btn-danger` variant to button system; `.travel-delete-btn` now composes from it, removing `!important` overrides (#137)
 
 ### Added

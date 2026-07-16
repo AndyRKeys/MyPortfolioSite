@@ -21,7 +21,7 @@ const statsRateLimit = rateLimit({
 });
 
 // Page names are whitelisted to prevent arbitrary values being written to the DB
-const ALLOWED_PAGES = new Set(['home', 'blog', 'travel']);
+const ALLOWED_PAGES = new Set(['home', 'blog', 'travel', 'ai-blog']);
 
 // ── Routes
 

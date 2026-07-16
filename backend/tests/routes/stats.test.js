@@ -28,6 +28,26 @@ function authToken() {
 beforeEach(() => { process.env.JWT_SECRET = SECRET; });
 afterEach(() => { delete process.env.JWT_SECRET; });
 
+describe('POST /stats/visit', () => {
+  it('accepts page=ai-blog and records the visit (#522 M7)', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockResolvedValueOnce({ rows: [{ count: '5' }] });
+    const res = await request(app).post('/stats/visit?page=ai-blog');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ page: 'ai-blog', count: 5 });
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO page_visits'),
+      ['ai-blog']
+    );
+  });
+
+  it('still rejects a non-whitelisted page with 400', async () => {
+    const res = await request(app).post('/stats/visit?page=not-a-page');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid page/i);
+  });
+});
+
 describe('GET /stats/visits', () => {
   it('returns 200 with auth', async () => {
     const res = await request(app)
