@@ -73,3 +73,12 @@ export const UPLOAD_RATE_LIMIT     = 30;
 
 export const CV_RATE_WINDOW_MS     = 60 * 1000; // 1 minute
 export const CV_RATE_LIMIT         = 30;
+
+// ── Health check ──────────────────────────────────────────────────────────────
+
+// Internal-only endpoint (not proxied by nginx), but still hits the DB — must
+// stay rate-limited per CodeQL's js/missing-rate-limiting detector. Docker's
+// healthcheck polls every 10s (6 req/min); this leaves generous headroom for
+// external monitoring too.
+export const HEALTH_RATE_WINDOW_MS = 60 * 1000; // 1 minute
+export const HEALTH_RATE_LIMIT     = 60;

@@ -9,9 +9,12 @@ import express  from 'express';
 import cors     from 'cors';
 import crypto   from 'crypto';
 import pinoHttp from 'pino-http';
+import { rateLimit } from 'express-rate-limit';
 
 import { logger }     from './utils/logger.js';
 import { UPLOADS_DIR } from './utils/paths.js';
+import { PostgresStore } from './middleware/postgresStore.js';
+import { HEALTH_RATE_WINDOW_MS, HEALTH_RATE_LIMIT } from './utils/constants.js';
 
 import authRoutes    from './routes/auth.js';
 import travelRoutes  from './routes/travel.js';
@@ -97,9 +100,21 @@ export function createApp() {
   app.use('/github',  githubRoutes);
   app.use('/ai-blog', aiBlogRoutes);
 
-  // Health check — internal only (direct backend port); not proxied by nginx
-  app.get('/health', healthHandler);
-  app.get('/api/health', healthHandler);
+  // Health check — internal only (direct backend port); not proxied by nginx.
+  // Still hits the DB, so still needs a rate limiter to satisfy CodeQL's
+  // js/missing-rate-limiting detector (#522 follow-up).
+  const healthRateLimit = rateLimit({
+    windowMs:        HEALTH_RATE_WINDOW_MS,
+    limit:           HEALTH_RATE_LIMIT,
+    keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
+    message:         { error: 'Too many requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders:   false,
+    validate:        { positiveHits: false },
+    store:           new PostgresStore({ windowMs: HEALTH_RATE_WINDOW_MS, keyType: 'health' }),
+  });
+  app.get('/health', healthRateLimit, healthHandler);
+  app.get('/api/health', healthRateLimit, healthHandler);
 
   // Centralised error handler — must be last
   app.use(errorHandler);
