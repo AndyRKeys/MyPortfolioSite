@@ -79,15 +79,18 @@ async function streamToSSE(res, iter) {
 
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
+  let ok = true;
   try {
     for await (const line of iter) {
       send({ type: 'line', text: line });
     }
     send({ type: 'done' });
   } catch (err) {
+    ok = false;
     send({ type: 'error', text: err.message });
   }
   res.end();
+  return ok;
 }
 
 // Writes a queue trigger and streams the deploy log file as SSE.
@@ -268,7 +271,15 @@ router.get('/history', deployReadLimit, authenticateDeploy, async (req, res) => 
 
 router.post('/fetch', deployWriteLimit, authenticateDeploy, async (req, res) => {
   await logAudit(req, 'deploy.fetch', 'deploy', null, { env: DEPLOY_ENV });
-  await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
+  const ok = await streamToSSE(res, spawnStream('git', ['fetch', 'origin'], { cwd: REPO_DIR }));
+  if (ok) {
+    // Invalidate the branch list cache so a just-fetched branch shows up
+    // immediately in the admin branch selector (#522 M17).
+    branchCache = null;
+    logger.info('[deploy-fetch] fetch succeeded — branch cache cleared');
+  } else {
+    logger.warn('[deploy-fetch] fetch failed — branch cache left intact');
+  }
 });
 
 // ── POST /api/deploy ──────────────────────────────────────────────────────────

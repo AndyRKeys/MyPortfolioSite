@@ -2,10 +2,13 @@
  * Upload route tests — multer size limit, MIME filtering, auth gate,
  * status/jobs/retry endpoints. (#174)
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt     from 'jsonwebtoken';
+import fs      from 'node:fs';
+import path    from 'node:path';
 import { createApp } from '../../app.js';
+import { UPLOADS_ORIGINAL_DIR } from '../../utils/paths.js';
 
 vi.mock('../../db/pool.js', () => ({
   pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
@@ -187,6 +190,18 @@ describe('GET /upload/jobs', () => {
 // ── Retry endpoint ────────────────────────────────────────────────────────────
 
 describe('POST /upload/retry', () => {
+  const existingFile = 'retry-exists.jpg';
+  const existingPath = path.join(UPLOADS_ORIGINAL_DIR, existingFile);
+
+  beforeAll(() => {
+    fs.mkdirSync(UPLOADS_ORIGINAL_DIR, { recursive: true });
+    fs.writeFileSync(existingPath, 'jpeg-bytes');
+  });
+
+  afterAll(() => {
+    fs.rmSync(existingPath, { force: true });
+  });
+
   it('returns 401 without JWT', async () => {
     const res = await request(app).post('/upload/retry').send({ file: 'a.jpg' });
     expect(res.status).toBe(401);
@@ -200,14 +215,23 @@ describe('POST /upload/retry', () => {
     expect(res.status).toBe(400);
   });
 
-  it('re-enqueues the job and returns ok', async () => {
+  it('re-enqueues the job and returns ok when the original file exists', async () => {
     const { pool } = await import('../../db/pool.js');
     pool.query.mockResolvedValue({ rows: [] });
     const res = await request(app)
       .post('/upload/retry')
       .set('Authorization', `Bearer ${makeToken()}`)
-      .send({ file: 'test.jpg', mimeType: 'image/jpeg' });
+      .send({ file: existingFile, mimeType: 'image/jpeg' });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+  });
+
+  it('returns 404 when the original file is missing (#522 L12)', async () => {
+    const res = await request(app)
+      .post('/upload/retry')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ file: 'definitely-gone.jpg', mimeType: 'image/jpeg' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/original file .*not found|no longer exists/i);
   });
 });
