@@ -87,6 +87,8 @@ bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod
 bash ~/MyPortfolioSite/scripts/deploy/deploy.sh --env prod --rollback <sha>
 ```
 
+> **Fail-loud guarantee (#542):** `prod-deploy.ps1` now aborts before `deploy.sh` runs if `switch-branch.sh` fails, instead of silently deploying whatever was already checked out. `switch-branch.sh`'s own output is appended to `~/logs/prod-deploy.log`. `deploy.sh` also independently verifies it's on the requested branch (always `main` for prod) before doing any build/test work.
+
 > **Do not use `sudo`** with `deploy.sh`. Running as root sets `$HOME=/root`, causing the script to clone a fresh repo into `/root/` and read a template `.env` with placeholder values instead of your configured one. The script calls `try_root` internally for any commands that need elevation (UFW, certs). The script will exit immediately with a clear error if invoked as root.
 
 `deploy.sh --env prod` uses `deploy-lib.sh` to:
