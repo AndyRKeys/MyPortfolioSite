@@ -328,6 +328,15 @@ const importUpload = multer({
       cb(null, file.fieldname === 'photos' ? UPLOADS_ORIGINAL_DIR : os.tmpdir());
     },
     filename: (_req, file, cb) => {
+      // CodeQL (js/path-injection): don't derive the CSV's on-disk extension
+      // from the client-supplied filename, even though fileFilter already
+      // gates it to .csv — hardcode it so the generated path never traces
+      // back to user input at all, for the field whose file we later
+      // fs.readFileSync/unlink directly in the route handler.
+      if (file.fieldname === 'file') {
+        cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}.csv`);
+        return;
+      }
       const ext = path.extname(file.originalname).toLowerCase();
       cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
     },
