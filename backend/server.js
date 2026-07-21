@@ -4,7 +4,7 @@ import { logger } from './utils/logger.js';
 import { pool } from './db/pool.js';
 import { isOAuth2Configured, getGraphAccessToken } from './utils/email.js';
 import { validateEnvOrExit } from './utils/validateEnv.js';
-import { pruneAuditLog } from './utils/auditLog.js';
+import { pruneAuditLog } from './utils/audit.js';
 import { runMigrations } from './db/migrate.js';
 import { initBoss }            from './utils/boss.js';
 import { registerMediaWorker } from './workers/mediaProcessor.js';

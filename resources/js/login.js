@@ -93,8 +93,8 @@ document.getElementById('email-form').addEventListener('submit', async event => 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
         });
-        const data = await res.json();
-        setMessage(data.message || 'Check your inbox for the login link.');
+        await res.json(); // consume body; backend returns { sent: true }
+        setMessage('Check your inbox for the login link.');
     } catch {
         setMessage('Failed to send email. Is the backend running?', true);
     } finally {

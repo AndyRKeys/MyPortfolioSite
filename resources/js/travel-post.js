@@ -1,4 +1,5 @@
 import { API_BASE } from './config.js';
+import { formatVisitDate } from './utils/date.js';
 import { openLightbox, initLightbox } from './utils/lightbox.js';
 import { recordVisit } from './utils/stats.js';
 
@@ -7,13 +8,6 @@ import { recordVisit } from './utils/stats.js';
 function getId() {
     var params = new URLSearchParams(window.location.search);
     return params.get('id');
-}
-
-function formatVisitDate(d) {
-    if (!d) return '';
-    var dateObj = new Date(String(d).slice(0, 10) + 'T00:00:00');
-    if (isNaN(dateObj)) return '';
-    return dateObj.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function loadTravelPost() {
@@ -44,7 +38,7 @@ function renderTravelPost(travel) {
     var locationText = travel.location ? locationPrefix + travel.location : '';
     document.getElementById('post-location').textContent = locationText;
 
-    document.getElementById('post-date').textContent = formatVisitDate(travel.post_date);
+    document.getElementById('post-date').textContent = formatVisitDate(travel.post_date) || '';
 
     var allMedia = Array.isArray(travel.media) && travel.media.length
         ? travel.media

@@ -19,7 +19,7 @@ Revisit this decision if: (a) module-level unit tests of complex frontend logic 
 - Cache-busting: Nginx `sub_filter` appends `?v=${DEPLOY_VERSION}` to `.js` references in HTML at deploy time
 - **4 CDN imports** loaded at runtime:
   - `DOMPurify` from `cdn.jsdelivr.net` (blog-post.js, ai-blog-post.js)
-  - `exifr` from `esm.sh` (admin/travel.js, admin/travel/exif.js)
+  - `exifr` from `esm.sh` (admin/travel.js)
   - `@simplewebauthn/browser` from `esm.sh` (login.js, admin/passkeys.js)
 - **Existing browser-level test coverage (Puppeteer):** six scripts run inside the backend container post-deploy, covering all public pages, admin CRUD, CSP auditing, and error-logger contracts (see "Current Puppeteer suite" below)
 - Zero frontend unit or integration tests; regressions caught by Puppeteer E2E (post-deploy, automatic) and manual smoke test scripts (`Test-PRN.ps1`)

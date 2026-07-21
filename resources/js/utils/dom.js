@@ -89,75 +89,27 @@ export function buildTimelineItem(opts) {
 }
 
 /**
- * Builds a post card element.
- * type: 'blog' | 'travel'
- * data (blog):   { slug, title, date, excerpt }
- * data (travel): { id, title, location, date, notes, mediaUrl, mediaType }
+ * Builds a blog post card element.
+ * data: { slug, title, date, excerpt }
  * Returns a DOM element.
+ * (Travel cards use buildPublicTravelCard below.)
  */
-export function buildPostCard(type, data) {
-    if (type === 'blog') {
-        var card = el('a', { className: 'post-card', href: '/blog/post/?slug=' + encodeURIComponent(data.slug) });
-        var title = el('h3', { className: 'post-card-title' });
-        title.textContent = data.title || 'Untitled';
-        card.appendChild(title);
-        if (data.date) {
-            var date = el('p', { className: 'post-card-date' });
-            date.textContent = data.date;
-            card.appendChild(date);
-        }
-        if (data.excerpt) {
-            var excerpt = el('p', { className: 'post-card-excerpt' });
-            excerpt.textContent = data.excerpt;
-            card.appendChild(excerpt);
-        }
-        return card;
-    }
-
-    // type === 'travel'
-    var placeholder = '/resources/img/placeholder-transparent.png';
-    var tCard = el('article', { className: 'travel-card box draft-card' });
-    tCard.setAttribute('data-memory-id', data.id);
-
-    var media = el('div', { className: 'media' });
-    // Same root-relative guard as buildPublicTravelCard (#266).
-    var safeMediaUrl = (data.mediaUrl && !data.mediaUrl.startsWith('/') && !data.mediaUrl.startsWith('http'))
-        ? '/' + data.mediaUrl : data.mediaUrl;
-    if (safeMediaUrl) {
-        if (data.mediaType && data.mediaType.indexOf('video') === 0) {
-            media.appendChild(el('video', { controls: '', src: safeMediaUrl }));
-        } else {
-            var tImg = el('img', { alt: 'Travel snapshot', src: safeMediaUrl });
-            tImg.addEventListener('error', function () { tImg.setAttribute('src', placeholder); });
-            media.appendChild(tImg);
-        }
-    } else {
-        media.appendChild(el('img', { alt: 'Travel snapshot', src: placeholder }));
-    }
-
-    var content = el('div', { className: 'travel-content' });
-    var tTitle = el('h3');
-    tTitle.textContent = data.title || 'Untitled memory';
-    content.appendChild(tTitle);
-
-    var meta = el('p', { className: 'meta' });
-    var locSpan = el('span', { className: 'travel-location' });
-    locSpan.textContent = data.location || 'Location not set';
-    meta.appendChild(locSpan);
+export function buildPostCard(data) {
+    var card = el('a', { className: 'post-card', href: '/blog/post/?slug=' + encodeURIComponent(data.slug) });
+    var title = el('h3', { className: 'post-card-title' });
+    title.textContent = data.title || 'Untitled';
+    card.appendChild(title);
     if (data.date) {
-        var dateSpan2 = el('span', { className: 'travel-date' });
-        dateSpan2.textContent = data.date;
-        meta.appendChild(dateSpan2);
+        var date = el('p', { className: 'post-card-date' });
+        date.textContent = data.date;
+        card.appendChild(date);
     }
-    content.appendChild(meta);
-
-    var notesP = el('p');
-    notesP.textContent = data.notes || 'No notes yet.';
-    content.appendChild(notesP);
-
-    tCard.appendChild(media);
-    tCard.appendChild(content);
-    return tCard;
+    if (data.excerpt) {
+        var excerpt = el('p', { className: 'post-card-excerpt' });
+        excerpt.textContent = data.excerpt;
+        card.appendChild(excerpt);
+    }
+    return card;
 }
 
 /**

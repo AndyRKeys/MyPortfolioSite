@@ -1,8 +1,11 @@
 /**
- * Audit logging utility (#154)
+ * Audit log utilities (#154, #467)
  *
  * logAudit(req, action, entityType, entityId, detail)
  *   → writes one row to audit_log asynchronously (non-blocking)
+ *
+ * pruneAuditLog()
+ *   → deletes audit_log rows older than 90 days at server startup.
  *
  * Sensitive fields (tokens, passwords, hashes) must NEVER appear in `detail`.
  * The caller is responsible for scrubbing any such fields before passing them.
@@ -42,4 +45,18 @@ export async function logAudit(req, action, entityType = null, entityId = null, 
     // Audit failures are non-fatal — log and continue
     logger.warn({ err, action, entityType, entityId }, '[audit] Failed to write audit log row');
   }
+}
+
+/**
+ * Delete audit_log rows older than 90 days (#467).
+ * IPs from unauthenticated events (e.g. auth.login_failed) are PII and must
+ * not be retained indefinitely. This mirrors the email_tokens expiry pattern.
+ * Called once at server startup — non-blocking from the caller's perspective
+ * but awaited inside runStartupPreflight so failures surface in logs.
+ */
+export async function pruneAuditLog() {
+  const result = await pool.query(
+    `DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'`
+  );
+  logger.info({ deleted: result.rowCount }, '[audit] Pruned stale audit_log rows');
 }

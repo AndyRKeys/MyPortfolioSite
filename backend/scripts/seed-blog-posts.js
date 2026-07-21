@@ -119,7 +119,7 @@ Each feature has its own module under \`resources/js/admin/\`:
 
 ## State management
 
-There's no state management library. Each module owns its own state. The JWT token lives in \`sessionStorage\` (not \`localStorage\` — it clears on tab close, which is the right security trade-off for an admin session). The modules communicate via DOM events where needed.
+There's no state management library. Each module owns its own state. The JWT token lives in \`localStorage\`, so the admin session survives page reloads and new tabs; the token itself carries an expiry that bounds the session. The modules communicate via DOM events where needed.
 
 ## The constraint that helped
 
