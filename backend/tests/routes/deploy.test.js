@@ -207,6 +207,47 @@ describe('GET /deploy/branches', () => {
   });
 });
 
+// ── POST /deploy/fetch — branch cache invalidation (#522 M17) ────────────────
+
+describe('POST /deploy/fetch — branch cache invalidation', () => {
+  async function branchListGitCalls() {
+    const { spawnPromise } = await import('../../utils/shell.js');
+    return spawnPromise.mock.calls.filter(
+      ([cmd, args]) => cmd === 'git' && args.includes('--sort=-committerdate')
+    ).length;
+  }
+
+  it('clears the branch cache so the next /branches call re-runs git', async () => {
+    const { spawnPromise } = await import('../../utils/shell.js');
+
+    // Prime the cache (may or may not shell out depending on prior tests)
+    await request(app)
+      .get('/deploy/branches')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    spawnPromise.mockClear();
+
+    // Cached: no git call expected
+    const cached = await request(app)
+      .get('/deploy/branches')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(cached.status).toBe(200);
+    expect(await branchListGitCalls()).toBe(0);
+
+    // Fetch must invalidate the cache
+    const fetchRes = await request(app)
+      .post('/deploy/fetch')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(fetchRes.status).toBe(200);
+
+    // Next /branches call bypasses the (cleared) cache and re-runs git
+    const fresh = await request(app)
+      .get('/deploy/branches')
+      .set('Authorization', `Bearer ${adminToken()}`);
+    expect(fresh.status).toBe(200);
+    expect(await branchListGitCalls()).toBe(1);
+  });
+});
+
 // ── GET /deploy/history ───────────────────────────────────────────────────────
 
 describe('GET /deploy/history', () => {
