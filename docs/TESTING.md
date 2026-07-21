@@ -95,19 +95,42 @@ docker compose exec backend npm run test:coverage
 
 ## Browser-Level Tests
 
-Puppeteer scripts run automatically inside the backend container after every dev/prod deploy (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium). They reach nginx by its docker-internal service name (`NGINX_URL`).
+Browser tests run automatically inside the backend container after every dev/prod deploy (gated by `RUN_ERROR_LOGGER=1`; the backend image ships Chromium and Firefox ESR). They reach nginx by its docker-internal service name (`NGINX_URL`).
 
-| Script | npm script | What it verifies |
-|---|---|---|
-| `test-error-logger.js` | `test:error-logger` | Error logger initialises and reports on the `/api/debug/test-errors` page |
-| `test-error-logger-all-pages.js` | `test:error-logger:all-pages` | Logger initialises on every public page (`/`, `/blog/`, `/travel/`, `/login/`) |
-| `test-error-logger-browser.js` | `test:error-logger:browser` | Behavioural **contracts** (see below) via request interception |
-| `test-csp-violations.js` | `test:csp-violations` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
-| `test-admin-e2e-csp.js` | `test:admin-e2e-csp` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
-| `test-admin-e2e.js` | `test:admin-e2e` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175); also checks for unhandled JS exceptions on load and during interactions (#397) |
-| `test-public-pages.js` | `test:public-pages` | All public pages load without unhandled JS exceptions (`/`, `/blog/`, `/travel/`, `/login/`, `/setup/`, plus dynamically discovered blog post and travel post pages) — catches null dereferences and import failures invisible to curl-based checks (#390, #397) |
+Two scripts have been migrated from Puppeteer to **Playwright** (#527 — proof-of-concept); five remain as Puppeteer scripts pending follow-up PRs.
 
-> **Important:** every script that loads live pages (`test-error-logger-all-pages.js`, `test-csp-violations.js`, `test-admin-e2e-csp.js`, `test-admin-e2e.js`, `test-public-pages.js`) intercepts and mocks `POST /api/debug/errors` responses. Headless Chromium generates internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. Any new Puppeteer script that loads pages must do the same — add `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
+### Migration status
+
+| npm script | Runner | Spec / Script | What it verifies |
+|---|---|---|---|
+| `test:public-pages` | **Playwright** | `tests/e2e/public-pages.spec.js` | All public pages load without unhandled JS exceptions (Chromium + Firefox) |
+| `test:error-logger:all-pages` | **Playwright** | `tests/e2e/error-logger-all-pages.spec.js` | Logger initialises on every public page (Chromium + Firefox) |
+| `test:error-logger` | Puppeteer | `scripts/tests/test-error-logger.js` | Error logger initialises and reports on the `/api/debug/test-errors` page |
+| `test:error-logger:browser` | Puppeteer | `scripts/tests/test-error-logger-browser.js` | Behavioural **contracts** (see below) via request interception |
+| `test:csp-violations` | Puppeteer | `scripts/tests/test-csp-violations.js` | No first-party CSP violations on any page — catches missing allowlist entries (#341) |
+| `test:admin-e2e-csp` | Puppeteer | `scripts/tests/test-admin-e2e-csp.js` | Authenticated admin interactions (Nominatim geocoding etc.) produce no CSP violations (#342) |
+| `test:admin-e2e` | Puppeteer | `scripts/tests/test-admin-e2e.js` | Full admin CRUD E2E — blog create/delete, travel create/delete, deploy panel smoke (#175); also checks for unhandled JS exceptions on load and during interactions (#397) |
+
+### Running Playwright specs
+
+```bash
+# Run all migrated Playwright specs (both browsers):
+docker compose exec backend npx playwright test
+
+# Run a single spec on Chromium only:
+docker compose exec backend npx playwright test tests/e2e/public-pages.spec.js --project=chromium
+
+# Run on Firefox only:
+docker compose exec backend npx playwright test tests/e2e/public-pages.spec.js --project=firefox
+
+# Run via npm scripts (matches deploy pipeline):
+docker compose -f docker-compose.yml exec -T backend npm run test:public-pages -- https://nginx:3001
+docker compose -f docker-compose.yml exec -T backend npm run test:error-logger:all-pages -- https://nginx:3001
+```
+
+The Playwright config lives in `backend/playwright.config.js`. It reads `NGINX_URL` or `BASE_URL` for the base URL, and uses the system-installed Chromium and Firefox ESR (no downloads at runtime — `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`).
+
+> **Important:** every script or spec that loads live pages intercepts and mocks `POST /api/debug/errors` responses. Headless browsers generate internal noise errors (e.g. "Couldn't load fs/zlib") that `error-logger.js` would otherwise capture and POST as real entries, polluting the `client_errors` table and triggering false alert emails. In Playwright specs use `page.route('**/api/debug/errors', ...)` to fulfill POST requests before navigation; in Puppeteer scripts use `page.setRequestInterception(true)` and mock the endpoint before calling `page.goto()`.
 
 ### Contract test (`test-error-logger-browser.js`)
 
