@@ -28,6 +28,31 @@ function authToken() {
 beforeEach(() => { process.env.JWT_SECRET = SECRET; });
 afterEach(() => { delete process.env.JWT_SECRET; });
 
+describe('POST /stats/visit', () => {
+  it('accepts page=ai-blog and records the visit (#522 M7)', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockImplementation(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('rate_limits')) {
+        return { rows: [{ count: 1, window_start: new Date() }] };
+      }
+      return { rows: [{ count: '5' }] };
+    });
+    const res = await request(app).post('/stats/visit?page=ai-blog');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ page: 'ai-blog', count: 5 });
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO page_visits'),
+      ['ai-blog']
+    );
+  });
+
+  it('still rejects a non-whitelisted page with 400', async () => {
+    const res = await request(app).post('/stats/visit?page=not-a-page');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid page/i);
+  });
+});
+
 // #522 M8 — POST /stats/visit was the only unauthenticated write endpoint
 // without a rate limiter. It must return 429 once the per-IP cap is hit.
 describe('POST /stats/visit — rate limiting', () => {
