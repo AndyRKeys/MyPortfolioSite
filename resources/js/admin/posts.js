@@ -125,9 +125,11 @@ async function togglePublish(post) {
     try {
         const res = await authFetch(`/posts/${post.id}`, {
             method: 'PUT',
+            // Omit body_markdown: the list endpoint only returns an excerpt, so
+            // sending it here would wipe the stored body. The backend COALESCEs
+            // the missing field to the existing value (#522 H1).
             body: JSON.stringify({
                 title: post.title,
-                body_markdown: post.body_markdown || '',
                 // Slice to YYYY-MM-DD — list response returns full ISO timestamp (#93)
                 post_date: post.post_date ? String(post.post_date).slice(0, 10) : null,
                 publish: !post.published_at,
