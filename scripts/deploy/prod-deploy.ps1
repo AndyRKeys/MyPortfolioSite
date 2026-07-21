@@ -41,7 +41,14 @@ $remoteCommand = @"
 if [ ! -d "$ProdRepo/.git" ]; then
     git clone "$RepoUrl" "$ProdRepo"
 fi
-bash "$ProdRepo/scripts/deploy/switch-branch.sh" "main" "$ProdRepo"
+mkdir -p "$RemoteHome/logs"
+bash "$ProdRepo/scripts/deploy/switch-branch.sh" "main" "$ProdRepo" >> "$RemoteHome/logs/prod-deploy.log" 2>&1
+SWITCH_RC=`$?
+tail -n 30 "$RemoteHome/logs/prod-deploy.log"
+if [ "`$SWITCH_RC" -ne 0 ]; then
+    echo "[ERROR] switch-branch.sh failed (exit `$SWITCH_RC) — aborting deploy without building. See $RemoteHome/logs/prod-deploy.log"
+    exit `$SWITCH_RC
+fi
 bash "$ProdRepo/scripts/deploy/deploy.sh" --env prod $flagStr
 "@
 
