@@ -31,7 +31,12 @@ afterEach(() => { delete process.env.JWT_SECRET; });
 describe('POST /stats/visit', () => {
   it('accepts page=ai-blog and records the visit (#522 M7)', async () => {
     const { pool } = await import('../../db/pool.js');
-    pool.query.mockResolvedValueOnce({ rows: [{ count: '5' }] });
+    pool.query.mockImplementation(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('rate_limits')) {
+        return { rows: [{ count: 1, window_start: new Date() }] };
+      }
+      return { rows: [{ count: '5' }] };
+    });
     const res = await request(app).post('/stats/visit?page=ai-blog');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ page: 'ai-blog', count: 5 });
