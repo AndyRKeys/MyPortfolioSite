@@ -118,6 +118,16 @@ describe('GET /github/activity', () => {
     expect(res.body.pullRequestStats.total).toBe(3); // 1 open + 2 closed
   });
 
+  it('requests GitHub API paths built from the shared GITHUB_REPO constant (#522 M13)', async () => {
+    const { GITHUB_REPO } = await import('../../utils/constants.js');
+    const res = await request(app).get('/github/activity');
+    expect(res.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalled();
+    for (const [url] of global.fetch.mock.calls) {
+      expect(String(url)).toContain(`/repos/${GITHUB_REPO}/`);
+    }
+  });
+
   it('caches the response — second request does not call fetch again', async () => {
     await request(app).get('/github/activity');
     const fetchCallsAfterFirst = global.fetch.mock.calls.length;

@@ -14,6 +14,23 @@
 
 import { logger } from './logger.js';
 
+// ── Config ──────────────────────────────────────────────────────────────────────
+
+// Default Anthropic model and generation settings. Overridable via env so the
+// model can be bumped without a code change (#522 M14).
+const DEFAULT_ANTHROPIC_MODEL     = 'claude-sonnet-4-6';
+const ANTHROPIC_MAX_TOKENS        = 1024;
+const DEFAULT_AI_GENERATE_TIMEOUT_MS = 150_000; // 150s — Ollama can be slow on cold start
+
+/**
+ * Resolve the AI generation timeout (ms) from AI_GENERATE_TIMEOUT_MS, falling
+ * back to the default for unset, non-numeric, or non-positive values.
+ */
+export function getAiGenerateTimeoutMs() {
+  const raw = parseInt(process.env.AI_GENERATE_TIMEOUT_MS, 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_AI_GENERATE_TIMEOUT_MS;
+}
+
 // ── System prompt ─────────────────────────────────────────────────────────────
 
 export const AI_GENERATE_SYSTEM_PROMPT = `You are writing an AI dev blog post for a personal portfolio site. The owner (Andy) documents pair-programming sessions with Claude AI. Write in first person plural ("we") — Andy and Claude working together.
@@ -157,7 +174,7 @@ export async function generateAiBlogPost(context = null, caller = 'generate') {
 
   try {
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 150_000);
+    const timeout    = setTimeout(() => controller.abort(), getAiGenerateTimeoutMs());
     let ollamaRes;
     try {
       ollamaRes = await fetch(`${ollamaHost}/api/chat`, {
@@ -207,8 +224,8 @@ export async function generateAiBlogPost(context = null, caller = 'generate') {
       'content-type':      'application/json',
     },
     body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      model:      process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL,
+      max_tokens: ANTHROPIC_MAX_TOKENS,
       system:     AI_GENERATE_SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userMessage }],
     }),

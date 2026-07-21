@@ -2,6 +2,10 @@
 // Reactive: checkCvExists() runs on load and whenever the page regains visibility (#110).
 
 (function () {
+    // Canonical public download filename — mirrors CV_PUBLIC_FILENAME in
+    // backend/utils/constants.js.
+    var CV_PUBLIC_FILENAME = 'Andy_Keys_CV.pdf';
+
     var btn = document.getElementById('cv-download-btn');
     if (!btn) return;
 
@@ -36,7 +40,7 @@
                 var url = URL.createObjectURL(blob);
                 var a = document.createElement('a');
                 a.href = url;
-                a.download = 'Andy_Keys_CV.pdf';
+                a.download = CV_PUBLIC_FILENAME;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);

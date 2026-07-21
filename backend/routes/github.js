@@ -8,10 +8,10 @@
  */
 import { Router } from 'express';
 import { logger } from '../utils/logger.js';
+import { GITHUB_REPO } from '../utils/constants.js';
 
 const router = Router();
 
-const GITHUB_REPO   = 'AndyRKeys/MyPortfolioSite';
 const GITHUB_API    = 'https://api.github.com';
 const CACHE_TTL_MS  = 10 * 60 * 1000; // 10 minutes
 const USER_AGENT    = 'MyPortfolioSite-backend/1.0 (github-activity-proxy)';

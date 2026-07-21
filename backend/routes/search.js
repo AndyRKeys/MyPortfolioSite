@@ -13,19 +13,20 @@ import { PostgresStore } from '../middleware/postgresStore.js';
 import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 import { publicCache }   from '../middleware/cacheHeaders.js';
+import { SEARCH_RATE_WINDOW_MS, SEARCH_RATE_LIMIT } from '../utils/constants.js';
 
 const router = Router();
 
 const searchRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
+  windowMs:        SEARCH_RATE_WINDOW_MS,
+  limit:           SEARCH_RATE_LIMIT,
   keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
   skip:            exemptIfTrusted,
   message:         { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders:   false,
   validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'search' }),
+  store:           new PostgresStore({ windowMs: SEARCH_RATE_WINDOW_MS, keyType: 'search' }),
 });
 
 // GET /search?q=term&type=all|blog|travel&limit=10

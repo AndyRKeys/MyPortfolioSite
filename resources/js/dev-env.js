@@ -4,13 +4,13 @@
  * and tints the favicon when running on localhost, 127.0.0.1, or
  * port 3001 (dev server), so the browser tab and nav are immediately
  * distinguishable from the live site.
+ *
+ * Dev detection is imported from config.js — the single source of truth
+ * (hostname + port) so the heuristic isn't reimplemented here.
  */
-(function () {
-    const isDev =
-        location.hostname === 'localhost' ||
-        location.hostname === '127.0.0.1' ||
-        location.port === '3001';
+import { isDev } from './config.js';
 
+(function () {
     if (!isDev) return;
 
     // Prefix page title

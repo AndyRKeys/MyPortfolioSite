@@ -286,6 +286,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ## [Unreleased] — on `dev`, not yet in production
 
+### Changed
+
+- Extracted hard-coded values into env vars/named constants: `GITHUB_REPO` (backend + scheduler), `ANTHROPIC_MODEL` and `AI_GENERATE_TIMEOUT_MS` for AI generation, `CV_PUBLIC_FILENAME`, and rate-limit windows/limits for deploy/debug/stats/search/audit routes. WebAuthn challenge and magic-link TTL SQL now bind the interval as a query parameter instead of string-interpolating it. Consolidated dev-environment detection (hostname + port) into a single `isDev` export in `config.js` (#522)
+
 ### Fixed
 
 - Admin publish/unpublish toggle could silently erase the post body — backend UPDATE now `COALESCE`s `body_markdown` instead of overwriting with an empty string on a partial PUT (#522)

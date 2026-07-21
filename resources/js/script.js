@@ -71,11 +71,14 @@ for (var i = 0; i < childDivs.length; i++) {
 
 // ── GitHub activity widget ────────────────────────────────────────────────────
 
+// Number of repos to show in the homepage GitHub widget.
+var GITHUB_WIDGET_REPO_COUNT = 6;
+
 function loadGithubWidget() {
     var container = document.getElementById('github-repos');
     if (!container) return;
 
-    fetch('https://api.github.com/users/AndyRKeys/repos?sort=pushed&per_page=6')
+    fetch('https://api.github.com/users/AndyRKeys/repos?sort=pushed&per_page=' + GITHUB_WIDGET_REPO_COUNT)
         .then(function (res) {
             if (res.status === 403 || res.status === 429) throw new Error('rate-limited');
             if (!res.ok) throw new Error('fetch-failed');

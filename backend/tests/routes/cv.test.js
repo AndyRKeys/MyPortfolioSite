@@ -85,6 +85,19 @@ describe('GET /cv', () => {
     const res = await request(app).get('/cv');
     expect(res.status).toBe(404);
   });
+
+  it('downloads with the canonical CV_PUBLIC_FILENAME in Content-Disposition (#522 L10)', async () => {
+    const { CV_PUBLIC_FILENAME } = await import('../../utils/constants.js');
+    // Write a real file so res.download can stream it (fs.promises is not spied).
+    await fs.promises.mkdir('/tmp/test-uploads', { recursive: true });
+    await fs.promises.writeFile('/tmp/test-uploads/cv-real.pdf', minPdf);
+    pool.query.mockResolvedValue({ rows: [{ id: 'abc', filename: 'cv-real.pdf' }] });
+    spyExistsSync.mockReturnValue(true);
+
+    const res = await request(app).get('/cv');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain(`filename="${CV_PUBLIC_FILENAME}"`);
+  });
 });
 
 // ── POST /cv — auth gate ──────────────────────────────────────────────────────

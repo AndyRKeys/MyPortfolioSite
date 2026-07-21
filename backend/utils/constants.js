@@ -33,10 +33,19 @@ export const WEBAUTHN_CHALLENGE_TTL = '5 minutes';
 // is valid. Changing this requires updating auth.js email/verify query too.
 export const MAGIC_LINK_TTL = '15 minutes';
 
+// ── GitHub ────────────────────────────────────────────────────────────────────
+
+// Repository (owner/name) used by the GitHub activity proxy and scheduler.
+// Overridable via the GITHUB_REPO env var so a fork can point at its own repo.
+export const GITHUB_REPO = process.env.GITHUB_REPO || 'AndyRKeys/MyPortfolioSite';
+
 // ── CV upload ─────────────────────────────────────────────────────────────────
 
 // Maximum size (bytes) for CV PDF uploads.
 export const CV_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+// Canonical public download filename for the current CV.
+export const CV_PUBLIC_FILENAME = 'Andy_Keys_CV.pdf';
 
 // ── Media upload ──────────────────────────────────────────────────────────────
 
@@ -73,3 +82,23 @@ export const UPLOAD_RATE_LIMIT     = 30;
 
 export const CV_RATE_WINDOW_MS     = 60 * 1000; // 1 minute
 export const CV_RATE_LIMIT         = 30;
+
+// ── Deploy / debug / stats / search / audit rate limits ───────────────────────
+
+export const DEPLOY_READ_RATE_WINDOW_MS  = 60 * 1000; // 1 minute
+export const DEPLOY_READ_RATE_LIMIT       = 60;
+
+export const DEPLOY_WRITE_RATE_WINDOW_MS = 60 * 1000; // 1 minute
+export const DEPLOY_WRITE_RATE_LIMIT      = 10;
+
+export const DEBUG_RATE_WINDOW_MS        = 60 * 1000; // 1 minute
+export const DEBUG_RATE_LIMIT             = 50;
+
+export const STATS_RATE_WINDOW_MS        = 60 * 1000; // 1 minute
+export const STATS_RATE_LIMIT             = 60;
+
+export const SEARCH_RATE_WINDOW_MS       = 60 * 1000; // 1 minute
+export const SEARCH_RATE_LIMIT            = 60;
+
+export const AUDIT_RATE_WINDOW_MS        = 60 * 1000; // 1 minute
+export const AUDIT_RATE_LIMIT             = 120;

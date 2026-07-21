@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { escapeHtml } from './html.js';
 import { logger } from './logger.js';
+import { MAGIC_LINK_TTL } from './constants.js';
 
 const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
 const GRAPH_SEND_URL  = 'https://graph.microsoft.com/v1.0/me/sendMail';
@@ -131,6 +132,27 @@ export async function sendErrorAlertEmail({ count, windowMinutes, topErrors, adm
   }
 }
 
+/**
+ * Build the magic-link email bodies. The expiry copy is derived from
+ * MAGIC_LINK_TTL (constants.js) so it can never drift from the real token TTL.
+ *
+ * @param {string} url  The full login URL including the token.
+ * @returns {{ html: string, text: string }}
+ */
+export function buildMagicLinkEmail(url) {
+  const html = `
+    <p>Click the link below to log in to your admin dashboard:</p>
+    <p>
+      <a href="${url}" style="display:inline-block;padding:12px 24px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px;">
+        Log in to AK Portfolio
+      </a>
+    </p>
+    <p style="color:#666;font-size:12px;">This link expires in ${MAGIC_LINK_TTL} and can only be used once.</p>
+  `;
+  const text = `Log in here: ${url}\n\nThis link expires in ${MAGIC_LINK_TTL} and can only be used once.`;
+  return { html, text };
+}
+
 export async function sendMagicLink(to, token) {
   logger.info(`[email] sendMagicLink called for ${redactEmail(to)}`);
 
@@ -143,16 +165,7 @@ export async function sendMagicLink(to, token) {
     ? process.env.OUTLOOK_EMAIL
     : (process.env.SMTP_FROM || process.env.SMTP_USER);
   const url  = `${process.env.FRONTEND_URL}/login/?token=${token}`;
-  const html = `
-    <p>Click the link below to log in to your admin dashboard:</p>
-    <p>
-      <a href="${url}" style="display:inline-block;padding:12px 24px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px;">
-        Log in to AK Portfolio
-      </a>
-    </p>
-    <p style="color:#666;font-size:12px;">This link expires in 15 minutes and can only be used once.</p>
-  `;
-  const text = `Log in here: ${url}\n\nThis link expires in 15 minutes and can only be used once.`;
+  const { html, text } = buildMagicLinkEmail(url);
 
   if (isOAuth2Configured()) {
     logger.info(`[email] OAuth2 (Graph): user=${redactEmail(process.env.OUTLOOK_EMAIL)}`);
