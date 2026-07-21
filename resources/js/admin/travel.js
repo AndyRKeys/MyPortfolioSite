@@ -693,6 +693,9 @@ export function initTravel() {
     const csvImportBtn   = document.getElementById('travel-csv-import-btn');
     const csvTemplateBtn = document.getElementById('travel-csv-template-btn');
     const csvMessage     = document.getElementById('travel-csv-message');
+    const csvPhotosInput = document.getElementById('travel-csv-photos');
+    const csvPhotosBtn    = document.getElementById('csv-photos-btn');
+    const csvPhotosLabel  = document.getElementById('csv-photos-label');
 
     function setCsvMessage(text, isError = false) {
         if (!csvMessage) return;
@@ -713,6 +716,21 @@ export function initTravel() {
         });
     }
 
+    if (csvPhotosBtn && csvPhotosInput) {
+        csvPhotosBtn.addEventListener('click', () => csvPhotosInput.click());
+    }
+
+    if (csvPhotosInput) {
+        csvPhotosInput.addEventListener('change', () => {
+            const count = csvPhotosInput.files?.length || 0;
+            if (csvPhotosLabel) {
+                csvPhotosLabel.textContent = count
+                    ? `${count} file${count !== 1 ? 's' : ''} selected`
+                    : 'No folder chosen';
+            }
+        });
+    }
+
     if (csvImportBtn && csvFileInput) {
         csvImportBtn.addEventListener('click', async () => {
             const file = csvFileInput.files[0];
@@ -724,6 +742,14 @@ export function initTravel() {
             try {
                 const fd = new FormData();
                 fd.append('file', file);
+
+                const photoFiles = Array.from(csvPhotosInput?.files || []);
+                if (photoFiles.length) {
+                    const manifest = photoFiles.map(f => f.webkitRelativePath || f.name);
+                    for (const f of photoFiles) fd.append('photos', f);
+                    fd.append('photoManifest', JSON.stringify(manifest));
+                }
+
                 const res  = await authFetchMultipart('/travel/import', fd);
                 const data = await res.json();
 
@@ -743,6 +769,8 @@ export function initTravel() {
                 // Reset the file input and reload the list if anything was imported
                 csvFileInput.value = '';
                 if (csvFileLabel) csvFileLabel.textContent = 'No file chosen';
+                if (csvPhotosInput) csvPhotosInput.value = '';
+                if (csvPhotosLabel) csvPhotosLabel.textContent = 'No folder chosen';
                 csvImportBtn.disabled = true;
                 if (imported > 0) await loadAll();
             } catch {
@@ -755,8 +783,8 @@ export function initTravel() {
 
     if (csvTemplateBtn) {
         csvTemplateBtn.addEventListener('click', () => {
-            const header  = 'title,location,notes,post_date,lat,lng,publish';
-            const example = '"My trip","Paris, France","A wonderful visit",2024-06-15,48.8566,2.3522,false';
+            const header  = 'title,location,notes,post_date,lat,lng,publish,photos';
+            const example = '"My trip","Paris, France","A wonderful visit",2024-06-15,48.8566,2.3522,false,"Paris/IMG_0001.jpg;Paris/IMG_0002.jpg"';
             const blob    = new Blob([header + '\n' + example + '\n'], { type: 'text/csv' });
             const url     = URL.createObjectURL(blob);
             const a       = document.createElement('a');
