@@ -292,12 +292,20 @@ remaining folder name to get approximate coordinates.
    ```
 
 5. **Import via admin panel** — Admin → Travel → Bulk import → choose
-   `G:\Pictures\geo-work\04-travel-import.csv`.
+   `G:\Pictures\geo-work\04-travel-import.csv`, then also choose the same
+   root photo folder you scanned (`G:\Pictures` in this example) via the
+   "Choose photo folder…" picker. The CSV's `photos` column (added by the
+   Export stage) lists each row's source photos as paths relative to that
+   root folder — selecting the same root folder lets the browser match them
+   up automatically.
    The route returns `{ imported, skipped, errors }`. Skipped rows have missing
-   required fields; errors include the row number and reason.
+   required fields; errors (including "photo not found among uploaded files")
+   include the row number and reason.
 
-6. **Add photos** — travel memories are imported as drafts with no photos.
-   Use the admin Travel editor to attach photos and publish each entry.
+6. **Review** — any photo referenced in the CSV that wasn't found in the
+   selected folder (or wasn't selected at all) is reported as a row-level
+   error but doesn't block the memory from being created — use the admin
+   Travel editor to attach anything that didn't match automatically.
 
 ---
 
