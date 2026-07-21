@@ -223,7 +223,7 @@ describe('POST /travel/import — file validation', () => {
       .attach('file', Buffer.from(csv), { filename: 'bad.csv', contentType: 'text/csv' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/title/i);
-    expect(res.body.expected).toBe('title,location,notes,post_date,lat,lng,publish');
+    expect(res.body.expected).toBe('title,location,notes,post_date,lat,lng,publish,photos');
   });
 });
 

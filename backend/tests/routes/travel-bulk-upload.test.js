@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import jwt      from 'jsonwebtoken';
+import fs       from 'fs';
 import { createApp } from '../../app.js';
 
 // Hoist mockClient so it is available inside the vi.mock factory below.
@@ -31,15 +32,71 @@ vi.mock('../../utils/boss.js', () => ({
   })),
 }));
 
-// Stub multer diskStorage so tests don't write real files.
+// The multer stub below always uses memoryStorage, so uploaded files never
+// get a real `.path`/`.filename` — only `.buffer`. POST /travel/import reads
+// the CSV via fs.readFileSync(csvFile.path) since it now uses disk storage
+// in production. Track buffer-by-fake-path here so fs.readFileSync/fs.unlink
+// can be patched to work against the in-memory buffer during tests, without
+// touching the production code path (which does write real files via
+// diskStorage outside tests).
+const bufferByFakePath = new Map();
+let fakePathCounter = 0;
+
+// Stub multer diskStorage so tests don't write real files. Also backfills
+// `.path`/`.filename` (memoryStorage leaves both undefined) so route code
+// that reads via fs.readFileSync(file.path) has something to read.
 vi.mock('multer', async (importOriginal) => {
   const multer = await importOriginal();
   const original = multer.default ?? multer;
-  const patched = (opts) => original({ ...opts, storage: original.memoryStorage() });
+  const patched = (opts) => {
+    const instance = original({ ...opts, storage: original.memoryStorage() });
+    const wrapHandler = (fn) => (req, res, cb) => fn(req, res, (err) => {
+      const assign = (file) => {
+        if (file && !file.path) {
+          const fakePath = `/tmp/test-fake-${fakePathCounter++}`;
+          file.path = fakePath;
+          file.filename = file.filename || `test-${fakePathCounter}-${file.originalname}`;
+          bufferByFakePath.set(fakePath, file.buffer);
+        }
+      };
+      if (req.file) assign(req.file);
+      if (Array.isArray(req.files)) req.files.forEach(assign);
+      if (req.files && !Array.isArray(req.files)) {
+        Object.values(req.files).forEach(arr => arr.forEach(assign));
+      }
+      cb(err);
+    });
+    return {
+      single: (...args) => wrapHandler(instance.single(...args)),
+      array: (...args) => wrapHandler(instance.array(...args)),
+      fields: (...args) => wrapHandler(instance.fields(...args)),
+    };
+  };
   patched.memoryStorage = original.memoryStorage;
   patched.diskStorage   = original.diskStorage;
   patched.MulterError   = original.MulterError;
   return { default: patched };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal();
+  const readFileSync = (p, enc) => {
+    if (bufferByFakePath.has(p)) {
+      const buf = bufferByFakePath.get(p);
+      return enc ? buf.toString(enc) : buf;
+    }
+    return actual.readFileSync(p, enc);
+  };
+  const unlink = (p, cb) => {
+    if (bufferByFakePath.has(p)) return cb(null);
+    return actual.unlink(p, cb);
+  };
+  return {
+    ...actual,
+    readFileSync,
+    unlink,
+    default: { ...actual.default, readFileSync, unlink },
+  };
 });
 
 process.env.JWT_SECRET  = 'test-secret-test-secret-test-secret-32';
@@ -238,5 +295,131 @@ describe("POST /travel/:id/photos/bulk — partial success", () => {
     expect(res.body.uploaded).toHaveLength(1);
     expect(res.body.errors).toHaveLength(1);
     expect(res.body.errors[0].error).toMatch(/failed to save/i); // generic message — raw DB error stays in logs
+  });
+});
+
+// ── CSV import with photos (#511) ────────────────────────────────────────────
+
+const VALID_CSV_WITH_PHOTOS = 'title,location,notes,post_date,lat,lng,publish,photos\n' +
+  '"Japan trip","Tokyo, Japan","Great city",2024-06-15,35.6762,139.6503,false,"Japan/IMG_0001.jpg"\n';
+
+const UNMATCHED_CSV = 'title,location,notes,post_date,lat,lng,publish,photos\n' +
+  '"Japan trip","Tokyo, Japan","Great city",2024-06-15,35.6762,139.6503,false,"Japan/IMG_9999.jpg"\n';
+
+describe('POST /travel/import — with photos', () => {
+  it('attaches matched photos to the newly-created memory', async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    // Call sequence inside the row loop (client via pool.connect === mockClient):
+    //   BEGIN -> findUniqueSlug SELECT -> INSERT posts -> COMMIT
+    // then back on the outer pool: SELECT id FROM posts (slug lookup) for
+    // attachMediaFiles, then attachMediaFiles' own INSERT post_media, then
+    // logAudit's INSERT.
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })   // BEGIN
+      .mockResolvedValueOnce({ rows: [] })   // findUniqueSlug SELECT — slug free
+      .mockResolvedValueOnce({ rows: [] })   // INSERT posts
+      .mockResolvedValueOnce({ rows: [] });  // COMMIT
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: UUID_A }] }) // SELECT id FROM posts WHERE slug
+      .mockResolvedValueOnce({ rows: [] })                // attachMediaFiles INSERT post_media
+      .mockResolvedValueOnce({ rows: [] });               // logAudit INSERT
+
+    const res = await request(app)
+      .post('/travel/import')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('file', Buffer.from(VALID_CSV_WITH_PHOTOS), { filename: 'travel.csv', contentType: 'text/csv' })
+      .attach('photos', smallJpeg, { filename: 'IMG_0001.jpg', contentType: 'image/jpeg' })
+      .field('photoManifest', JSON.stringify(['Japan/IMG_0001.jpg']));
+
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1);
+    expect(res.body.errors).toHaveLength(0);
+
+    const mediaInsertCall = pool.query.mock.calls.find(
+      ([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO post_media'),
+    );
+    expect(mediaInsertCall).toBeDefined();
+    expect(mediaInsertCall[1]).toContain(UUID_A);
+  });
+
+  it('creates the memory but reports an error for an unmatched filename', async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })   // BEGIN
+      .mockResolvedValueOnce({ rows: [] })   // findUniqueSlug SELECT
+      .mockResolvedValueOnce({ rows: [] })   // INSERT posts
+      .mockResolvedValueOnce({ rows: [] });  // COMMIT
+
+    pool.query.mockResolvedValueOnce({ rows: [] }); // logAudit INSERT
+
+    const res = await request(app)
+      .post('/travel/import')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('file', Buffer.from(UNMATCHED_CSV), { filename: 'travel.csv', contentType: 'text/csv' })
+      .attach('photos', smallJpeg, { filename: 'IMG_0001.jpg', contentType: 'image/jpeg' })
+      .field('photoManifest', JSON.stringify(['Japan/IMG_0001.jpg']));
+
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1); // memory still created
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].reason).toMatch(/not found among the uploaded files/i);
+  });
+
+  it('rejects the request with 400 if photoManifest length does not match uploaded file count', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockClear();
+    mockClient.query.mockClear();
+
+    const res = await request(app)
+      .post('/travel/import')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('file', Buffer.from(VALID_CSV_WITH_PHOTOS), { filename: 'travel.csv', contentType: 'text/csv' })
+      .attach('photos', smallJpeg, { filename: 'photo1.jpg', contentType: 'image/jpeg' })
+      .attach('photos', smallJpeg, { filename: 'photo2.jpg', contentType: 'image/jpeg' })
+      .field('photoManifest', JSON.stringify(['Japan/IMG_0001.jpg']));
+
+    expect(res.status).toBe(400);
+    const insertCalls = mockClient.query.mock.calls.filter(
+      ([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO posts'),
+    );
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it('cleans up an uploaded photo file that no CSV row references', async () => {
+    const { pool } = await import('../../db/pool.js');
+
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })   // BEGIN
+      .mockResolvedValueOnce({ rows: [] })   // findUniqueSlug SELECT
+      .mockResolvedValueOnce({ rows: [] })   // INSERT posts
+      .mockResolvedValueOnce({ rows: [] });  // COMMIT
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: UUID_B }] }) // SELECT id FROM posts WHERE slug
+      .mockResolvedValueOnce({ rows: [] })                // attachMediaFiles INSERT post_media
+      .mockResolvedValueOnce({ rows: [] });               // logAudit INSERT
+
+    const unlinkSpy = vi.spyOn(fs, 'unlink');
+
+    const res = await request(app)
+      .post('/travel/import')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('file', Buffer.from(VALID_CSV_WITH_PHOTOS), { filename: 'travel.csv', contentType: 'text/csv' })
+      .attach('photos', smallJpeg, { filename: 'IMG_0001.jpg', contentType: 'image/jpeg' })
+      .attach('photos', smallJpeg, { filename: 'IMG_0002.jpg', contentType: 'image/jpeg' })
+      .field('photoManifest', JSON.stringify(['Japan/IMG_0001.jpg', 'Japan/IMG_0002.jpg']));
+
+    expect(res.status).toBe(200);
+
+    // The second uploaded file (IMG_0002.jpg) is never referenced by any CSV
+    // row's photos column, so it should be cleaned up via fs.unlink.
+    const unlinkedFilenamesArgs = unlinkSpy.mock.calls.map(([filePath]) => filePath);
+    expect(unlinkedFilenamesArgs.some(p => typeof p === 'string')).toBe(true);
+    expect(unlinkSpy).toHaveBeenCalled();
+
+    unlinkSpy.mockRestore();
   });
 });

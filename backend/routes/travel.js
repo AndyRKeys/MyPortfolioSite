@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs';
 import multer from 'multer';
+import os from 'os';
 import path from 'path';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
@@ -11,12 +12,13 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
-import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME } from '../utils/constants.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME, MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
 import { wrapMulter } from '../utils/wrapMulter.js';
 import { getBoss } from '../utils/boss.js';
 import { mediaUpload } from '../utils/mediaUpload.js';
+import { UPLOADS_ORIGINAL_DIR } from '../utils/paths.js';
 
 const router = Router();
 
@@ -315,19 +317,35 @@ router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, re
 
 const CSV_MAX_BYTES = 1 * 1024 * 1024; // 1 MB
 
-// Memory-only multer — CSV content is parsed in-process, no file written to disk.
-// Extension check is the authoritative gate: browsers are inconsistent with MIME
-// types for .csv files (text/csv, text/plain, application/vnd.ms-excel all occur).
-const csvUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: CSV_MAX_BYTES },
+// Combined CSV + photos import upload. The "file" field (the CSV itself) and
+// the "photos" field (media files) need different validation and destinations,
+// so storage/fileFilter branch on file.fieldname (#511). The CSV's 1 MB limit
+// is enforced in the route handler, not here — multer's fileSize limit is a
+// single value shared by every field in the request.
+const importUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, file, cb) => {
+      cb(null, file.fieldname === 'photos' ? UPLOADS_ORIGINAL_DIR : os.tmpdir());
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+    },
+  }),
+  limits: { fileSize: MEDIA_MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.csv') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .csv files are accepted — file must have a .csv extension'));
+    if (file.fieldname === 'file') {
+      const ext = path.extname(file.originalname).toLowerCase();
+      return ext === '.csv'
+        ? cb(null, true)
+        : cb(new Error('Only .csv files are accepted — file must have a .csv extension'));
     }
+    if (file.fieldname === 'photos') {
+      return MEDIA_ALLOWED_MIME.has(file.mimetype)
+        ? cb(null, true)
+        : cb(new Error('File type not allowed'));
+    }
+    cb(new Error('Unexpected field'));
   },
 });
 
@@ -376,7 +394,7 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
-const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish';
+const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish,photos';
 
 // ── Bulk photo upload ─────────────────────────────────────────────────────────
 
@@ -393,6 +411,55 @@ function removeUploadedFiles(files, reason) {
       if (unlinkErr) logger.warn({ err: unlinkErr.message, file: file.filename, reason }, '[travel/bulk-upload] failed to remove orphaned file');
     });
   }
+}
+
+// Insert post_media rows for each uploaded file and enqueue processing jobs.
+// Shared between the per-memory bulk-upload route and the CSV-import route
+// (#511) — both attach a batch of already-multer-saved files to a post.
+async function attachMediaFiles(postId, files, startOrderIdx) {
+  const uploaded = [];
+  const errors   = [];
+  const boss     = getBoss();
+  let orderIdx   = startOrderIdx;
+
+  for (const file of files) {
+    const url = `/uploads/original/${file.filename}`;
+    try {
+      await pool.query(
+        `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index)
+         VALUES ($1, $2, $3, 'pending', $4)`,
+        [postId, url, file.mimetype, orderIdx],
+      );
+      orderIdx++;
+
+      try {
+        if (boss) {
+          const jobId = await boss.send(
+            MEDIA_JOB_NAME,
+            { filePath: file.path, mimeType: file.mimetype },
+            { retryLimit: 3, retryDelay: 0, retryBackoff: true },
+          );
+          if (jobId) {
+            logger.info({ file: file.filename, mime: file.mimetype, jobId, postId }, '[media-attach] job enqueued');
+          } else {
+            logger.warn({ file: file.filename }, '[media-attach] boss.send returned null — queue may not exist yet');
+          }
+        } else {
+          logger.warn({ file: file.filename }, '[media-attach] boss not ready — skipping job enqueue');
+        }
+      } catch (jobErr) {
+        logger.error({ err: jobErr.message, file: file.filename }, '[media-attach] failed to enqueue job');
+      }
+
+      uploaded.push({ url, type: file.mimetype, status: 'pending' });
+    } catch (err) {
+      logger.error({ err: err.message, file: file.filename, postId }, '[media-attach] failed to insert media row');
+      removeUploadedFiles([file], 'insert failed');
+      errors.push({ file: file.originalname, error: 'Failed to save file — see server logs' });
+    }
+  }
+
+  return { uploaded, errors };
 }
 
 // Admin: bulk upload photos/videos to an existing travel memory.
@@ -451,49 +518,7 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
     logger.warn({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to get order_index — defaulting to 0');
   }
 
-  const uploaded = [];
-  const errors   = [];
-  const boss     = getBoss();
-
-  for (const file of files) {
-    const url = `/uploads/original/${file.filename}`;
-    try {
-      await pool.query(
-        `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index)
-         VALUES ($1, $2, $3, 'pending', $4)`,
-        [id, url, file.mimetype, orderIdx],
-      );
-      orderIdx++;
-
-      // Enqueue processing job — non-fatal if boss is unavailable
-      try {
-        if (boss) {
-          const jobId = await boss.send(
-            MEDIA_JOB_NAME,
-            { filePath: file.path, mimeType: file.mimetype },
-            { retryLimit: 3, retryDelay: 0, retryBackoff: true },
-          );
-          if (jobId) {
-            logger.info({ file: file.filename, mime: file.mimetype, jobId, postId: id }, '[travel/bulk-upload] job enqueued');
-          } else {
-            logger.warn({ file: file.filename }, '[travel/bulk-upload] boss.send returned null — queue may not exist yet');
-          }
-        } else {
-          logger.warn({ file: file.filename }, '[travel/bulk-upload] boss not ready — skipping job enqueue');
-        }
-      } catch (jobErr) {
-        logger.error({ err: jobErr.message, file: file.filename }, '[travel/bulk-upload] failed to enqueue job');
-      }
-
-      uploaded.push({ url, type: file.mimetype, status: 'pending' });
-    } catch (err) {
-      logger.error({ err: err.message, file: file.filename, postId: id }, '[travel/bulk-upload] failed to insert media row');
-      removeUploadedFiles([file], 'insert failed');
-      // Generic client message — raw DB error details stay in logs only,
-      // matching the errorHandler policy for 5xx responses.
-      errors.push({ file: file.originalname, error: 'Failed to save file — see server logs' });
-    }
-  }
+  const { uploaded, errors } = await attachMediaFiles(id, files, orderIdx);
 
   // Set posts.media_url / posts.media_type to the first uploaded file if none exists yet
   if (uploaded.length) {
@@ -517,10 +542,44 @@ router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrap
 // Admin: bulk-import travel entries from a CSV file.
 // Accepts multipart/form-data with a single "file" field (must be .csv, max 1 MB).
 // Response: { imported: N, skipped: N, errors: [{ row: N, reason: string }] }
-router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(csvUpload.single('file')), async (req, res, next) => {
-  if (!req.file) return res.status(400).json({ error: 'No CSV file received' });
+router.post('/import', travelRateLimit, resolveUser, authenticate,
+  wrapMulter(importUpload.fields([{ name: 'file', maxCount: 1 }, { name: 'photos', maxCount: 500 }])),
+  async (req, res, next) => {
+  const csvFile = req.files?.file?.[0];
+  if (!csvFile) return res.status(400).json({ error: 'No CSV file received' });
+  if (csvFile.size > CSV_MAX_BYTES) {
+    fs.unlink(csvFile.path, () => {});
+    return res.status(400).json({ error: `CSV file exceeds the ${CSV_MAX_BYTES} byte limit` });
+  }
 
-  const csvText = req.file.buffer.toString('utf8');
+  const photoFiles = req.files?.photos ?? [];
+
+  let photoManifest = [];
+  if (req.body.photoManifest) {
+    try {
+      photoManifest = JSON.parse(req.body.photoManifest);
+    } catch {
+      fs.unlink(csvFile.path, () => {});
+      removeUploadedFiles(photoFiles, 'invalid photoManifest JSON');
+      return res.status(400).json({ error: 'photoManifest must be valid JSON' });
+    }
+  }
+  if (!Array.isArray(photoManifest) || photoManifest.length !== photoFiles.length ||
+      !photoManifest.every(p => typeof p === 'string' && p.length > 0 && p.length <= 4096)) {
+    fs.unlink(csvFile.path, () => {});
+    removeUploadedFiles(photoFiles, 'photoManifest mismatch');
+    return res.status(400).json({ error: 'photoManifest must be a JSON array of strings matching the number of uploaded photos' });
+  }
+
+  // Map relative path -> uploaded file, for matching against each CSV row's
+  // photos column. Multiple CSV rows could (in principle) reference the same
+  // relative path; each row gets its own copy attached since attachMediaFiles
+  // inserts a fresh post_media row per call.
+  const photoByPath = new Map();
+  photoFiles.forEach((file, i) => photoByPath.set(photoManifest[i], file));
+
+  const csvText = fs.readFileSync(csvFile.path, 'utf8');
+  fs.unlink(csvFile.path, () => {});
   const { headers, rows } = parseCSV(csvText);
 
   if (!headers.includes('title')) {
@@ -587,6 +646,30 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       );
       await client.query('COMMIT');
       imported++;
+
+      const rowPhotoNames = String(row.photos ?? '').split(';').map(s => s.trim()).filter(Boolean);
+      if (rowPhotoNames.length) {
+        const matchedFiles = [];
+        for (const name of rowPhotoNames) {
+          const file = photoByPath.get(name);
+          if (file) {
+            matchedFiles.push(file);
+            photoByPath.delete(name); // consumed — prevents double-attach if two rows list the same name
+          } else {
+            errors.push({ row: rowNum, reason: `photo "${name}" was not found among the uploaded files` });
+          }
+        }
+        if (matchedFiles.length) {
+          const idResult = await pool.query(
+            `SELECT id FROM posts WHERE slug = $1 AND post_type = 'travel'`, [slug],
+          );
+          const newPostId = idResult.rows[0]?.id;
+          if (newPostId) {
+            const { errors: attachErrors } = await attachMediaFiles(newPostId, matchedFiles, 0);
+            for (const ae of attachErrors) errors.push({ row: rowNum, reason: `photo "${ae.file}": ${ae.error}` });
+          }
+        }
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       skipped++;
@@ -595,6 +678,10 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
     } finally {
       client.release();
     }
+  }
+
+  if (photoByPath.size) {
+    removeUploadedFiles([...photoByPath.values()], 'not referenced by any CSV row');
   }
 
   await logAudit(req, 'travel.import', 'travel', null, { imported, skipped, total: rows.length });
