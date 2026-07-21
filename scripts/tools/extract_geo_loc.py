@@ -300,6 +300,8 @@ def run_extract(config: dict, root_folder: Path, working_folder: Path) -> None:
         writer.writerows(results)
     print(f'[extract] Done → {out}')
 
+    (working_folder / 'root-folder.txt').write_text(str(root_folder), encoding='utf-8')
+
 
 # ── Group stage
 
@@ -749,6 +751,36 @@ def load_config(args: argparse.Namespace,
 
 # ── Export stage
 
+def _load_group_photo_map(working_folder: Path, root_folder: Path | None) -> dict[str, list[str]]:
+    """Read 02-file-group-map.csv and return group_key -> [relative photo paths].
+
+    Returns an empty dict (with a warning) if the map file is missing (e.g. an
+    old working folder from before this feature existed) or root_folder is
+    unknown — export still succeeds, just without a photos column.
+    """
+    map_csv = working_folder / '02-file-group-map.csv'
+    if not map_csv.exists() or root_folder is None:
+        print('[export] WARNING: no file-group map or root folder available — '
+              'photos column will be empty. Re-run extract+group to populate it.')
+        return {}
+
+    by_group: dict[str, list[str]] = {}
+    with open(map_csv, encoding='utf-8-sig') as f:
+        for row in csv.DictReader(f):
+            fp = row.get('file_path')
+            gk = row.get('group_key')
+            if not fp or not gk:
+                continue
+            try:
+                rel = Path(fp).relative_to(root_folder).as_posix()
+            except ValueError:
+                # File path isn't under root_folder (shouldn't happen in
+                # normal use) — skip rather than crash the export.
+                continue
+            by_group.setdefault(gk, []).append(rel)
+    return by_group
+
+
 def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
     """Stage 4: deduplicate resolved groups by name, write final import CSV."""
     resolved_csv = working_folder / '03-resolved.csv'
@@ -768,14 +800,21 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
         if name not in by_name or row['post_date'] < by_name[name]['post_date']:
             by_name[name] = row
 
+    root_folder_file = working_folder / 'root-folder.txt'
+    root_folder = Path(root_folder_file.read_text(encoding='utf-8').strip()) \
+        if root_folder_file.exists() else None
+    group_photos = _load_group_photo_map(working_folder, root_folder)
+
     cp    = config.get('coordinate_precision', 4)
     final = sorted(by_name.values(), key=lambda r: r['resolved_location'])
 
     with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(
-            f, fieldnames=['title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish'])
+            f, fieldnames=['title', 'location', 'notes', 'post_date', 'lat', 'lng',
+                           'publish', 'photos'])
         writer.writeheader()
         for row in final:
+            photos = group_photos.get(row.get('group_key', ''), [])
             writer.writerow({
                 'title':     config.get('title_prefix', 'Trip'),
                 'location':  row['resolved_location'],
@@ -784,6 +823,7 @@ def run_export(config: dict, working_folder: Path, output_csv: Path) -> None:
                 'lat':       round(float(row['export_lat']), cp),
                 'lng':       round(float(row['export_lng']), cp),
                 'publish':   str(config.get('publish', False)).lower(),
+                'photos':    ';'.join(photos),
             })
     print(f'[export] {len(final)} unique locations → {output_csv}')
 
