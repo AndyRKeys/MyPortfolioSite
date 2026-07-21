@@ -25,6 +25,27 @@ vi.mock('nodemailer', () => ({
 
 const app = createApp();
 
+// #522 M18 — the dev fallback (email unconfigured) must not log raw PII.
+// Email vars are unset under vitest, so the fallback path always fires here.
+describe('POST /contact — dev fallback PII redaction', () => {
+  it('does not log the raw email address or message body', async () => {
+    const { logger } = await import('../../utils/logger.js');
+    const infoSpy = vi.spyOn(logger, 'info');
+
+    const res = await request(app)
+      .post('/contact')
+      .send({ name: 'Alice Smith', email: 'alice@example.com', message: 'A very private message body' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const logged = JSON.stringify(infoSpy.mock.calls);
+    expect(logged).toContain('[contact]');                       // fallback line was logged
+    expect(logged).not.toContain('alice@example.com');           // email redacted
+    expect(logged).not.toContain('A very private message body'); // message not logged raw
+    infoSpy.mockRestore();
+  });
+});
+
 describe('POST /contact', () => {
   beforeEach(async () => {
     vi.clearAllMocks();

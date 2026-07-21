@@ -29,6 +29,15 @@ describe('findMissingEnv', () => {
     expect(findMissingEnv(env)).toEqual(['JWT_SECRET']);
   });
 
+  // #522 H4 — auth.js reads WEBAUTHN_RP_NAME at startup; it must be validated
+  // like the other WEBAUTHN_* vars so a missing value fails loud, not silent.
+  it('requires WEBAUTHN_RP_NAME and flags it when absent', () => {
+    expect(REQUIRED_ENV).toContain('WEBAUTHN_RP_NAME');
+    const env = fullEnv();
+    delete env.WEBAUTHN_RP_NAME;
+    expect(findMissingEnv(env)).toEqual(['WEBAUTHN_RP_NAME']);
+  });
+
   it('reports multiple missing vars', () => {
     const env = fullEnv();
     delete env.DB_PASSWORD;
@@ -57,5 +66,15 @@ describe('validateEnvOrExit', () => {
     expect(exit).toHaveBeenCalledWith(1);
     // one per-var line + one summary line
     expect(logger.fatal).toHaveBeenCalledWith(expect.stringContaining('SITE_HOST'));
+  });
+
+  it('exits(1) when WEBAUTHN_RP_NAME is absent (#522 H4)', () => {
+    const logger = fakeLogger();
+    const exit = vi.fn();
+    const env = fullEnv();
+    delete env.WEBAUTHN_RP_NAME;
+    validateEnvOrExit(logger, env, exit);
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(logger.fatal).toHaveBeenCalledWith(expect.stringContaining('WEBAUTHN_RP_NAME'));
   });
 });

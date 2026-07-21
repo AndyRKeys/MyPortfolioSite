@@ -146,12 +146,14 @@ router.put('/:id', aiBlogRateLimit, resolveUser, authenticate, validate(UpdatePo
     if (publish && !published_at) published_at = new Date();
     if (publish === false) published_at = null;
 
+    // COALESCE keeps the stored body when body_markdown is omitted from a
+    // partial PUT (e.g. the publish/unpublish toggle) — never wipe it (#522 H1).
     const result = await pool.query(
       `UPDATE posts
-       SET title=$1, slug=$2, body_markdown=$3, post_date=$4, published_at=$5, updated_at=NOW()
+       SET title=$1, slug=$2, body_markdown=COALESCE($3, body_markdown), post_date=$4, published_at=$5, updated_at=NOW()
        WHERE id=$6 AND post_type='ai-blog'
        RETURNING *`,
-      [title.trim(), slug, body_markdown || '', post_date || null, published_at, req.params.id]
+      [title.trim(), slug, body_markdown ?? null, post_date || null, published_at, req.params.id]
     );
     const updated = result.rows[0];
     const wasPublished = !!existing.rows[0].published_at;

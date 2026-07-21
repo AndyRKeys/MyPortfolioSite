@@ -25,8 +25,10 @@ const ALLOWED_PAGES = new Set(['home', 'blog', 'travel', 'ai-blog']);
 
 // ── Routes
 
-// Public: increment visit count for a page and return the new total
-router.post('/visit', async (req, res, next) => {
+// Public: increment visit count for a page and return the new total.
+// Rate-limited per-IP — the only unauthenticated write endpoint, so it must be
+// throttled like the admin GETs (#522 M8).
+router.post('/visit', statsRateLimit, async (req, res, next) => {
   const page = req.query.page;
   if (!page || !ALLOWED_PAGES.has(page)) {
     return res.status(400).json({ error: 'Invalid page' });

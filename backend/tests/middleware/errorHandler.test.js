@@ -75,6 +75,18 @@ describe('errorHandler', () => {
     expect(res._json).toBeNull();
   });
 
+  // #522 L15 — Express convention: once headers are sent, delegate to the
+  // default handler via next(err) so the connection is torn down instead of
+  // the error being silently swallowed.
+  it('delegates to next(err) when headers already sent', () => {
+    const res = { ...makeRes(), headersSent: true };
+    const next = vi.fn();
+    const err = new Error('Too late');
+    errorHandler(err, {}, res, next);
+    expect(res._json).toBeNull();
+    expect(next).toHaveBeenCalledWith(err);
+  });
+
   it('does not log in NODE_ENV=test', () => {
     const spy = vi.spyOn(console, 'error');
     errorHandler(new Error('Quiet'), {}, makeRes(), () => {});

@@ -238,7 +238,12 @@ router.put('/:id', travelRateLimit, resolveUser, authenticate, validate(UpdateTr
       `SELECT * FROM posts WHERE id = $1 AND post_type = 'travel'`,
       [req.params.id]
     );
-    if (!existing.rows.length) return res.status(404).json({ error: 'Memory not found' });
+    if (!existing.rows.length) {
+      // Roll back the open transaction before returning — otherwise `finally`
+      // releases the client to the pool mid-transaction (#522 H2).
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Memory not found' });
+    }
 
     const latVal      = lat  != null ? parseFloat(lat)  : null;
     const lngVal      = lng  != null ? parseFloat(lng)  : null;
@@ -461,25 +466,39 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
 
 // Admin: delete a single media item from post_media
 router.delete('/:id/media/:mediaId', travelRateLimit, resolveUser, authenticate, async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id`,
+    // DELETE + posts.media_url resync must be atomic — wrap in a transaction
+    // and audit like every other travel mutation (#522 L11).
+    await client.query('BEGIN');
+    const result = await client.query(
+      `DELETE FROM post_media WHERE id = $1 AND post_id = $2 RETURNING id, media_url`,
       [req.params.mediaId, req.params.id]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Media item not found' });
+    if (!result.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Media item not found' });
+    }
 
-    const first = await pool.query(
+    const first = await client.query(
       `SELECT media_url, media_type FROM post_media WHERE post_id = $1 ORDER BY order_index, created_at LIMIT 1`,
       [req.params.id]
     );
-    await pool.query(
+    await client.query(
       'UPDATE posts SET media_url = $1, media_type = $2 WHERE id = $3',
       [first.rows[0]?.media_url || null, first.rows[0]?.media_type || null, req.params.id]
     );
+
+    await client.query('COMMIT');
+
+    await logAudit(req, 'travel.media_delete', 'travel', req.params.id, { mediaId: req.params.mediaId });
     res.json({ deleted: true });
   } catch (err) {
+    await client.query('ROLLBACK');
     logger.error({ err }, '[travel] Request failed');
     next(err);
+  } finally {
+    client.release();
   }
 });
 
