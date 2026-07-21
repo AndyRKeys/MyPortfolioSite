@@ -5,25 +5,18 @@
  */
 import { Router }        from 'express';
 import { rateLimit }     from 'express-rate-limit';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { pool }          from '../db/pool.js';
 import { authenticate }  from '../middleware/authenticate.js';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 
 const router = Router();
 
-const auditRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           120,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'audit' }),
-});
+const auditRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    120,
+  keyType:  'audit',
+}));
 
 // Admin: list recent audit log entries
 // Supports ?limit=<n> (max 200, default 50) and ?type=<action-prefix|all>

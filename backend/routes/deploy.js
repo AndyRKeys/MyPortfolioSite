@@ -1,9 +1,8 @@
 import { Router }        from 'express';
 import fs                from 'fs/promises';
 import { rateLimit }     from 'express-rate-limit';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { authenticateDeploy } from '../middleware/authenticateDeploy.js';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { spawnStream, spawnPromise } from '../utils/shell.js';
 import { parseDeployRuns } from '../utils/deployLogParser.js';
 import { logger }        from '../utils/logger.js';
@@ -18,29 +17,17 @@ let branchCache = null; // { data: { branches: string[] }, expiresAt: number }
 
 // Limiter precedes authenticateDeploy on every route so CodeQL's
 // js/missing-rate-limiting detector sees it before the authorization step.
-const deployReadLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-read' }),
-});
+const deployReadLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    60,
+  keyType:  'deploy-read',
+}));
 
-const deployWriteLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           10,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'deploy-write' }),
-});
+const deployWriteLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    10,
+  keyType:  'deploy-write',
+}));
 
 const REPO_DIR        = process.env.REPO_DIR || '/repo';
 const DEPLOY_ENV      = process.env.DEPLOY_ENV;

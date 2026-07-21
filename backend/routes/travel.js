@@ -5,8 +5,7 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
@@ -22,22 +21,23 @@ const router = Router();
 // targets anonymous scraping and fuzz attempts against the protected CRUD
 // surface. The limiter precedes resolveUser in the chain so CodeQL's
 // js/missing-rate-limiting detector sees it before any authorization step.
-const travelRateLimit = rateLimit({
-  windowMs:        TRAVEL_RATE_WINDOW_MS,
-  limit:           TRAVEL_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: TRAVEL_RATE_WINDOW_MS, keyType: 'travel' }),
-});
+const travelRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: TRAVEL_RATE_WINDOW_MS,
+  limit:    TRAVEL_RATE_LIMIT,
+  keyType:  'travel',
+}));
 
-const TRAVEL_COLS = `
+// Single template for the travel column list (#522 M5) — the public variant
+// rounds coordinates to ~1km precision for privacy. Any new column added here
+// is automatically present in both variants.
+function travelCols({ publicCoords = false } = {}) {
+  const latLng = publicCoords
+    ? 'ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng'
+    : 'p.lat, p.lng';
+  return `
   p.id, p.title, p.slug, p.location,
   p.body_markdown AS notes,
-  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, p.lat, p.lng,
+  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, ${latLng},
   p.post_date,
   p.location_estimated, p.published_at, p.created_at,
   COALESCE(
@@ -50,24 +50,10 @@ const TRAVEL_COLS = `
     ), '[]'::json
   ) AS media
 `;
+}
 
-// Public variant: coordinates rounded to ~1km precision for privacy
-const TRAVEL_COLS_PUBLIC = `
-  p.id, p.title, p.slug, p.location,
-  p.body_markdown AS notes,
-  p.media_url, p.media_type, p.full_url, p.thumb_url, p.media_status, ROUND(p.lat, 2) AS lat, ROUND(p.lng, 2) AS lng,
-  p.post_date,
-  p.location_estimated, p.published_at, p.created_at,
-  COALESCE(
-    (SELECT json_agg(
-       json_build_object('id', pm.id, 'url', pm.media_url, 'type', pm.media_type,
-         'full_url', pm.full_url, 'thumb_url', pm.thumb_url, 'media_status', pm.media_status)
-       ORDER BY pm.order_index, pm.created_at
-     )
-     FROM post_media pm WHERE pm.post_id = p.id
-    ), '[]'::json
-  ) AS media
-`;
+const TRAVEL_COLS        = travelCols();
+const TRAVEL_COLS_PUBLIC = travelCols({ publicCoords: true });
 
 async function replaceMedia(client, postId, mediaItems) {
   // Fetch existing media to preserve processed derivatives

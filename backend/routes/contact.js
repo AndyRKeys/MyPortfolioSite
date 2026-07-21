@@ -1,25 +1,18 @@
 import { Router } from 'express';
 import { validate, ContactSchema } from '../middleware/validate.js';
 import { rateLimit } from 'express-rate-limit';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { isEmailConfigured, sendContactEmail, redactEmail } from '../utils/email.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
 
-const contactRateLimit = rateLimit({
-  windowMs:        60 * 60 * 1000, // 3 per hour
-  limit:           3,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 60 * 1000, keyType: 'contact' }),
-});
+const contactRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 60 * 1000, // 3 per hour
+  limit:    3,
+  keyType:  'contact',
+}));
 
 router.post('/', contactRateLimit, resolveUser, validate(ContactSchema), async (req, res) => {
   // Honeypot: bots fill in the hidden website field — silently accept

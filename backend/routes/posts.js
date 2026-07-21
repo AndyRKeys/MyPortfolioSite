@@ -3,8 +3,7 @@ import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { resolveUser } from '../middleware/resolveUser.js';
 import { rateLimit } from 'express-rate-limit';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreatePostSchema, UpdatePostSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
@@ -20,17 +19,11 @@ const router = Router();
 // endpoints from abuse and blocks attackers spamming protected routes with
 // random JWTs. The limiter is placed before resolveUser in the chain so
 // CodeQL's js/missing-rate-limiting detector sees it precede authorization.
-const postsRateLimit = rateLimit({
-  windowMs:        POSTS_RATE_WINDOW_MS,
-  limit:           POSTS_RATE_LIMIT,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: POSTS_RATE_WINDOW_MS, keyType: 'posts' }),
-});
+const postsRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: POSTS_RATE_WINDOW_MS,
+  limit:    POSTS_RATE_LIMIT,
+  keyType:  'posts',
+}));
 
 // ── Helpers
 

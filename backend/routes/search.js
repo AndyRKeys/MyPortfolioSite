@@ -8,25 +8,18 @@
  */
 import { Router }        from 'express';
 import { rateLimit }     from 'express-rate-limit';
+import { rateLimiterOptions } from '../middleware/rateLimiter.js';
 import { pool }          from '../db/pool.js';
-import { PostgresStore } from '../middleware/postgresStore.js';
-import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { logger }        from '../utils/logger.js';
 import { publicCache }   from '../middleware/cacheHeaders.js';
 
 const router = Router();
 
-const searchRateLimit = rateLimit({
-  windowMs:        60 * 1000,
-  limit:           60,
-  keyGenerator:    (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress,
-  skip:            exemptIfTrusted,
-  message:         { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  validate:        { positiveHits: false },
-  store:           new PostgresStore({ windowMs: 60 * 1000, keyType: 'search' }),
-});
+const searchRateLimit = rateLimit(rateLimiterOptions({
+  windowMs: 60 * 1000,
+  limit:    60,
+  keyType:  'search',
+}));
 
 // GET /search?q=term&type=all|blog|travel&limit=10
 router.get('/', searchRateLimit, publicCache(60), async (req, res, next) => {
