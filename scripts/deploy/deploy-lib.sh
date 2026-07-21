@@ -286,6 +286,13 @@ record_deploy_sha() {
 
   cd "$REPO_DIR"
 
+  local actual_branch
+  actual_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  if [ "$actual_branch" != "$BRANCH" ]; then
+    dstatus git status=mismatch expected="$BRANCH" actual="$actual_branch"
+    ddie "Repo is on '$actual_branch' but this deploy was requested for '$BRANCH' — the branch-switch step (switch-branch.sh) did not complete. Aborting before any build/test work. Check the wrapper's output/exit code."
+  fi
+
   PRE_SHA=$(git rev-parse HEAD 2>/dev/null || echo "none")
   NEW_SHA="$PRE_SHA"
 
