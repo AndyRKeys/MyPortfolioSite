@@ -28,6 +28,44 @@ function authToken() {
 beforeEach(() => { process.env.JWT_SECRET = SECRET; });
 afterEach(() => { delete process.env.JWT_SECRET; });
 
+// #522 M8 — POST /stats/visit was the only unauthenticated write endpoint
+// without a rate limiter. It must return 429 once the per-IP cap is hit.
+describe('POST /stats/visit — rate limiting', () => {
+  afterEach(async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockReset();
+    pool.query.mockResolvedValue({ rows: [] });
+  });
+
+  it('returns 429 when the per-IP limit is exceeded', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockImplementation(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('rate_limits')) {
+        // Simulate a counter already over the 60/min cap
+        return { rows: [{ count: 61, window_start: new Date() }] };
+      }
+      return { rows: [{ count: 1 }] };
+    });
+
+    const res = await request(app).post('/stats/visit?page=home');
+    expect(res.status).toBe(429);
+  });
+
+  it('allows the request when under the limit', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockImplementation(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('rate_limits')) {
+        return { rows: [{ count: 1, window_start: new Date() }] };
+      }
+      return { rows: [{ count: 5 }] };
+    });
+
+    const res = await request(app).post('/stats/visit?page=home');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ page: 'home', count: 5 });
+  });
+});
+
 describe('GET /stats/visits', () => {
   it('returns 200 with auth', async () => {
     const res = await request(app)

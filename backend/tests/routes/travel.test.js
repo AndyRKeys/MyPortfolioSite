@@ -67,6 +67,24 @@ describe('PUT /travel/:id', () => {
     expect(res.body.error).toMatch(/YYYY-MM-DD/i);
   });
 
+  // #522 H2 — the 404 early-return previously skipped ROLLBACK, releasing the
+  // client to the pool with an open transaction.
+  it('rolls back the transaction before returning 404 for a missing memory', async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })  // BEGIN
+      .mockResolvedValueOnce({ rows: [] }); // SELECT existing → not found
+
+    const res = await request(app)
+      .put('/travel/nonexistent-id')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Paris', post_date: '2026-07-04' });
+
+    expect(res.status).toBe(404);
+    const sqls = mockClient.query.mock.calls.map(([sql]) => sql);
+    expect(sqls).toContain('ROLLBACK');
+    expect(mockClient.release).toHaveBeenCalled();
+  });
+
   it('preserves full_url and thumb_url for already-processed media on edit', async () => {
     const { pool } = await import('../../db/pool.js');
 
@@ -114,6 +132,53 @@ describe('PUT /travel/:id', () => {
     expect(params).toContain('/uploads/full/photo.webp');   // full_url carried forward
     expect(params).toContain('/uploads/thumb/photo.webp');  // thumb_url carried forward
     expect(params).toContain('ready');                      // status carried forward
+  });
+});
+
+// ── DELETE /travel/:id/media/:mediaId ─────────────────────────────────────────
+// #522 L11 — media delete must run in a transaction (DELETE + posts.media_url
+// sync are atomic) and write an audit_log row like every other travel mutation.
+
+describe('DELETE /travel/:id/media/:mediaId', () => {
+  it('runs in a transaction and writes an audit row', async () => {
+    const { pool } = await import('../../db/pool.js');
+    pool.query.mockClear();
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })                                     // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 'm2', media_url: '/u/b.jpg' }] }) // DELETE RETURNING
+      .mockResolvedValueOnce({ rows: [{ media_url: '/u/a.jpg', media_type: 'image/jpeg' }] }) // SELECT first
+      .mockResolvedValueOnce({ rows: [] })                                     // UPDATE posts
+      .mockResolvedValueOnce({ rows: [] });                                    // COMMIT
+
+    const res = await request(app)
+      .delete('/travel/post-1/media/m2')
+      .set('Authorization', `Bearer ${makeToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(true);
+    const sqls = mockClient.query.mock.calls.map(([sql]) => sql);
+    expect(sqls).toContain('BEGIN');
+    expect(sqls).toContain('COMMIT');
+    const auditCall = pool.query.mock.calls.find(
+      ([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO audit_log'),
+    );
+    expect(auditCall).toBeDefined();
+    expect(auditCall[1]).toContain('travel.media_delete');
+  });
+
+  it('rolls back and returns 404 when the media item is missing', async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })  // BEGIN
+      .mockResolvedValueOnce({ rows: [] }); // DELETE → nothing deleted
+
+    const res = await request(app)
+      .delete('/travel/post-1/media/nope')
+      .set('Authorization', `Bearer ${makeToken()}`);
+
+    expect(res.status).toBe(404);
+    const sqls = mockClient.query.mock.calls.map(([sql]) => sql);
+    expect(sqls).toContain('ROLLBACK');
+    expect(mockClient.release).toHaveBeenCalled();
   });
 });
 
