@@ -16,8 +16,11 @@
 import { logger } from '../utils/logger.js';
 import { notifyError } from '../utils/errorWebhook.js';
 
-export function errorHandler(err, req, res, _next) {
-  if (res.headersSent) return;
+export function errorHandler(err, req, res, next) {
+  // Once headers are sent the response is already committed; per Express
+  // convention delegate to the default handler so the connection is torn
+  // down rather than the error being silently swallowed.
+  if (res.headersSent) return next(err);
 
   const status  = err.status ?? err.statusCode ?? 500;
   const message = err.message || 'Internal server error';

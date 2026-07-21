@@ -18,7 +18,7 @@ export function isEmailConfigured() {
   return isOAuth2Configured() || isSmtpConfigured();
 }
 
-function redactEmail(email) {
+export function redactEmail(email) {
   if (!email || !email.includes('@')) return '[invalid]';
   const [user, domain] = email.split('@');
   return `${user.slice(0, 2)}***@${domain}`;

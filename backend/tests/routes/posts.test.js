@@ -95,6 +95,50 @@ describe('PUT /posts/:id', () => {
       .send({ title: 'Updated Title', body_markdown: '# Updated' });
     expect(res.status).toBe(404);
   });
+
+  // #522 H1 — togglePublish sends a partial PUT without body_markdown;
+  // the UPDATE must COALESCE to the stored body instead of wiping it.
+  it('preserves stored body_markdown when the field is omitted (publish toggle)', async () => {
+    const existing = {
+      id: 'abc', title: 'Hello', slug: 'hello',
+      body_markdown: '# Full body', post_date: null, published_at: null,
+    };
+    mockQuery
+      .mockResolvedValueOnce({ rows: [existing] })                                     // SELECT existing
+      .mockResolvedValueOnce({ rows: [{ ...existing, published_at: new Date() }] })    // UPDATE RETURNING
+      .mockResolvedValue({ rows: [] });                                                // audit insert
+
+    const res = await request(app)
+      .put('/posts/abc')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Hello', publish: true }); // no body_markdown — togglePublish shape
+
+    expect(res.status).toBe(200);
+    const updateCall = mockQuery.mock.calls.find(([sql]) => sql.includes('UPDATE posts'));
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0]).toMatch(/COALESCE\(\$3, body_markdown\)/);
+    expect(updateCall[1][2]).toBeNull(); // null param → COALESCE keeps stored body
+  });
+
+  it('still overwrites body_markdown when explicitly provided', async () => {
+    const existing = {
+      id: 'abc', title: 'Hello', slug: 'hello',
+      body_markdown: '# Old body', post_date: null, published_at: null,
+    };
+    mockQuery
+      .mockResolvedValueOnce({ rows: [existing] })
+      .mockResolvedValueOnce({ rows: [{ ...existing, body_markdown: '# New body' }] })
+      .mockResolvedValue({ rows: [] });
+
+    const res = await request(app)
+      .put('/posts/abc')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Hello', body_markdown: '# New body' });
+
+    expect(res.status).toBe(200);
+    const updateCall = mockQuery.mock.calls.find(([sql]) => sql.includes('UPDATE posts'));
+    expect(updateCall[1][2]).toBe('# New body');
+  });
 });
 
 describe('DELETE /posts/:id', () => {

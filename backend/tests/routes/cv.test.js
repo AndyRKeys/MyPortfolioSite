@@ -339,4 +339,64 @@ describe('POST /cv/:id/confirm', () => {
     expect(res.status).toBe(200);
     expect(res.body.confirmed).toBe(true);
   });
+
+  // #522 M10 — pruning by uploaded_at alone could delete the version just
+  // made current (if it's an old upload). The prune query must exclude the
+  // current version so confirming an old CV never deletes it.
+  it('excludes the current version from pruning when confirming an old CV', async () => {
+    const cvId = '00000000-0000-0000-0000-000000000004';
+    let pruneSql = null;
+    const deletedIds = [];
+    const fakeClient = makeFakeClient(async (sql, params) => {
+      if (typeof sql === 'string' && sql.includes('SELECT id, filename FROM cvs WHERE id')) {
+        return { rows: [{ id: cvId, filename: 'cv-old-but-confirmed.pdf' }] };
+      }
+      if (typeof sql === 'string' && sql.includes('OFFSET')) {
+        pruneSql = sql;
+        // DB-side filter excludes the current row; return only an old non-current row
+        return { rows: [{ id: 'ancient-id', filename: 'cv-ancient.pdf' }] };
+      }
+      if (typeof sql === 'string' && sql.startsWith('DELETE FROM cvs')) {
+        deletedIds.push(params[0]);
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
+    const res = await request(app)
+      .post(`/cv/${cvId}/confirm`)
+      .set('Authorization', `Bearer ${makeToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(pruneSql).toMatch(/is_current = FALSE/);
+    expect(deletedIds).toContain('ancient-id');
+    expect(deletedIds).not.toContain(cvId);
+  });
+});
+
+// ── POST /cv — prune excludes current version (#522 M10) ─────────────────────
+
+describe('POST /cv — prune on upload', () => {
+  it('prune query excludes the current version', async () => {
+    spyExistsSync.mockReturnValue(false);
+    let pruneSql = null;
+    const fakeClient = makeFakeClient(async (sql) => {
+      if (typeof sql === 'string' && sql.includes('INSERT INTO cvs')) {
+        return { rows: [{ id: 'new-cv-id' }] };
+      }
+      if (typeof sql === 'string' && sql.includes('OFFSET')) {
+        pruneSql = sql;
+      }
+      return { rows: [] };
+    });
+    pool.connect.mockResolvedValue(fakeClient);
+
+    const res = await request(app)
+      .post('/cv')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .attach('cv', minPdf, { filename: 'cv.pdf', contentType: 'application/pdf' });
+
+    expect(res.status).toBe(200);
+    expect(pruneSql).toMatch(/is_current = FALSE/);
+  });
 });

@@ -136,6 +136,30 @@ describe('PUT /ai-blog/:id', () => {
       .send({ title: 'Updated Title', body_markdown: '# Updated' });
     expect(res.status).toBe(404);
   });
+
+  // #522 H1 — togglePublish sends a partial PUT without body_markdown;
+  // the UPDATE must COALESCE to the stored body instead of wiping it.
+  it('preserves stored body_markdown when the field is omitted (publish toggle)', async () => {
+    const existing = {
+      id: 'e1', title: 'Day 1', slug: 'day-1',
+      body_markdown: '# Full entry body', post_date: null, published_at: null,
+    };
+    mockQuery
+      .mockResolvedValueOnce({ rows: [existing] })                                  // SELECT existing
+      .mockResolvedValueOnce({ rows: [{ ...existing, published_at: new Date() }] }) // UPDATE RETURNING
+      .mockResolvedValue({ rows: [] });                                             // audit insert
+
+    const res = await request(app)
+      .put('/ai-blog/e1')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ title: 'Day 1', publish: true }); // no body_markdown — togglePublish shape
+
+    expect(res.status).toBe(200);
+    const updateCall = mockQuery.mock.calls.find(([sql]) => sql.includes('UPDATE posts'));
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0]).toMatch(/COALESCE\(\$3, body_markdown\)/);
+    expect(updateCall[1][2]).toBeNull(); // null param → COALESCE keeps stored body
+  });
 });
 
 describe('DELETE /ai-blog/:id', () => {

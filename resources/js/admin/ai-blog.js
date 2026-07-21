@@ -123,9 +123,11 @@ async function togglePublish(entry) {
     try {
         const res = await authFetch(`/ai-blog/${entry.id}`, {
             method: 'PUT',
+            // Omit body_markdown: the list endpoint only returns an excerpt, so
+            // sending it here would wipe the stored body. The backend COALESCEs
+            // the missing field to the existing value (#522 H1).
             body: JSON.stringify({
                 title:         entry.title,
-                body_markdown: entry.body_markdown || '',
                 post_date:     entry.post_date ? String(entry.post_date).slice(0, 10) : null,
                 publish:       !entry.published_at,
             }),

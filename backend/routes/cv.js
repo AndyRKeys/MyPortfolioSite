@@ -194,8 +194,9 @@ router.post('/', cvRateLimit, authenticate, wrapMulter(upload.single('cv')), asy
     const newId = rows[0].id;
 
     if (isCurrent) {
+      // Never prune the current version even if it is an old upload (#522 M10).
       const all = await client.query(
-        `SELECT id, filename FROM cvs ORDER BY uploaded_at DESC OFFSET $1`,
+        `SELECT id, filename FROM cvs WHERE is_current = FALSE ORDER BY uploaded_at DESC OFFSET $1`,
         [MAX_CV_VERSIONS]
       );
       for (const old of all.rows) {
@@ -275,8 +276,10 @@ router.post('/:id/confirm', cvRateLimit, authenticate, async (req, res, next) =>
     await client.query(`UPDATE cvs SET is_current = FALSE WHERE is_current = TRUE`);
     await client.query(`UPDATE cvs SET is_current = TRUE WHERE id = $1`, [req.params.id]);
 
+    // Never prune the version just confirmed as current, even if it is an old
+    // upload — excluding is_current = TRUE avoids deleting it (#522 M10).
     const all = await client.query(
-      `SELECT id, filename FROM cvs ORDER BY uploaded_at DESC OFFSET $1`,
+      `SELECT id, filename FROM cvs WHERE is_current = FALSE ORDER BY uploaded_at DESC OFFSET $1`,
       [MAX_CV_VERSIONS]
     );
     for (const old of all.rows) {
