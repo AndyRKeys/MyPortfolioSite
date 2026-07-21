@@ -295,6 +295,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 - Contact form's dev-fallback log no longer writes raw name/email/message — uses redaction like the rest of the app (#522)
 - `errorHandler` now forwards post-headers-sent errors to `next(err)` instead of silently swallowing them (#522)
 - Travel media-delete endpoint now runs its two queries in a transaction and writes an audit log entry, matching every other travel mutation (#522)
+- AI Blog page visits were never recorded — `ai-blog` was missing from the stats route's page whitelist (#522)
+- Admin deploy branch selector could show a stale branch list right after a successful fetch — cache is now cleared on `/fetch` (#522)
+- Media upload retry no longer silently burns retries against a deleted original file — returns 404 with a clear message instead (#522)
 - Delete button size/shape inconsistency — add `.btn-danger` variant to button system; `.travel-delete-btn` now composes from it, removing `!important` overrides (#137)
 
 ### Added

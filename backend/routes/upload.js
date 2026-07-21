@@ -1,6 +1,7 @@
 import { Router }   from 'express';
 import multer       from 'multer';
 import path         from 'path';
+import fsp          from 'fs/promises';
 import { rateLimit } from 'express-rate-limit';
 import { authenticate }   from '../middleware/authenticate.js';
 import { PostgresStore }  from '../middleware/postgresStore.js';
@@ -121,6 +122,15 @@ router.post('/retry', uploadRateLimit, authenticate, async (req, res, next) => {
     const { mimeType } = req.body;
     const mediaUrl  = `/uploads/original/${file}`;
     const filePath  = path.join(UPLOADS_ORIGINAL_DIR, file);
+
+    // Fail fast if the original file is gone — re-enqueueing would just burn
+    // three retries with a confusing worker error (#522 L12).
+    try {
+      await fsp.access(filePath);
+    } catch {
+      logger.warn({ file }, '[upload/retry] original file not found — retry rejected');
+      return res.status(404).json({ error: `Original file not found on disk — cannot retry: ${file}` });
+    }
 
     await pool.query('UPDATE posts      SET media_status = $1 WHERE media_url = $2', ['pending', mediaUrl]);
     await pool.query('UPDATE post_media SET media_status = $1 WHERE media_url = $2', ['pending', mediaUrl]);
