@@ -46,6 +46,8 @@ bash ~/MyPortfolioSite-dev/scripts/deploy/switch-branch.sh dev ~/MyPortfolioSite
 bash ~/MyPortfolioSite-dev/scripts/deploy/deploy.sh --env dev
 ```
 
+> **Fail-loud guarantee (#542):** `dev-deploy.ps1` now aborts before `deploy.sh` runs if `switch-branch.sh` fails (e.g. an unrecognised branch name) — it no longer silently deploys whatever was already checked out. `switch-branch.sh`'s own output is appended to `~/logs/dev-deploy.log` alongside the rest of the deploy report, so a failed branch switch is visible in the same log file. `deploy.sh` also independently verifies it's on the requested branch before doing any build/test work, as a second line of defense.
+
 > **Do not use `sudo`** with `deploy.sh`. Running as root sets `$HOME=/root`, causing the script to clone a fresh repo into `/root/` and read a template `.env` with placeholder values instead of your configured one. The script calls `try_root` internally for any commands that need elevation (UFW, certs). The script will exit immediately with a clear error if invoked as root.
 
 ### What happens on the first run

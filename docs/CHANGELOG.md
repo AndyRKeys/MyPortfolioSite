@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — entr
 
 ### Fixed
 
+- Deploy scripts (`dev-deploy.ps1`, `prod-deploy.ps1`) no longer silently deploy the wrong branch when `switch-branch.sh` fails — the deploy now aborts and logs the failure to the server-side deploy log; `deploy.sh` independently verifies the checked-out branch before building (#542)
 - `scripts/ops/migration-restore.sh` (#529) — Ollama container existence check used `docker inspect ollama`, which matches any Docker object by that name (including the `ollama` volume left over from an earlier attempt), so it silently skipped starting the container when only the volume existed. Now checks `docker inspect --type container ollama`; the CPU-only fallback also removes any stale container left behind by a failed `--gpus all` attempt before retrying.
 
 ---
