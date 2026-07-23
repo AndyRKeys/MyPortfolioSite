@@ -703,13 +703,11 @@ export function initTravel() {
 
     // Wraps a file <input> so every open() starts a brand-new native dialog
     // session — the element is replaced with a fresh clone before each click
-    // instead of reusing the same one repeatedly. Windows' common file dialog
-    // can retain per-element state (e.g. last-typed search-box text) across
-    // repeated opens of the same <input>, producing a false "No items match
-    // your search" on a later attempt (#511). window.showDirectoryPicker()
-    // would avoid this more cleanly (no persistent element at all), but
-    // Brave disables it by default (throws instead of prompting), so this
-    // sticks with the classic <input webkitdirectory> approach.
+    // instead of reusing the same one repeatedly. This didn't fix the folder
+    // picker's "No items match your search" (Windows + Brave, #511) — that
+    // turned out not to be about element/dialog-state reuse at all — but it's
+    // still kept here as the CSV field's picker and as the folder picker's
+    // fallback for browsers without window.showDirectoryPicker().
     function filePicker(id, onChange) {
         let el = document.getElementById(id);
         const attach = () => el.addEventListener('change', () => onChange(el));
@@ -733,17 +731,69 @@ export function initTravel() {
         setCsvMessage('');
     });
 
-    const csvPhotosPicker = filePicker('travel-csv-photos', (input) => {
-        const count = input.files?.length || 0;
+    if (csvFileBtn) csvFileBtn.addEventListener('click', () => csvFilePicker.open());
+
+    // Photo folder selection — decoupled from any single <input>, since we
+    // support two different picker mechanisms feeding the same state.
+    // Each entry: { file: File, relativePath: string }.
+    let selectedPhotoFiles = [];
+
+    function setSelectedPhotoFiles(entries) {
+        selectedPhotoFiles = entries;
+        const count = entries.length;
         if (csvPhotosLabel) {
             csvPhotosLabel.textContent = count
                 ? `${count} file${count !== 1 ? 's' : ''} selected`
                 : 'No folder chosen';
         }
+    }
+
+    // Recursively walk a FileSystemDirectoryHandle, returning every file
+    // beneath it with its path relative to the picked root.
+    async function walkDirectoryHandle(dirHandle, prefix = '') {
+        const entries = [];
+        for await (const [name, handle] of dirHandle.entries()) {
+            const relativePath = prefix ? `${prefix}/${name}` : name;
+            if (handle.kind === 'file') {
+                entries.push({ file: await handle.getFile(), relativePath });
+            } else if (handle.kind === 'directory') {
+                entries.push(...await walkDirectoryHandle(handle, relativePath));
+            }
+        }
+        return entries;
+    }
+
+    // Classic <input webkitdirectory> fallback — used when
+    // window.showDirectoryPicker isn't available (or fails) in this browser.
+    const csvPhotosFallbackPicker = filePicker('travel-csv-photos', (input) => {
+        const entries = Array.from(input.files || []).map(f => ({
+            file: f,
+            relativePath: f.webkitRelativePath || f.name,
+        }));
+        setSelectedPhotoFiles(entries);
     });
 
-    if (csvFileBtn) csvFileBtn.addEventListener('click', () => csvFilePicker.open());
-    if (csvPhotosBtn) csvPhotosBtn.addEventListener('click', () => csvPhotosPicker.open());
+    if (csvPhotosBtn) {
+        csvPhotosBtn.addEventListener('click', async () => {
+            if (window.showDirectoryPicker) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    setCsvMessage('Reading folder…');
+                    const entries = await walkDirectoryHandle(dirHandle);
+                    setSelectedPhotoFiles(entries);
+                    setCsvMessage('');
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // user cancelled — do nothing
+                    // Unsupported/disabled (e.g. Brave without the File System
+                    // Access API flag enabled) or any other failure — fall
+                    // back to the classic <input webkitdirectory> picker.
+                    console.warn('[travel/csv-import] showDirectoryPicker unavailable, falling back:', err.name, err.message);
+                }
+            }
+            csvPhotosFallbackPicker.open();
+        });
+    }
 
     if (csvImportBtn) {
         csvImportBtn.addEventListener('click', async () => {
@@ -757,10 +807,9 @@ export function initTravel() {
                 const fd = new FormData();
                 fd.append('file', file);
 
-                const photoFiles = Array.from(csvPhotosPicker.element.files || []);
-                if (photoFiles.length) {
-                    const manifest = photoFiles.map(f => f.webkitRelativePath || f.name);
-                    for (const f of photoFiles) fd.append('photos', f);
+                if (selectedPhotoFiles.length) {
+                    const manifest = selectedPhotoFiles.map(e => e.relativePath);
+                    for (const e of selectedPhotoFiles) fd.append('photos', e.file);
                     fd.append('photoManifest', JSON.stringify(manifest));
                 }
 
@@ -783,8 +832,8 @@ export function initTravel() {
                 // Reset the file inputs and reload the list if anything was imported
                 csvFilePicker.element.value = '';
                 if (csvFileLabel) csvFileLabel.textContent = 'No file chosen';
-                csvPhotosPicker.element.value = '';
-                if (csvPhotosLabel) csvPhotosLabel.textContent = 'No folder chosen';
+                csvPhotosFallbackPicker.element.value = '';
+                setSelectedPhotoFiles([]);
                 csvImportBtn.disabled = true;
                 if (imported > 0) await loadAll();
             } catch {
