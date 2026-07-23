@@ -687,15 +687,13 @@ export function initTravel() {
 
     // ── CSV bulk import ───────────────────────────────────────────────────────
 
-    const csvFileInput   = document.getElementById('travel-csv-file');
     const csvFileLabel   = document.getElementById('csv-file-label');
     const csvFileBtn     = document.getElementById('csv-file-btn');
     const csvImportBtn   = document.getElementById('travel-csv-import-btn');
     const csvTemplateBtn = document.getElementById('travel-csv-template-btn');
     const csvMessage     = document.getElementById('travel-csv-message');
-    const csvPhotosInput = document.getElementById('travel-csv-photos');
-    const csvPhotosBtn    = document.getElementById('csv-photos-btn');
-    const csvPhotosLabel  = document.getElementById('csv-photos-label');
+    const csvPhotosBtn   = document.getElementById('csv-photos-btn');
+    const csvPhotosLabel = document.getElementById('csv-photos-label');
 
     function setCsvMessage(text, isError = false) {
         if (!csvMessage) return;
@@ -703,37 +701,53 @@ export function initTravel() {
         csvMessage.style.color = isError ? 'var(--color-error)' : '';
     }
 
-    if (csvFileBtn && csvFileInput) {
-        csvFileBtn.addEventListener('click', () => csvFileInput.click());
+    // Wraps a file <input> so every open() starts a brand-new native dialog
+    // session — the element is replaced with a fresh clone before each click
+    // instead of reusing the same one repeatedly. Windows' common file dialog
+    // can retain per-element state (e.g. last-typed search-box text) across
+    // repeated opens of the same <input>, producing a false "No items match
+    // your search" on a later attempt (#511). window.showDirectoryPicker()
+    // would avoid this more cleanly (no persistent element at all), but
+    // Brave disables it by default (throws instead of prompting), so this
+    // sticks with the classic <input webkitdirectory> approach.
+    function filePicker(id, onChange) {
+        let el = document.getElementById(id);
+        const attach = () => el.addEventListener('change', () => onChange(el));
+        attach();
+        return {
+            open() {
+                const clone = el.cloneNode(false);
+                el.replaceWith(clone);
+                el = clone;
+                attach();
+                el.click();
+            },
+            get element() { return el; },
+        };
     }
 
-    if (csvFileInput) {
-        csvFileInput.addEventListener('change', () => {
-            const file = csvFileInput.files[0];
-            if (csvFileLabel) csvFileLabel.textContent = file ? file.name : 'No file chosen';
-            if (csvImportBtn) csvImportBtn.disabled = !file;
-            setCsvMessage('');
-        });
-    }
+    const csvFilePicker = filePicker('travel-csv-file', (input) => {
+        const file = input.files[0];
+        if (csvFileLabel) csvFileLabel.textContent = file ? file.name : 'No file chosen';
+        if (csvImportBtn) csvImportBtn.disabled = !file;
+        setCsvMessage('');
+    });
 
-    if (csvPhotosBtn && csvPhotosInput) {
-        csvPhotosBtn.addEventListener('click', () => csvPhotosInput.click());
-    }
+    const csvPhotosPicker = filePicker('travel-csv-photos', (input) => {
+        const count = input.files?.length || 0;
+        if (csvPhotosLabel) {
+            csvPhotosLabel.textContent = count
+                ? `${count} file${count !== 1 ? 's' : ''} selected`
+                : 'No folder chosen';
+        }
+    });
 
-    if (csvPhotosInput) {
-        csvPhotosInput.addEventListener('change', () => {
-            const count = csvPhotosInput.files?.length || 0;
-            if (csvPhotosLabel) {
-                csvPhotosLabel.textContent = count
-                    ? `${count} file${count !== 1 ? 's' : ''} selected`
-                    : 'No folder chosen';
-            }
-        });
-    }
+    if (csvFileBtn) csvFileBtn.addEventListener('click', () => csvFilePicker.open());
+    if (csvPhotosBtn) csvPhotosBtn.addEventListener('click', () => csvPhotosPicker.open());
 
-    if (csvImportBtn && csvFileInput) {
+    if (csvImportBtn) {
         csvImportBtn.addEventListener('click', async () => {
-            const file = csvFileInput.files[0];
+            const file = csvFilePicker.element.files[0];
             if (!file) return;
 
             csvImportBtn.disabled = true;
@@ -743,7 +757,7 @@ export function initTravel() {
                 const fd = new FormData();
                 fd.append('file', file);
 
-                const photoFiles = Array.from(csvPhotosInput?.files || []);
+                const photoFiles = Array.from(csvPhotosPicker.element.files || []);
                 if (photoFiles.length) {
                     const manifest = photoFiles.map(f => f.webkitRelativePath || f.name);
                     for (const f of photoFiles) fd.append('photos', f);
@@ -766,10 +780,10 @@ export function initTravel() {
                 }
                 setCsvMessage(msg, skipped > 0 && imported === 0);
 
-                // Reset the file input and reload the list if anything was imported
-                csvFileInput.value = '';
+                // Reset the file inputs and reload the list if anything was imported
+                csvFilePicker.element.value = '';
                 if (csvFileLabel) csvFileLabel.textContent = 'No file chosen';
-                if (csvPhotosInput) csvPhotosInput.value = '';
+                csvPhotosPicker.element.value = '';
                 if (csvPhotosLabel) csvPhotosLabel.textContent = 'No folder chosen';
                 csvImportBtn.disabled = true;
                 if (imported > 0) await loadAll();

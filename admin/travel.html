@@ -138,7 +138,11 @@
                 <div class="file-input-wrap">
                     <button type="button" class="btn-secondary file-input-btn" id="csv-file-btn" aria-label="Choose CSV file">Choose CSV…</button>
                     <span class="file-input-label" id="csv-file-label">No file chosen</span>
-                    <input type="file" id="travel-csv-file" accept=".csv" class="file-input-hidden" />
+                    <!-- No accept filter: the server already enforces .csv (fileFilter in
+                         backend/routes/travel.js). An accept filter here was the suspected
+                         cause of Windows' native file dialog leaking a stale filter into the
+                         adjacent folder picker below on some browsers (#511). -->
+                    <input type="file" id="travel-csv-file" class="file-input-hidden" />
                 </div>
                 <div class="file-input-wrap">
                     <button type="button" class="btn-secondary file-input-btn" id="csv-photos-btn" aria-label="Choose the photo library folder referenced by the CSV">Choose photo folder… (optional)</button>
