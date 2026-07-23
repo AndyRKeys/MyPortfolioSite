@@ -20,6 +20,7 @@ let existingMedia   = [];   // {id, url, type} from post_media (on edit)
 let removedMediaIds = [];   // post_media ids to delete on save
 let geoconfirmMap   = null; // Leaflet map for coordinate confirmation
 let geoconfirmMarker = null;
+let bulkFiles       = [];   // Files queued for bulk direct-upload to saved memory
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,9 @@ function clearForm() {
     hideGeoconfirmMap();
     syncUploadBtn();
     if (uploadStatus) uploadStatus.textContent = '';
+
+    // Hide bulk upload section and reset its state
+    resetBulkUploadSection(false);
 }
 
 // ── Saved memories list ───────────────────────────────────────────────────────
@@ -189,6 +193,9 @@ async function loadForEdit(memory) {
         renderMediaList();
         syncUploadBtn();
         if (uploadStatus) uploadStatus.textContent = '';
+
+        // Show bulk upload section (only meaningful when editing a saved memory)
+        resetBulkUploadSection(true);
 
         if (full.lat != null && full.lng != null) {
             updateGeoconfirmMap(parseFloat(full.lat), parseFloat(full.lng));
@@ -521,6 +528,24 @@ function syncUploadBtn() {
     uploadBtn.disabled = pendingFiles.length === 0;
 }
 
+function syncBulkUploadBtn() {
+    const btn = document.getElementById('travel-bulk-upload-btn');
+    if (btn) btn.disabled = bulkFiles.length === 0;
+}
+
+// Reset the bulk upload section state and show/hide it. Hidden when creating
+// a new memory (no id to upload against); shown when editing a saved one.
+function resetBulkUploadSection(visible) {
+    bulkFiles = [];
+    const bulkSection = document.getElementById('travel-bulk-upload-section');
+    if (bulkSection) bulkSection.classList.toggle('hidden', !visible);
+    const bulkLabel = document.getElementById('travel-bulk-file-label');
+    if (bulkLabel) bulkLabel.textContent = 'No files chosen';
+    const bulkStatus = document.getElementById('travel-bulk-status');
+    if (bulkStatus) bulkStatus.textContent = '';
+    syncBulkUploadBtn();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initTravel() {
@@ -662,12 +687,13 @@ export function initTravel() {
 
     // ── CSV bulk import ───────────────────────────────────────────────────────
 
-    const csvFileInput   = document.getElementById('travel-csv-file');
     const csvFileLabel   = document.getElementById('csv-file-label');
     const csvFileBtn     = document.getElementById('csv-file-btn');
     const csvImportBtn   = document.getElementById('travel-csv-import-btn');
     const csvTemplateBtn = document.getElementById('travel-csv-template-btn');
     const csvMessage     = document.getElementById('travel-csv-message');
+    const csvPhotosBtn   = document.getElementById('csv-photos-btn');
+    const csvPhotosLabel = document.getElementById('csv-photos-label');
 
     function setCsvMessage(text, isError = false) {
         if (!csvMessage) return;
@@ -675,22 +701,103 @@ export function initTravel() {
         csvMessage.style.color = isError ? 'var(--color-error)' : '';
     }
 
-    if (csvFileBtn && csvFileInput) {
-        csvFileBtn.addEventListener('click', () => csvFileInput.click());
+    // Wraps a file <input> so every open() starts a brand-new native dialog
+    // session — the element is replaced with a fresh clone before each click
+    // instead of reusing the same one repeatedly. This didn't fix the folder
+    // picker's "No items match your search" (Windows + Brave, #511) — that
+    // turned out not to be about element/dialog-state reuse at all — but it's
+    // still kept here as the CSV field's picker and as the folder picker's
+    // fallback for browsers without window.showDirectoryPicker().
+    function filePicker(id, onChange) {
+        let el = document.getElementById(id);
+        const attach = () => el.addEventListener('change', () => onChange(el));
+        attach();
+        return {
+            open() {
+                const clone = el.cloneNode(false);
+                el.replaceWith(clone);
+                el = clone;
+                attach();
+                el.click();
+            },
+            get element() { return el; },
+        };
     }
 
-    if (csvFileInput) {
-        csvFileInput.addEventListener('change', () => {
-            const file = csvFileInput.files[0];
-            if (csvFileLabel) csvFileLabel.textContent = file ? file.name : 'No file chosen';
-            if (csvImportBtn) csvImportBtn.disabled = !file;
-            setCsvMessage('');
+    const csvFilePicker = filePicker('travel-csv-file', (input) => {
+        const file = input.files[0];
+        if (csvFileLabel) csvFileLabel.textContent = file ? file.name : 'No file chosen';
+        if (csvImportBtn) csvImportBtn.disabled = !file;
+        setCsvMessage('');
+    });
+
+    if (csvFileBtn) csvFileBtn.addEventListener('click', () => csvFilePicker.open());
+
+    // Photo folder selection — decoupled from any single <input>, since we
+    // support two different picker mechanisms feeding the same state.
+    // Each entry: { file: File, relativePath: string }.
+    let selectedPhotoFiles = [];
+
+    function setSelectedPhotoFiles(entries) {
+        selectedPhotoFiles = entries;
+        const count = entries.length;
+        if (csvPhotosLabel) {
+            csvPhotosLabel.textContent = count
+                ? `${count} file${count !== 1 ? 's' : ''} selected`
+                : 'No folder chosen';
+        }
+    }
+
+    // Recursively walk a FileSystemDirectoryHandle, returning every file
+    // beneath it with its path relative to the picked root.
+    async function walkDirectoryHandle(dirHandle, prefix = '') {
+        const entries = [];
+        for await (const [name, handle] of dirHandle.entries()) {
+            const relativePath = prefix ? `${prefix}/${name}` : name;
+            if (handle.kind === 'file') {
+                entries.push({ file: await handle.getFile(), relativePath });
+            } else if (handle.kind === 'directory') {
+                entries.push(...await walkDirectoryHandle(handle, relativePath));
+            }
+        }
+        return entries;
+    }
+
+    // Classic <input webkitdirectory> fallback — used when
+    // window.showDirectoryPicker isn't available (or fails) in this browser.
+    const csvPhotosFallbackPicker = filePicker('travel-csv-photos', (input) => {
+        const entries = Array.from(input.files || []).map(f => ({
+            file: f,
+            relativePath: f.webkitRelativePath || f.name,
+        }));
+        setSelectedPhotoFiles(entries);
+    });
+
+    if (csvPhotosBtn) {
+        csvPhotosBtn.addEventListener('click', async () => {
+            if (window.showDirectoryPicker) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    setCsvMessage('Reading folder…');
+                    const entries = await walkDirectoryHandle(dirHandle);
+                    setSelectedPhotoFiles(entries);
+                    setCsvMessage('');
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // user cancelled — do nothing
+                    // Unsupported/disabled (e.g. Brave without the File System
+                    // Access API flag enabled) or any other failure — fall
+                    // back to the classic <input webkitdirectory> picker.
+                    console.warn('[travel/csv-import] showDirectoryPicker unavailable, falling back:', err.name, err.message);
+                }
+            }
+            csvPhotosFallbackPicker.open();
         });
     }
 
-    if (csvImportBtn && csvFileInput) {
+    if (csvImportBtn) {
         csvImportBtn.addEventListener('click', async () => {
-            const file = csvFileInput.files[0];
+            const file = csvFilePicker.element.files[0];
             if (!file) return;
 
             csvImportBtn.disabled = true;
@@ -699,6 +806,13 @@ export function initTravel() {
             try {
                 const fd = new FormData();
                 fd.append('file', file);
+
+                if (selectedPhotoFiles.length) {
+                    const manifest = selectedPhotoFiles.map(e => e.relativePath);
+                    for (const e of selectedPhotoFiles) fd.append('photos', e.file);
+                    fd.append('photoManifest', JSON.stringify(manifest));
+                }
+
                 const res  = await authFetchMultipart('/travel/import', fd);
                 const data = await res.json();
 
@@ -715,9 +829,11 @@ export function initTravel() {
                 }
                 setCsvMessage(msg, skipped > 0 && imported === 0);
 
-                // Reset the file input and reload the list if anything was imported
-                csvFileInput.value = '';
+                // Reset the file inputs and reload the list if anything was imported
+                csvFilePicker.element.value = '';
                 if (csvFileLabel) csvFileLabel.textContent = 'No file chosen';
+                csvPhotosFallbackPicker.element.value = '';
+                setSelectedPhotoFiles([]);
                 csvImportBtn.disabled = true;
                 if (imported > 0) await loadAll();
             } catch {
@@ -730,8 +846,8 @@ export function initTravel() {
 
     if (csvTemplateBtn) {
         csvTemplateBtn.addEventListener('click', () => {
-            const header  = 'title,location,notes,post_date,lat,lng,publish';
-            const example = '"My trip","Paris, France","A wonderful visit",2024-06-15,48.8566,2.3522,false';
+            const header  = 'title,location,notes,post_date,lat,lng,publish,photos';
+            const example = '"My trip","Paris, France","A wonderful visit",2024-06-15,48.8566,2.3522,false,"Paris/IMG_0001.jpg;Paris/IMG_0002.jpg"';
             const blob    = new Blob([header + '\n' + example + '\n'], { type: 'text/csv' });
             const url     = URL.createObjectURL(blob);
             const a       = document.createElement('a');
@@ -739,6 +855,95 @@ export function initTravel() {
             a.download    = 'travel-import-template.csv';
             a.click();
             URL.revokeObjectURL(url);
+        });
+    }
+
+    // ── Bulk photo/video upload (edit mode) ───────────────────────────────────
+
+    const bulkFileInput = document.getElementById('travel-bulk-file');
+    const bulkFileBtn   = document.getElementById('travel-bulk-file-btn');
+    const bulkUploadBtn = document.getElementById('travel-bulk-upload-btn');
+    const bulkFileLabel = document.getElementById('travel-bulk-file-label');
+    const bulkStatusEl  = document.getElementById('travel-bulk-status');
+
+    function setBulkStatus(text, isError = false) {
+        if (!bulkStatusEl) return;
+        bulkStatusEl.textContent = text;
+        bulkStatusEl.style.color = isError ? 'var(--color-error)' : '';
+    }
+
+    if (bulkFileBtn && bulkFileInput) {
+        bulkFileBtn.addEventListener('click', () => bulkFileInput.click());
+    }
+
+    if (bulkFileInput) {
+        bulkFileInput.addEventListener('change', () => {
+            const files = Array.from(bulkFileInput.files || []);
+            if (!files.length) return;
+            bulkFiles = bulkFiles.concat(files);
+            if (bulkFileLabel) {
+                bulkFileLabel.textContent = bulkFiles.length + ' file' + (bulkFiles.length !== 1 ? 's' : '') + ' selected';
+            }
+            bulkFileInput.value = ''; // allow re-selecting the same file
+            setBulkStatus('');
+            syncBulkUploadBtn();
+        });
+    }
+
+    if (bulkUploadBtn) {
+        bulkUploadBtn.addEventListener('click', async () => {
+            const editId = document.getElementById('travel-edit-id').value;
+            if (!editId || !bulkFiles.length) return;
+
+            bulkUploadBtn.disabled = true;
+            setBulkStatus(`Uploading ${bulkFiles.length} file${bulkFiles.length !== 1 ? 's' : ''}…`);
+
+            const fd = new FormData();
+            for (const f of bulkFiles) fd.append('photos', f);
+
+            try {
+                const res  = await authFetchMultipart(`/travel/${editId}/photos/bulk`, fd);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    setBulkStatus(data.error || 'Upload failed.', true);
+                    return;
+                }
+
+                const { uploaded, errors } = data;
+                let msg = `Uploaded ${uploaded.length} file${uploaded.length !== 1 ? 's' : ''}`;
+                if (errors && errors.length) {
+                    msg += `, ${errors.length} failed: ` + errors.map(e => e.file).join(', ');
+                }
+                setBulkStatus(msg, errors && errors.length > 0 && uploaded.length === 0);
+
+                // Reset file list after upload
+                bulkFiles = [];
+                if (bulkFileLabel) bulkFileLabel.textContent = 'No files chosen';
+                syncBulkUploadBtn();
+
+                // Refresh the media list by reloading the current memory from the API
+                if (uploaded.length) {
+                    try {
+                        const memRes = await authFetch(`/travel/admin/${editId}`);
+                        if (memRes.ok) {
+                            const full = await memRes.json();
+                            existingMedia = Array.isArray(full.media) && full.media.length
+                                ? full.media.map(m => ({ id: m.id, url: m.url, type: m.type }))
+                                : (full.media_url ? [{ id: null, url: full.media_url, type: full.media_type }] : []);
+                            renderMediaList();
+                            startJobPolling();
+                            refreshJobQueue();
+                        }
+                    } catch {
+                        // Non-fatal — media list will refresh on next form load
+                    }
+                }
+            } catch {
+                setBulkStatus('Upload failed — check connection and try again.', true);
+            } finally {
+                syncBulkUploadBtn();
+            }
         });
     }
 

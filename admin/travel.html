@@ -72,6 +72,19 @@
                         </div>
                     </label>
                     <div id="travel-media-list" class="media-list hidden"></div>
+                    <!-- Bulk upload section — visible only when editing an existing memory -->
+                    <div id="travel-bulk-upload-section" class="hidden">
+                        <hr style="margin: 1rem 0;" />
+                        <label>Bulk upload photos / videos (uploads directly to this memory)
+                            <div class="file-input-wrap">
+                                <button type="button" class="btn-secondary file-input-btn" id="travel-bulk-file-btn" aria-label="Choose photos or videos for bulk upload">Add files…</button>
+                                <span class="file-input-label" id="travel-bulk-file-label">No files chosen</span>
+                                <input id="travel-bulk-file" type="file" accept="image/*,video/*" class="file-input-hidden" multiple />
+                                <button type="button" id="travel-bulk-upload-btn" class="btn-small" disabled>Upload now</button>
+                            </div>
+                        </label>
+                        <p id="travel-bulk-status" class="admin-message" aria-live="polite"></p>
+                    </div>
                     <div class="coord-row">
                         <label>Latitude
                             <div class="coord-stepper">
@@ -118,26 +131,37 @@
                     <div class="preview-media"></div>
                     <div class="preview-text"></div>
                 </div>
-                <div class="saved-memories">
-                    <h3 class="saved-list-title">Saved memories</h3>
-                    <div id="saved-memories-list">
-                        <p class="hint">Loading…</p>
-                    </div>
-                </div>
             </div>
             <div class="admin-card">
                 <h2 class="admin-card-title">Bulk import</h2>
-                <p class="hint">Import multiple travel memories from a CSV file. Required column: <code>title</code>. Optional: <code>location</code>, <code>notes</code>, <code>post_date</code> (YYYY-MM-DD), <code>lat</code>, <code>lng</code>, <code>publish</code> (true/false). Max 1 MB.</p>
+                <p class="hint">Import multiple travel memories from a CSV file. Required column: <code>title</code>. Optional: <code>location</code>, <code>notes</code>, <code>post_date</code> (YYYY-MM-DD), <code>lat</code>, <code>lng</code>, <code>publish</code> (true/false), <code>photos</code> (semicolon-separated paths relative to the folder you select below, e.g. produced by <code>scripts/tools/extract_geo_loc.py</code>). Max 1 MB.</p>
                 <div class="file-input-wrap">
                     <button type="button" class="btn-secondary file-input-btn" id="csv-file-btn" aria-label="Choose CSV file">Choose CSV…</button>
                     <span class="file-input-label" id="csv-file-label">No file chosen</span>
-                    <input type="file" id="travel-csv-file" accept=".csv" class="file-input-hidden" />
+                    <!-- No accept filter: the server already enforces .csv (fileFilter in
+                         backend/routes/travel.js). An accept filter here was the suspected
+                         cause of Windows' native file dialog leaking a stale filter into the
+                         adjacent folder picker below on some browsers (#511). -->
+                    <input type="file" id="travel-csv-file" class="file-input-hidden" />
+                </div>
+                <div class="file-input-wrap">
+                    <button type="button" class="btn-secondary file-input-btn" id="csv-photos-btn" aria-label="Choose the photo library folder referenced by the CSV">Choose photo folder… (optional)</button>
+                    <span class="file-input-label" id="csv-photos-label">No folder chosen</span>
+                    <input type="file" id="travel-csv-photos" webkitdirectory directory class="file-input-hidden" />
                 </div>
                 <div class="form-actions">
                     <button type="button" id="travel-csv-import-btn" class="btn-primary" disabled>Import</button>
                     <button type="button" id="travel-csv-template-btn" class="btn-secondary">Download template</button>
                 </div>
                 <p id="travel-csv-message" class="admin-message"></p>
+            </div>
+            <div class="admin-card">
+                <div class="saved-memories">
+                    <h3 class="saved-list-title">Saved memories</h3>
+                    <div id="saved-memories-list">
+                        <p class="hint">Loading…</p>
+                    </div>
+                </div>
             </div>
         </section>
     </main>

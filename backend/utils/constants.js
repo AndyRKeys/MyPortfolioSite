@@ -60,6 +60,22 @@ export const MEDIA_ALLOWED_MIME = new Set([
   'video/mp4', 'video/webm', 'video/quicktime',
 ]);
 
+// On-disk extension for each allowed MIME type. Generated multer filenames
+// use this instead of the client-supplied original filename's extension —
+// CodeQL (js/path-injection) flags any path built from file.originalname
+// that reaches an fs.* call, even where the resulting value could never
+// actually contain a path separator; mapping from the already-validated
+// MIME type instead severs that taint at the source (#511).
+export const MEDIA_EXTENSION_BY_MIME = {
+  'image/jpeg':      '.jpg',
+  'image/png':       '.png',
+  'image/gif':       '.gif',
+  'image/webp':      '.webp',
+  'video/mp4':       '.mp4',
+  'video/webm':      '.webm',
+  'video/quicktime': '.mov',
+};
+
 // ── Posts / travel rate limits ────────────────────────────────────────────────
 
 export const POSTS_RATE_WINDOW_MS  = 60 * 1000; // 1 minute

@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import fs from 'fs';
 import multer from 'multer';
+import os from 'os';
 import path from 'path';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../middleware/authenticate.js';
@@ -10,10 +12,13 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
-import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT } from '../utils/constants.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME, MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME, MEDIA_EXTENSION_BY_MIME } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
 import { wrapMulter } from '../utils/wrapMulter.js';
+import { getBoss } from '../utils/boss.js';
+import { mediaUpload } from '../utils/mediaUpload.js';
+import { UPLOADS_ORIGINAL_DIR } from '../utils/paths.js';
 
 const router = Router();
 
@@ -312,19 +317,48 @@ router.delete('/:id', travelRateLimit, resolveUser, authenticate, async (req, re
 
 const CSV_MAX_BYTES = 1 * 1024 * 1024; // 1 MB
 
-// Memory-only multer — CSV content is parsed in-process, no file written to disk.
-// Extension check is the authoritative gate: browsers are inconsistent with MIME
-// types for .csv files (text/csv, text/plain, application/vnd.ms-excel all occur).
-const csvUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: CSV_MAX_BYTES },
+// Combined CSV + photos import upload. The "file" field (the CSV itself) and
+// the "photos" field (media files) need different validation and destinations,
+// so storage/fileFilter branch on file.fieldname (#511). The CSV's 1 MB limit
+// is enforced in the route handler, not here — multer's fileSize limit is a
+// single value shared by every field in the request.
+const importUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, file, cb) => {
+      cb(null, file.fieldname === 'photos' ? UPLOADS_ORIGINAL_DIR : os.tmpdir());
+    },
+    filename: (_req, file, cb) => {
+      // CodeQL (js/path-injection): don't derive the CSV's on-disk extension
+      // from the client-supplied filename, even though fileFilter already
+      // gates it to .csv — hardcode it so the generated path never traces
+      // back to user input at all, for the field whose file we later
+      // fs.readFileSync/unlink directly in the route handler.
+      if (file.fieldname === 'file') {
+        cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}.csv`);
+        return;
+      }
+      // "photos" field: fileFilter (below) has already confirmed
+      // file.mimetype is a MEDIA_ALLOWED_MIME member by the time storage
+      // runs, so map from that instead of the client-supplied filename's
+      // extension — same rationale as the "file" branch above (#511).
+      const ext = MEDIA_EXTENSION_BY_MIME[file.mimetype] ?? '';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+    },
+  }),
+  limits: { fileSize: MEDIA_MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.csv') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .csv files are accepted — file must have a .csv extension'));
+    if (file.fieldname === 'file') {
+      const ext = path.extname(file.originalname).toLowerCase();
+      return ext === '.csv'
+        ? cb(null, true)
+        : cb(new Error('Only .csv files are accepted — file must have a .csv extension'));
     }
+    if (file.fieldname === 'photos') {
+      return MEDIA_ALLOWED_MIME.has(file.mimetype)
+        ? cb(null, true)
+        : cb(new Error('File type not allowed'));
+    }
+    cb(new Error('Unexpected field'));
   },
 });
 
@@ -373,15 +407,208 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
-const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish';
+const CSV_TEMPLATE_HEADERS = 'title,location,notes,post_date,lat,lng,publish,photos';
+
+// ── Bulk photo upload ─────────────────────────────────────────────────────────
+
+const MAX_BULK_FILES = 20; // reasonable per-request cap
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Remove files multer already wrote to disk when the request is rejected
+// after upload (unknown memory, DB failure). Non-fatal: failures are logged.
+function removeUploadedFiles(files, reason) {
+  for (const file of files) {
+    if (!file.path) continue;
+    fs.unlink(file.path, unlinkErr => {
+      if (unlinkErr) logger.warn({ err: unlinkErr.message, file: file.filename, reason }, '[travel/bulk-upload] failed to remove orphaned file');
+    });
+  }
+}
+
+// Insert post_media rows for each uploaded file and enqueue processing jobs.
+// Shared between the per-memory bulk-upload route and the CSV-import route
+// (#511) — both attach a batch of already-multer-saved files to a post.
+async function attachMediaFiles(postId, files, startOrderIdx) {
+  const uploaded = [];
+  const errors   = [];
+  const boss     = getBoss();
+  let orderIdx   = startOrderIdx;
+
+  for (const file of files) {
+    const url = `/uploads/original/${file.filename}`;
+    try {
+      await pool.query(
+        `INSERT INTO post_media (post_id, media_url, media_type, media_status, order_index)
+         VALUES ($1, $2, $3, 'pending', $4)`,
+        [postId, url, file.mimetype, orderIdx],
+      );
+      orderIdx++;
+
+      try {
+        if (boss) {
+          const jobId = await boss.send(
+            MEDIA_JOB_NAME,
+            { filePath: file.path, mimeType: file.mimetype },
+            { retryLimit: 3, retryDelay: 0, retryBackoff: true },
+          );
+          if (jobId) {
+            logger.info({ file: file.filename, mime: file.mimetype, jobId, postId }, '[media-attach] job enqueued');
+          } else {
+            logger.warn({ file: file.filename }, '[media-attach] boss.send returned null — queue may not exist yet');
+          }
+        } else {
+          logger.warn({ file: file.filename }, '[media-attach] boss not ready — skipping job enqueue');
+        }
+      } catch (jobErr) {
+        logger.error({ err: jobErr.message, file: file.filename }, '[media-attach] failed to enqueue job');
+      }
+
+      uploaded.push({ url, type: file.mimetype, status: 'pending' });
+    } catch (err) {
+      logger.error({ err: err.message, file: file.filename, postId }, '[media-attach] failed to insert media row');
+      removeUploadedFiles([file], 'insert failed');
+      errors.push({ file: file.originalname, error: 'Failed to save file — see server logs' });
+    }
+  }
+
+  return { uploaded, errors };
+}
+
+// Admin: bulk upload photos/videos to an existing travel memory.
+// Accepts multipart/form-data with a "photos" field (up to MAX_BULK_FILES files).
+// Response: { uploaded: [{ url, type, status }], errors: [{ file, error }] }
+router.post('/:id/photos/bulk', travelRateLimit, resolveUser, authenticate, wrapMulter(mediaUpload.array('photos', MAX_BULK_FILES)), async (req, res, next) => {
+  const { id } = req.params;
+  const rawFiles = req.files;
+  if (rawFiles != null && !Array.isArray(rawFiles)) {
+    logger.warn({ postId: id, filesType: typeof rawFiles }, '[travel/bulk-upload] Invalid files payload type');
+    return res.status(400).json({ error: 'Invalid files payload' });
+  }
+  const files = Array.isArray(rawFiles) ? rawFiles : [];
+
+  logger.info({ postId: id, fileCount: files.length }, '[travel/bulk-upload] Received bulk upload request');
+
+  if (!files.length) {
+    return res.status(400).json({ error: 'No files received' });
+  }
+
+  // Reject malformed ids up front — posts.id is a UUID, so passing a
+  // non-UUID string straight to Postgres would raise 22P02 and surface
+  // as a 500 instead of a clean 404.
+  if (!UUID_RE.test(id)) {
+    logger.warn({ postId: id }, '[travel/bulk-upload] Invalid memory id — not a UUID');
+    removeUploadedFiles(files, 'invalid id');
+    return res.status(404).json({ error: 'Memory not found' });
+  }
+
+  // Verify the travel memory exists before writing any rows
+  try {
+    const check = await pool.query(
+      `SELECT id FROM posts WHERE id = $1 AND post_type = 'travel'`,
+      [id],
+    );
+    if (!check.rows.length) {
+      logger.warn({ postId: id }, '[travel/bulk-upload] Travel memory not found');
+      removeUploadedFiles(files, 'memory not found');
+      return res.status(404).json({ error: 'Memory not found' });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to verify travel memory');
+    removeUploadedFiles(files, 'memory check failed');
+    return next(err);
+  }
+
+  // Determine starting order_index (append after existing media)
+  let orderIdx = 0;
+  try {
+    const orderResult = await pool.query(
+      `SELECT COALESCE(MAX(order_index), -1) AS max_idx FROM post_media WHERE post_id = $1`,
+      [id],
+    );
+    orderIdx = (orderResult.rows[0]?.max_idx ?? -1) + 1;
+  } catch (err) {
+    logger.warn({ err: err.message, postId: id }, '[travel/bulk-upload] Failed to get order_index — defaulting to 0');
+  }
+
+  const { uploaded, errors } = await attachMediaFiles(id, files, orderIdx);
+
+  // Set posts.media_url / posts.media_type to the first uploaded file if none exists yet
+  if (uploaded.length) {
+    await pool.query(
+      `UPDATE posts
+       SET media_url  = COALESCE(media_url, $1),
+           media_type = COALESCE(media_type, $2)
+       WHERE id = $3`,
+      [uploaded[0].url, uploaded[0].type, id],
+    ).catch(err => logger.error({ err: err.message, postId: id }, '[travel/bulk-upload] failed to update primary media'));
+  }
+
+  await logAudit(req, 'travel.bulk_upload', 'travel', id, { uploaded: uploaded.length, errors: errors.length }).catch(() => {});
+  logger.info({ postId: id, uploaded: uploaded.length, errors: errors.length }, '[travel/bulk-upload] Complete');
+
+  res.json({ uploaded, errors });
+});
+
+// ── CSV import ────────────────────────────────────────────────────────────────
 
 // Admin: bulk-import travel entries from a CSV file.
 // Accepts multipart/form-data with a single "file" field (must be .csv, max 1 MB).
 // Response: { imported: N, skipped: N, errors: [{ row: N, reason: string }] }
-router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(csvUpload.single('file')), async (req, res, next) => {
-  if (!req.file) return res.status(400).json({ error: 'No CSV file received' });
+router.post('/import', travelRateLimit, resolveUser, authenticate,
+  wrapMulter(importUpload.fields([{ name: 'file', maxCount: 1 }, { name: 'photos', maxCount: 500 }])),
+  async (req, res, next) => {
+  const csvFile = req.files?.file?.[0];
+  if (!csvFile) return res.status(400).json({ error: 'No CSV file received' });
 
-  const csvText = req.file.buffer.toString('utf8');
+  // CodeQL (js/path-injection): multer file objects are modelled as tainted
+  // by req regardless of how their on-disk filename was generated, so
+  // normalize + verify containment within the expected temp directory
+  // before any fs.* use — the pattern this rule's own remediation guidance
+  // recommends — rather than using csvFile.path directly. path.resolve()
+  // (no symlink resolution, no filesystem access) is sufficient here since
+  // the file's directory and generated filename are both fully
+  // server-controlled; nothing about this path depends on file.originalname.
+  const csvTmpDir = path.resolve(os.tmpdir());
+  const csvPath = path.resolve(csvFile.path);
+  if (!csvPath.startsWith(csvTmpDir + path.sep)) {
+    logger.error({ path: csvPath }, '[travel/import] CSV upload path outside expected directory');
+    return res.status(500).json({ error: 'Internal error processing upload' });
+  }
+
+  if (csvFile.size > CSV_MAX_BYTES) {
+    fs.unlink(csvPath, () => {});
+    return res.status(400).json({ error: `CSV file exceeds the ${CSV_MAX_BYTES} byte limit` });
+  }
+
+  const photoFiles = req.files?.photos ?? [];
+
+  let photoManifest = [];
+  if (req.body.photoManifest) {
+    try {
+      photoManifest = JSON.parse(req.body.photoManifest);
+    } catch {
+      fs.unlink(csvPath, () => {});
+      removeUploadedFiles(photoFiles, 'invalid photoManifest JSON');
+      return res.status(400).json({ error: 'photoManifest must be valid JSON' });
+    }
+  }
+  if (!Array.isArray(photoManifest) || photoManifest.length !== photoFiles.length ||
+      !photoManifest.every(p => typeof p === 'string' && p.length > 0 && p.length <= 4096)) {
+    fs.unlink(csvPath, () => {});
+    removeUploadedFiles(photoFiles, 'photoManifest mismatch');
+    return res.status(400).json({ error: 'photoManifest must be a JSON array of strings matching the number of uploaded photos' });
+  }
+
+  // Map relative path -> uploaded file, for matching against each CSV row's
+  // photos column. Multiple CSV rows could (in principle) reference the same
+  // relative path; each row gets its own copy attached since attachMediaFiles
+  // inserts a fresh post_media row per call.
+  const photoByPath = new Map();
+  photoFiles.forEach((file, i) => photoByPath.set(photoManifest[i], file));
+
+  const csvText = fs.readFileSync(csvPath, 'utf8');
+  fs.unlink(csvPath, () => {});
   const { headers, rows } = parseCSV(csvText);
 
   if (!headers.includes('title')) {
@@ -402,14 +629,14 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
     const row    = rows[i];
     const rowNum = i + 2; // header is row 1; data starts at row 2
 
-    const title = (row.title ?? '').trim();
+    const title = String(row.title ?? '').trim();
     if (!title) {
       skipped++;
       errors.push({ row: rowNum, reason: 'title is required' });
       continue;
     }
 
-    let postDate = (row.post_date ?? '').trim() || null;
+    let postDate = String(row.post_date ?? '').trim() || null;
     if (postDate) {
       // Accept DD/MM/YYYY (Excel default) and normalise to YYYY-MM-DD
       const dmyMatch = postDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -421,8 +648,8 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       }
     }
 
-    const latRaw = (row.lat ?? '').trim();
-    const lngRaw = (row.lng ?? '').trim();
+    const latRaw = String(row.lat ?? '').trim();
+    const lngRaw = String(row.lng ?? '').trim();
     const lat    = latRaw ? parseFloat(latRaw) : null;
     const lng    = lngRaw ? parseFloat(lngRaw) : null;
     if ((latRaw && isNaN(lat)) || (lngRaw && isNaN(lng))) {
@@ -431,9 +658,9 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       continue;
     }
 
-    const location    = (row.location ?? '').trim() || null;
-    const notes       = (row.notes ?? '').trim() || '';
-    const publishRaw  = (row.publish ?? '').trim().toLowerCase();
+    const location    = String(row.location ?? '').trim() || null;
+    const notes       = String(row.notes ?? '').trim() || '';
+    const publishRaw  = String(row.publish ?? '').trim().toLowerCase();
     const publishedAt = publishRaw === 'true' ? new Date() : null;
 
     const client = await pool.connect();
@@ -448,6 +675,30 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
       );
       await client.query('COMMIT');
       imported++;
+
+      const rowPhotoNames = String(row.photos ?? '').split(';').map(s => s.trim()).filter(Boolean);
+      if (rowPhotoNames.length) {
+        const matchedFiles = [];
+        for (const name of rowPhotoNames) {
+          const file = photoByPath.get(name);
+          if (file) {
+            matchedFiles.push(file);
+            photoByPath.delete(name); // consumed — prevents double-attach if two rows list the same name
+          } else {
+            errors.push({ row: rowNum, reason: `photo "${name}" was not found among the uploaded files` });
+          }
+        }
+        if (matchedFiles.length) {
+          const idResult = await pool.query(
+            `SELECT id FROM posts WHERE slug = $1 AND post_type = 'travel'`, [slug],
+          );
+          const newPostId = idResult.rows[0]?.id;
+          if (newPostId) {
+            const { errors: attachErrors } = await attachMediaFiles(newPostId, matchedFiles, 0);
+            for (const ae of attachErrors) errors.push({ row: rowNum, reason: `photo "${ae.file}": ${ae.error}` });
+          }
+        }
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       skipped++;
@@ -456,6 +707,10 @@ router.post('/import', travelRateLimit, resolveUser, authenticate, wrapMulter(cs
     } finally {
       client.release();
     }
+  }
+
+  if (photoByPath.size) {
+    removeUploadedFiles([...photoByPath.values()], 'not referenced by any CSV row');
   }
 
   await logAudit(req, 'travel.import', 'travel', null, { imported, skipped, total: rows.length });

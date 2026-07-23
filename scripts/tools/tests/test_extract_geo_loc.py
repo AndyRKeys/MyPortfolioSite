@@ -658,7 +658,7 @@ def test_run_export_output_columns(tmp_path):
     assert rows[0]['location'] == 'Paris, France'
     assert rows[0]['notes']    == 'Nice'
     assert rows[0]['publish']  == 'true'
-    assert set(rows[0].keys()) == {'title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish'}
+    assert set(rows[0].keys()) == {'title', 'location', 'notes', 'post_date', 'lat', 'lng', 'publish', 'photos'}
 
 
 def test_run_export_no_resolved_raises(tmp_path):
@@ -672,6 +672,54 @@ def test_run_export_no_resolved_raises(tmp_path):
         geo.run_export({'title_prefix': 'Trip', 'notes': '', 'publish': False,
                         'coordinate_precision': 4},
                        tmp_path, tmp_path / '04-travel-import.csv')
+
+
+def test_run_export_includes_photos_column(tmp_path):
+    """Export stage should add a photos column listing each row's source
+    files as paths relative to the scanned root folder, semicolon-joined."""
+    root = tmp_path / 'library'
+    (root / 'Japan').mkdir(parents=True)
+    photo1 = root / 'Japan' / 'IMG_0001.jpg'
+    photo2 = root / 'Japan' / 'IMG_0002.jpg'
+    photo1.write_bytes(b'fake')
+    photo2.write_bytes(b'fake')
+
+    working = tmp_path / 'work'
+    working.mkdir()
+    (working / 'root-folder.txt').write_text(str(root), encoding='utf-8')
+
+    resolved_csv = working / '03-resolved.csv'
+    with open(resolved_csv, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'group_key', 'item_count', 'source', 'lookup_latitude',
+            'lookup_longitude', 'export_lat', 'export_lng', 'post_date',
+            'status', 'resolved_location'])
+        writer.writeheader()
+        writer.writerow({
+            'group_key': 'g1', 'item_count': 2, 'source': 'GPS',
+            'lookup_latitude': 35.0, 'lookup_longitude': 139.0,
+            'export_lat': 35.0, 'export_lng': 139.0,
+            'post_date': '2024-06-15', 'status': 'resolved',
+            'resolved_location': 'Tokyo, Japan',
+        })
+
+    map_csv = working / '02-file-group-map.csv'
+    with open(map_csv, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=['file_path', 'group_key', 'gps_found'])
+        writer.writeheader()
+        writer.writerow({'file_path': str(photo1), 'group_key': 'g1', 'gps_found': True})
+        writer.writerow({'file_path': str(photo2), 'group_key': 'g1', 'gps_found': True})
+
+    output_csv = working / '04-travel-import.csv'
+    config = dict(geo.DEFAULTS)
+    config['title_prefix'] = 'Trip'
+    geo.run_export(config, working, output_csv)
+
+    with open(output_csv, encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    assert set(rows[0]['photos'].split(';')) == {'Japan/IMG_0001.jpg', 'Japan/IMG_0002.jpg'}
 
 
 # ── Geotag preview stage tests
