@@ -12,7 +12,7 @@ import { exemptIfTrusted } from '../utils/serviceKey.js';
 import { slugify, findUniqueSlug } from '../utils/slugify.js';
 import { validate, CreateTravelSchema, UpdateTravelSchema } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
-import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME, MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME } from '../utils/constants.js';
+import { TRAVEL_RATE_WINDOW_MS, TRAVEL_RATE_LIMIT, MEDIA_JOB_NAME, MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME, MEDIA_EXTENSION_BY_MIME } from '../utils/constants.js';
 import { publicCache, noStore } from '../middleware/cacheHeaders.js';
 import { logAudit } from '../utils/audit.js';
 import { wrapMulter } from '../utils/wrapMulter.js';
@@ -337,7 +337,11 @@ const importUpload = multer({
         cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}.csv`);
         return;
       }
-      const ext = path.extname(file.originalname).toLowerCase();
+      // "photos" field: fileFilter (below) has already confirmed
+      // file.mimetype is a MEDIA_ALLOWED_MIME member by the time storage
+      // runs, so map from that instead of the client-supplied filename's
+      // extension — same rationale as the "file" branch above (#511).
+      const ext = MEDIA_EXTENSION_BY_MIME[file.mimetype] ?? '';
       cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
     },
   }),

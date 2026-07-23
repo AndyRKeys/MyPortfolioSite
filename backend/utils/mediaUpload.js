@@ -1,6 +1,5 @@
 import multer from 'multer';
-import path from 'path';
-import { MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME } from './constants.js';
+import { MEDIA_MAX_FILE_SIZE, MEDIA_ALLOWED_MIME, MEDIA_EXTENSION_BY_MIME } from './constants.js';
 import { UPLOADS_ORIGINAL_DIR } from './paths.js';
 
 // ── Shared media upload config
@@ -13,7 +12,12 @@ import { UPLOADS_ORIGINAL_DIR } from './paths.js';
 const mediaStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_ORIGINAL_DIR),
   filename:    (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    // multer only calls storage after fileFilter accepts the file, so
+    // file.mimetype is guaranteed to be a MEDIA_ALLOWED_MIME member here —
+    // mapping from it (rather than path.extname(file.originalname)) keeps
+    // the generated path free of any client-supplied input (#511, CodeQL
+    // js/path-injection).
+    const ext = MEDIA_EXTENSION_BY_MIME[file.mimetype] ?? '';
     cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
   },
 });
