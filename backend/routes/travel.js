@@ -560,8 +560,24 @@ router.post('/import', travelRateLimit, resolveUser, authenticate,
   async (req, res, next) => {
   const csvFile = req.files?.file?.[0];
   if (!csvFile) return res.status(400).json({ error: 'No CSV file received' });
+
+  // CodeQL (js/path-injection): multer file objects are modelled as tainted
+  // by req regardless of how their on-disk filename was generated, so
+  // normalize + verify containment within the expected temp directory
+  // before any fs.* use — the pattern this rule's own remediation guidance
+  // recommends — rather than using csvFile.path directly. path.resolve()
+  // (no symlink resolution, no filesystem access) is sufficient here since
+  // the file's directory and generated filename are both fully
+  // server-controlled; nothing about this path depends on file.originalname.
+  const csvTmpDir = path.resolve(os.tmpdir());
+  const csvPath = path.resolve(csvFile.path);
+  if (!csvPath.startsWith(csvTmpDir + path.sep)) {
+    logger.error({ path: csvPath }, '[travel/import] CSV upload path outside expected directory');
+    return res.status(500).json({ error: 'Internal error processing upload' });
+  }
+
   if (csvFile.size > CSV_MAX_BYTES) {
-    fs.unlink(csvFile.path, () => {});
+    fs.unlink(csvPath, () => {});
     return res.status(400).json({ error: `CSV file exceeds the ${CSV_MAX_BYTES} byte limit` });
   }
 
@@ -572,14 +588,14 @@ router.post('/import', travelRateLimit, resolveUser, authenticate,
     try {
       photoManifest = JSON.parse(req.body.photoManifest);
     } catch {
-      fs.unlink(csvFile.path, () => {});
+      fs.unlink(csvPath, () => {});
       removeUploadedFiles(photoFiles, 'invalid photoManifest JSON');
       return res.status(400).json({ error: 'photoManifest must be valid JSON' });
     }
   }
   if (!Array.isArray(photoManifest) || photoManifest.length !== photoFiles.length ||
       !photoManifest.every(p => typeof p === 'string' && p.length > 0 && p.length <= 4096)) {
-    fs.unlink(csvFile.path, () => {});
+    fs.unlink(csvPath, () => {});
     removeUploadedFiles(photoFiles, 'photoManifest mismatch');
     return res.status(400).json({ error: 'photoManifest must be a JSON array of strings matching the number of uploaded photos' });
   }
@@ -591,8 +607,8 @@ router.post('/import', travelRateLimit, resolveUser, authenticate,
   const photoByPath = new Map();
   photoFiles.forEach((file, i) => photoByPath.set(photoManifest[i], file));
 
-  const csvText = fs.readFileSync(csvFile.path, 'utf8');
-  fs.unlink(csvFile.path, () => {});
+  const csvText = fs.readFileSync(csvPath, 'utf8');
+  fs.unlink(csvPath, () => {});
   const { headers, rows } = parseCSV(csvText);
 
   if (!headers.includes('title')) {
